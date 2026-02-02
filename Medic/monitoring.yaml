@@ -1,0 +1,14 @@
+#Medic Config
+---
+Service: 
+  repo: medic
+  region: 
+    - us-east-1
+  loadbalancer: 
+  baseurl: 
+---
+#Healtcheck setup
+Healthcheck:
+    url: /v1/healthcheck/network
+    validation: 
+      statusCode: 204

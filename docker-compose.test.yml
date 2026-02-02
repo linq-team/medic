@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  test-db:
+    container_name: medic-test-db
+    image: "postgres:16"
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_pass
+      - POSTGRES_DB=medic_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d medic_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  test-runner:
+    build: .
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      - PG_USER=test_user
+      - PG_PASS=test_pass
+      - DB_NAME=medic_test
+      - DB_HOST=test-db
+      - PORT=5000
+      - SLACK_API_TOKEN=xoxb-test-token
+      - SLACK_CHANNEL_ID=C12345678
+      - PAGERDUTY_ROUTING_KEY=test-routing-key
+      - MEDIC_BASE_URL=http://localhost:5000
+      - PYTHONPATH=/usr/src/app
+    volumes:
+      - ./tests:/usr/src/app/tests
+      - ./coverage:/usr/src/app/coverage
+    command: >
+      sh -c "
+        pip install pytest pytest-cov pytest-flask &&
+        pytest tests/ -v --cov=Medic --cov-report=html:coverage/html --cov-report=xml:coverage/coverage.xml --cov-report=term-missing
+      "
+
+  # Integration test runner with real database
+  integration-test:
+    build: .
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      - PG_USER=test_user
+      - PG_PASS=test_pass
+      - DB_NAME=medic_test
+      - DB_HOST=test-db
+      - PORT=5000
+      - SLACK_API_TOKEN=xoxb-test-token
+      - SLACK_CHANNEL_ID=C12345678
+      - PAGERDUTY_ROUTING_KEY=test-routing-key
+      - TEST_DATABASE_URL=postgresql://test_user:test_pass@test-db:5432/medic_test
+      - PYTHONPATH=/usr/src/app
+    volumes:
+      - ./tests:/usr/src/app/tests
+    command: >
+      sh -c "
+        pip install pytest pytest-cov pytest-flask &&
+        pytest tests/integration -v -m integration
+      "
+
+  # E2E test runner with full services
+  e2e-test:
+    build: .
+    depends_on:
+      test-web:
+        condition: service_healthy
+    environment:
+      - E2E_TEST_URL=http://test-web:5000
+      - PYTHONPATH=/usr/src/app
+    volumes:
+      - ./tests:/usr/src/app/tests
+    command: >
+      sh -c "
+        pip install pytest requests &&
+        pytest tests/e2e -v -m e2e
+      "
+
+  test-web:
+    build: .
+    entrypoint: ["python", "./medic.py"]
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=test-db
+      - PG_USER=test_user
+      - PG_PASS=test_pass
+      - PORT=5000
+      - DB_NAME=medic_test
+      - SLACK_API_TOKEN=xoxb-test-token
+      - SLACK_CHANNEL_ID=C12345678
+      - PAGERDUTY_ROUTING_KEY=test-routing-key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/v1/healthcheck/network"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

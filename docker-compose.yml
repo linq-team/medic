@@ -1,0 +1,64 @@
+version: '3.8'
+services:
+  pg:
+    container_name: medic-db
+    image: "postgres:16"
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=pg
+      - POSTGRES_PASSWORD=docker
+      - POSTGRES_DB=medic
+    volumes:
+      - medic_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pg -d medic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    entrypoint: ["python", "./medic.py"]
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=medic-db
+      - PG_USER=pg
+      - PG_PASS=docker
+      - PORT=5000
+      - DB_NAME=medic
+      - MEDIC_BASE_URL=http://localhost:5000
+      - SLACK_API_TOKEN
+      - SLACK_CHANNEL_ID
+      - PAGERDUTY_ROUTING_KEY
+    depends_on:
+      pg:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/v1/healthcheck/network"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    build: .
+    entrypoint: ["python", "./Medic/Worker/monitor.py"]
+    environment:
+      - DB_HOST=medic-db
+      - PG_USER=pg
+      - PG_PASS=docker
+      - DB_NAME=medic
+      - MEDIC_BASE_URL=http://web:5000
+      - SLACK_API_TOKEN
+      - SLACK_CHANNEL_ID
+      - PAGERDUTY_ROUTING_KEY
+    depends_on:
+      pg:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+volumes:
+  medic_pgdata:

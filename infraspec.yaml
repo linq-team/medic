@@ -1,0 +1,50 @@
+language: python
+deploy:
+  pipeline: default
+  chart: default
+  group: platform
+  production:
+    releaseStrategy:
+      branch: master
+  staging:
+    releaseStrategy:
+      branch: development
+  locations:
+  - us-east-1
+roles:
+  schedule:
+   - name: dbcleanup
+     command: python3 ./Medic/Jobs/dbCleanup.py
+     cron: 0 0 * * *
+  webserver:
+    static: false
+    command: python ./medic.py
+    resources:
+      memory: 256Mi
+      cpu: 100m
+    port: 5000
+    replicaCount: 4
+  worker:
+  - name: monitor
+    command: python ./Medic/Worker/monitor.py
+    resources:
+      memory: 384Mi
+      cpu: 100m
+datastores:
+  postgres:
+    - name: medic-production
+      size: MEDIUM
+      version: "11.1"
+      resourceNameOverride:
+      - resourceName: medic-production
+      locations:
+        - environments:
+          - production
+    - name: medic-staging
+      size: MEDIUM
+      version: "11.1"
+      resourceNameOverride:
+      - resourceName: medic-staging
+      locations:
+        - environments:
+          - staging

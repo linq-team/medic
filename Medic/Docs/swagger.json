@@ -1,0 +1,932 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "Medic is a service for posting heartbeats and generating alerts based on heartbeat failures.",
+    "version": "1.0.1",
+    "title": "Medic API"
+  },
+  "host": "localhost:5000",
+  "tags": [
+    {
+      "name": "healthcheck",
+      "description": "Healthcheck Information"
+    },
+    {
+      "name": "heartbeat",
+      "description": "Information about successful heartbeat posts in Medic"
+    },
+    {
+      "name": "service",
+      "description": "Information about registered Heartbeats and Services"
+    },
+    {
+      "name": "alerts",
+      "description": "Information regarding active and historical alerts in Medic"
+    }
+  ],
+  "schemes": [
+    "https"
+  ],
+  "paths": {
+    "/v1/healthcheck/network": {
+      "get": {
+        "tags": [
+          "healthcheck"
+        ],
+        "summary": "Static Healthcheck",
+        "description": "",
+        "operationId": "healthcheck",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.healthcheck_controller"
+      }
+    },
+    "/heartbeat": {
+      "get": {
+        "tags": [
+          "heartbeat"
+        ],
+        "summary": "Lists a maximum of 250 recent heartbeats",
+        "description": "Lists active heartbeats",
+        "operationId": "heartbeat",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "heartbeat_name",
+            "in": "query",
+            "description": "Name of the registered heartbeat to look for",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "service_name",
+            "in": "query",
+            "description": "Name of the associated service in the system",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Message Content from Application"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Heartbeats"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.heartbeat_controller"
+      },
+      "post": {
+        "tags": [
+          "heartbeat"
+        ],
+        "summary": "Add a heartbeat from a registered source to the database",
+        "description": "",
+        "operationId": "heartbeat_post",
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "heartbeat_name",
+            "in": "formData",
+            "description": "Name of pre-registered heartbeat",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "service_name",
+            "in": "formData",
+            "description": "Name of associated service",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "in": "formData",
+            "description": "Current status of system up/down/degraded/etc",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created Successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Heartbeat Posted Successfully."
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An error occurred in processing",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Failure message here"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Failure message here"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.heartbeat_controller"
+      }
+    },
+    "/service": {
+      "get": {
+        "tags": [
+          "service"
+        ],
+        "summary": "Lists a registered heartbeats with the system",
+        "description": "Lists active heartbeats",
+        "operationId": "service",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Message Content from Application"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Service"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.service_controller"
+      },
+      "post": {
+        "tags": [
+          "service"
+        ],
+        "summary": "Register a heartbeat with Medic",
+        "description": "Creates a registration with Medic for a unique heartbeat",
+        "operationId": "servicePost",
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "heartbeat_name",
+            "in": "formData",
+            "description": "Heartbeat name to register with Medic. Must be unique.",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "service_name",
+            "in": "formData",
+            "description": "Name of associated service.",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "environment",
+            "in": "formData",
+            "description": "Environment where source service is located.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "alert_interval",
+            "in": "formData",
+            "description": "Acceptable time frame in minutes that heartbeat post should occur within. Will trigger alerts if heartbeat post does not occur or is not within this interval",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "threshold",
+            "in": "formData",
+            "description": "Number of minimum accepted heartbeats within the alert interval to be considered healthy.",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "name": "team",
+            "in": "formData",
+            "description": "Team as it appears in PagerDuty to send alerts to.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "priority",
+            "in": "formData",
+            "description": "Alert priority. P1 = Critical, P2 = Error, P3 = Warning. Below P3 settings trigger no alerts in PagerDuty.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "runbook",
+            "in": "formData",
+            "description": "URL to runbook for service to troubleshoot heartbeat failures",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "created successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Heartbeat successfully registered."
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An error occurred in processing",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Failure message here"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Failure message here"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      },
+      "x-swagger-router-controller": "swagger_server.controllers.service_controller"
+    },
+    "/service/<heartbeat_name>": {
+      "get": {
+        "tags": [
+          "service"
+        ],
+        "summary": "Locate a registered Heartbeat by name",
+        "description": "Lists information about a registered Hearbeat based on its registered name.",
+        "operationId": "serviceByName",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "heartbeat_name",
+            "in": "path",
+            "description": "Heartbeat name registered with Medic.",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Message Content from Application"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Service"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.service_controller"
+      },
+      "post": {
+        "tags": [
+          "service"
+        ],
+        "summary": "Update information for a specific registered heartbeat",
+        "description": "Allows for updating registered parameter(s) for a specific heartbeat.\n\n You can specify one or many parameter(s) in the update",
+        "operationId": "serviceByNamePost",
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "service_name",
+            "in": "formData",
+            "description": "Name of associated service.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "active",
+            "in": "formData",
+            "description": "Activates or De-Activates a heartbeat.\n 0 = OFF and 1 = ON",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "name": "alert_interval",
+            "in": "formData",
+            "description": "Acceptable time frame in minutes that heartbeat post should occur within. Will trigger alerts if heartbeat post does not occur or is not within this interval",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "name": "threshold",
+            "in": "formData",
+            "description": "Number of minimum accepted heartbeats within the alert interval to be considered healthy.",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "name": "team",
+            "in": "formData",
+            "description": "Team as it appears in PagerDuty to send alerts to.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "priority",
+            "in": "formData",
+            "description": "Alert priority. P1 = Critical, P2 = Error, P3 = Warning. Below P3 settings trigger no alerts in PagerDuty.",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "runbook",
+            "in": "formData",
+            "description": "URL to runbook for service to troubleshoot heartbeat failures",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Successfully posted update."
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An error occurred in processing",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "message": {
+                  "type": "string",
+                  "example": "You have provided invalid request data. Please ensure your request contains data in the correct JSON fields."
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": ""
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.service_controller"
+      }
+    },
+    "/alerts": {
+      "get": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Alert information",
+        "description": "Lists 100 most recent alerts in Medic.",
+        "operationId": "alerts",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Message Content from Application"
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Alerts"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-swagger-router-controller": "swagger_server.controllers.alerts_controller"
+      }
+    }
+  },
+  "definitions": {
+    "Heartbeats": {
+      "type": "object",
+      "required": [
+        "heartbeat_name",
+        "status"
+      ],
+      "properties": {
+        "heartbeat_id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "heartbeat_name": {
+          "type": "string",
+          "example": "staging-linq-service"
+        },
+        "service_name": {
+          "type": "string",
+          "example": "Linq-Service"
+        },
+        "time": {
+          "type": "number",
+          "example": 1564168794000
+        },
+        "status": {
+          "type": "string",
+          "example": "UP"
+        },
+        "team": {
+          "type": "string",
+          "example": "site-reliability"
+        },
+        "priority": {
+          "type": "string",
+          "example": "p3"
+        }
+      },
+      "example": {
+        "heartbeat_name": "staging-linq-service-hb",
+        "service_name": "Linq-Service",
+        "heartbeat_id": 0,
+        "time": 1564168794000,
+        "team": "site-reliability",
+        "priority": "p3",
+        "status": "UP"
+      }
+    },
+    "Service": {
+      "type": "object",
+      "required": [
+        "alert_interval",
+        "heartbeat_name",
+        "service_name"
+      ],
+      "properties": {
+        "service_id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "heartbeat_name": {
+          "type": "string",
+          "example": "staging-linq-service-hb"
+        },
+        "active": {
+          "type": "integer",
+          "example": 0
+        },
+        "alert_interval": {
+          "type": "integer",
+          "example": 1,
+          "description": "Interval in minutes"
+        },
+        "team": {
+          "type": "string",
+          "example": "site-reliability"
+        },
+        "priority": {
+          "type": "string",
+          "example": "p3"
+        },
+        "muted": {
+          "type": "integer",
+          "example": 0
+        },
+        "down": {
+          "type": "integer",
+          "example": 0
+        },
+        "threshold": {
+          "type": "integer",
+          "example": 1
+        },
+        "service_name": {
+          "type": "string",
+          "example": "Linq-Service"
+        },
+        "runbook": {
+          "type": "string",
+          "example": "https://myurl.com/link/to/my/runbook/doc"
+        }
+      },
+      "example": {
+        "heartbeat_name": "staging-linq-service-hb",
+        "alert_interval": 1,
+        "service_name": "Linq-Service",
+        "service_id": 0,
+        "active": 0,
+        "threshold": 1,
+        "team": "site-reliability",
+        "priority": "p3",
+        "muted": 0,
+        "down": 0,
+        "runbook": "https://myurl.com/link/to/my/runbook/doc"
+      }
+    },
+    "Alerts": {
+      "type": "object",
+      "properties": {
+        "alert_id": {
+          "type": "integer",
+          "example": 7
+        },
+        "alert_name": {
+          "type": "string",
+          "example": "Medic - Heartbeat failure for staging-linq-service-hb"
+        },
+        "service_id": {
+          "type": "integer",
+          "example": 2
+        },
+        "active": {
+          "type": "integer",
+          "example": 1
+        },
+        "external_reference_id": {
+          "type": "string",
+          "description": "Id of alert from PagerDuty",
+          "example": "e52bb0c2-e830-4d26-b789-b093347c634f-1563466913667"
+        },
+        "alert_cycle": {
+          "type": "integer",
+          "description": "Number of 15 second cycles the alert has gone through",
+          "example": 10
+        },
+        "created_date": {
+          "type": "number",
+          "example": 1564049593000
+        },
+        "closed_date": {
+          "type": "number",
+          "example": 1564052077000
+        }
+      }
+    },
+    "APIResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Message Content from Application"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": ""
+          }
+        }
+      }
+    },
+    "inline_response_200": {
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Message Content from Application"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Heartbeats"
+          }
+        }
+      },
+      "example": {
+        "success": true,
+        "message": "Message Content from Application",
+        "results": [
+          {
+            "heartbeat_name": "staging-linq-service-hb",
+            "service_name": "Linq-Service",
+            "heartbeat_id": 0,
+            "time": 1564168794000,
+            "team": "site-reliability",
+            "priority": "p3",
+            "status": "UP"
+          },
+          {
+            "heartbeat_name": "staging-linq-service-hb",
+            "service_name": "Linq-Service",
+            "heartbeat_id": 0,
+            "time": 1564168794000,
+            "team": "site-reliability",
+            "priority": "p3",
+            "status": "UP"
+          }
+        ]
+      }
+    },
+    "inline_response_201": {
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Heartbeat Posted Successfully."
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": ""
+          }
+        }
+      },
+      "example": {
+        "success": true,
+        "message": "Heartbeat Posted Successfully.",
+        "results": [
+          "",
+          ""
+        ]
+      }
+    },
+    "inline_response_201_service": {
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Heartbeat successfully registered."
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": ""
+          }
+        }
+      },
+      "example": {
+        "success": true,
+        "message": "Heartbeat Posted Successfully.",
+        "results": [
+          "",
+          ""
+        ]
+      }
+    },
+    "inline_response_400": {
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Failure message here"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": ""
+          }
+        }
+      }
+    },
+    "inline_response_200_1": {
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Message Content from Application"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Service"
+          }
+        }
+      },
+      "example": {
+        "success": true,
+        "message": "Message Content from Application",
+        "results": [
+          {
+            "heartbeat_name": "staging-linq-service-hb",
+            "alert_interval": 1,
+            "service_name": "Linq-Service",
+            "service_id": 0,
+            "active": 0,
+            "threshold": 1,
+            "team": "site-reliability",
+            "priority": "p3",
+            "muted": 0,
+            "down": 0,
+            "runbook": "https://myurl.com/link/to/my/runbook/doc"
+          },
+          {
+            "heartbeat_name": "staging-linq-service-hb",
+            "alert_interval": 1,
+            "service_name": "Linq-Service",
+            "service_id": 0,
+            "active": 0,
+            "threshold": 1,
+            "team": "site-reliability",
+            "priority": "p3",
+            "muted": 0,
+            "down": 0,
+            "runbook": "https://myurl.com/link/to/my/runbook/doc"
+          }
+        ]
+      }
+    }
+  }
+}
