@@ -1,5 +1,9 @@
+<p align="center">
+  <img src="docs/assets/medic-icon-all-green.png" alt="Medic Logo" width="200">
+</p>
+
 # Medic
-Help is just a hearbeat away
+Help is just a heartbeat away
 
 # Table of Contents
 
@@ -29,7 +33,7 @@ Help is just a hearbeat away
 <br>
 
 # Maintainers
-- SRE Engineers @sre-engineers
+- Corey Jones ([@coreyjones](https://github.com/coreyjones))
 
 # Overview
 Medic is a heartbeat monitoring service consisting of 3 main objects: the server, the client and the worker. The server's responsibility is to be available and accept incoming API requests for storing or retrieving heartbeat data. The client's job is to be included in a service and post a heartbeat at a defined interval >= 1 min. The job of the worker is to query the API to look for alertable data and then to notify the appropriate channels. When combined the system provides a full-service system of heartbeat management.
