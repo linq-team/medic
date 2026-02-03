@@ -45,6 +45,11 @@ import requests
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
+from Medic.Core.metrics import (
+    record_playbook_execution,
+    record_playbook_execution_duration,
+    update_pending_approval_count,
+)
 from Medic.Core.playbook_parser import (
     ApprovalMode,
     ConditionStep,
@@ -355,6 +360,41 @@ def get_pending_approval_executions() -> List[PlaybookExecution]:
     return [
         ex for ex in (_parse_execution(r) for r in rows if r) if ex is not None
     ]
+
+
+def get_pending_approval_count() -> int:
+    """
+    Get the count of executions pending approval.
+
+    Returns:
+        Number of pending executions
+    """
+    result = db.query_db(
+        """
+        SELECT COUNT(*) as count
+        FROM medic.playbook_executions
+        WHERE status = 'pending_approval'
+        """,
+        show_columns=True
+    )
+
+    if not result or result == '[]':
+        return 0
+
+    try:
+        rows = json.loads(str(result))
+        if rows:
+            return rows[0].get('count', 0)
+    except (json.JSONDecodeError, TypeError, KeyError):
+        pass
+
+    return 0
+
+
+def _update_pending_approval_metric():
+    """Update the pending approval gauge metric."""
+    count = get_pending_approval_count()
+    update_pending_approval_count(count)
 
 
 def update_execution_status(
@@ -1922,6 +1962,10 @@ class PlaybookExecutionEngine:
                 f"for '{playbook.name}' (status: {initial_status.value})"
         )
 
+        # Update pending approval metric if applicable
+        if initial_status == ExecutionStatus.PENDING_APPROVAL:
+            _update_pending_approval_metric()
+
         # If running immediately, execute steps
         if initial_status == ExecutionStatus.RUNNING:
             self._execute_steps(execution)
@@ -2024,6 +2068,9 @@ class PlaybookExecutionEngine:
             msg=f"Execution {execution_id} approved, starting execution"
         )
 
+        # Update pending approval metric
+        _update_pending_approval_metric()
+
         # Start execution
         self.resume_execution(execution_id)
         return True
@@ -2062,6 +2109,19 @@ class PlaybookExecutionEngine:
                 level=20,
                 msg=f"Execution {execution_id} cancelled"
             )
+
+            # Load playbook to get name for metrics
+            playbook = get_playbook_by_id(execution.playbook_id)
+            playbook_name = playbook.name if playbook else "unknown"
+            record_playbook_execution(playbook_name, "cancelled")
+
+            # Record duration if we have a start time
+            if execution.started_at:
+                duration = (now - execution.started_at).total_seconds()
+                record_playbook_execution_duration(playbook_name, duration)
+
+            # Update pending approval gauge
+            _update_pending_approval_metric()
 
         return success
 
@@ -2232,6 +2292,20 @@ class PlaybookExecutionEngine:
             msg=f"Execution {execution.execution_id} failed: {error_message}"
         )
 
+        # Record metrics
+        playbook_name = (
+            execution.playbook.name if execution.playbook else "unknown"
+        )
+        record_playbook_execution(playbook_name, "failed")
+
+        # Record duration if we have a start time
+        if execution.started_at:
+            duration = (now - execution.started_at).total_seconds()
+            record_playbook_execution_duration(playbook_name, duration)
+
+        # Update pending approval gauge
+        _update_pending_approval_metric()
+
     def _complete_execution(self, execution: PlaybookExecution) -> None:
         """Mark execution as completed successfully."""
         now = _now()
@@ -2248,6 +2322,20 @@ class PlaybookExecutionEngine:
             level=20,
             msg=f"Execution {execution.execution_id} completed successfully"
         )
+
+        # Record metrics
+        playbook_name = (
+            execution.playbook.name if execution.playbook else "unknown"
+        )
+        record_playbook_execution(playbook_name, "completed")
+
+        # Record duration if we have a start time
+        if execution.started_at:
+            duration = (now - execution.started_at).total_seconds()
+            record_playbook_execution_duration(playbook_name, duration)
+
+        # Update pending approval gauge
+        _update_pending_approval_metric()
 
 
 # ============================================================================

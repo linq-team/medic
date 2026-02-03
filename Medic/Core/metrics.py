@@ -139,6 +139,25 @@ CIRCUIT_BREAKER_OPEN = Gauge(
     'Number of services with open circuit breakers'
 )
 
+# Playbook execution metrics
+PLAYBOOK_EXECUTIONS = Counter(
+    'medic_playbook_executions_total',
+    'Total playbook executions',
+    ['playbook', 'status']
+)
+
+PLAYBOOK_EXECUTION_DURATION = Histogram(
+    'medic_playbook_execution_duration_seconds',
+    'Playbook execution duration in seconds',
+    ['playbook'],
+    buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0]
+)
+
+PLAYBOOK_EXECUTIONS_PENDING_APPROVAL = Gauge(
+    'medic_playbook_executions_pending_approval',
+    'Number of playbook executions pending approval'
+)
+
 
 def track_request_metrics(func: Callable) -> Callable:
     """Decorator to track request metrics."""
@@ -277,6 +296,43 @@ def update_circuit_breaker_open_count(count: int):
         count: Number of services with open circuits
     """
     CIRCUIT_BREAKER_OPEN.set(count)
+
+
+def record_playbook_execution(playbook_name: str, status: str):
+    """
+    Record a playbook execution metric.
+
+    Args:
+        playbook_name: Name of the playbook that was executed
+        status: Final status of the execution (completed, failed, cancelled)
+    """
+    PLAYBOOK_EXECUTIONS.labels(playbook=playbook_name, status=status).inc()
+
+
+def record_playbook_execution_duration(
+    playbook_name: str,
+    duration_seconds: float
+):
+    """
+    Record the duration of a playbook execution.
+
+    Args:
+        playbook_name: Name of the playbook that was executed
+        duration_seconds: Duration of the execution in seconds
+    """
+    PLAYBOOK_EXECUTION_DURATION.labels(playbook=playbook_name).observe(
+        duration_seconds
+    )
+
+
+def update_pending_approval_count(count: int):
+    """
+    Update the count of playbook executions pending approval.
+
+    Args:
+        count: Number of executions currently pending approval
+    """
+    PLAYBOOK_EXECUTIONS_PENDING_APPROVAL.set(count)
 
 
 def get_metrics() -> bytes:

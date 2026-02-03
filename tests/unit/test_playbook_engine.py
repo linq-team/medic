@@ -632,6 +632,7 @@ class TestPlaybookExecutionEngine:
         assert result is None
         mock_create.assert_not_called()
 
+    @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
     @patch('Medic.Core.playbook_engine.update_execution_status')
     @patch('Medic.Core.playbook_engine.get_playbook_by_id')
     @patch('Medic.Core.playbook_engine.create_execution')
@@ -639,7 +640,8 @@ class TestPlaybookExecutionEngine:
         self,
         mock_create,
         mock_get_playbook,
-        mock_update
+        mock_update,
+        mock_update_pending
     ):
         """Test start_execution respects approval setting."""
         from Medic.Core.playbook_engine import (
@@ -672,7 +674,12 @@ class TestPlaybookExecutionEngine:
         assert result.status == ExecutionStatus.PENDING_APPROVAL
         # Should not execute steps when pending approval
         mock_update.assert_not_called()
+        # Should update pending approval metric
+        mock_update_pending.assert_called_once()
 
+    @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
+    @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
+    @patch('Medic.Core.playbook_engine.record_playbook_execution')
     @patch('Medic.Core.playbook_engine.update_execution_status')
     @patch('Medic.Core.playbook_engine.time.sleep')
     @patch('Medic.Core.playbook_engine.update_step_result')
@@ -686,7 +693,10 @@ class TestPlaybookExecutionEngine:
         mock_create_step,
         mock_update_step,
         mock_sleep,
-        mock_update_exec
+        mock_update_exec,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
     ):
         """Test execution runs immediately when approval=none."""
         from Medic.Core.playbook_engine import (
@@ -757,9 +767,12 @@ class TestPlaybookExecutionEngine:
         assert result is not None
         assert result.status == ExecutionStatus.COMPLETED
 
+    @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
     @patch('Medic.Core.playbook_engine.update_execution_status')
     @patch('Medic.Core.playbook_engine.get_execution')
-    def test_approve_execution_success(self, mock_get, mock_update):
+    def test_approve_execution_success(
+        self, mock_get, mock_update, mock_update_pending
+    ):
         """Test approving an execution."""
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
@@ -784,6 +797,7 @@ class TestPlaybookExecutionEngine:
 
         assert result is True
         mock_update.assert_called()
+        mock_update_pending.assert_called_once()
 
     @patch('Medic.Core.playbook_engine.get_execution')
     def test_approve_execution_wrong_status(self, mock_get):
@@ -807,15 +821,28 @@ class TestPlaybookExecutionEngine:
 
         assert result is False
 
+    @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
+    @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
+    @patch('Medic.Core.playbook_engine.record_playbook_execution')
+    @patch('Medic.Core.playbook_engine.get_playbook_by_id')
     @patch('Medic.Core.playbook_engine.update_execution_status')
     @patch('Medic.Core.playbook_engine.get_execution')
-    def test_cancel_execution_success(self, mock_get, mock_update):
+    def test_cancel_execution_success(
+        self,
+        mock_get,
+        mock_update,
+        mock_get_playbook,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
+    ):
         """Test cancelling an execution."""
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
             PlaybookExecution,
             PlaybookExecutionEngine,
         )
+        from Medic.Core.playbook_parser import Playbook
 
         execution = PlaybookExecution(
             execution_id=1,
@@ -823,13 +850,21 @@ class TestPlaybookExecutionEngine:
             service_id=None,
             status=ExecutionStatus.RUNNING,
         )
+        playbook = Playbook(
+            name="test-playbook",
+            description="test",
+            steps=[],
+        )
         mock_get.return_value = execution
         mock_update.return_value = True
+        mock_get_playbook.return_value = playbook
 
         engine = PlaybookExecutionEngine()
         result = engine.cancel_execution(1)
 
         assert result is True
+        mock_record_exec.assert_called_once_with("test-playbook", "cancelled")
+        mock_update_pending.assert_called_once()
 
     @patch('Medic.Core.playbook_engine.get_execution')
     def test_cancel_execution_already_terminal(self, mock_get):
@@ -956,6 +991,9 @@ class TestParseDateTime:
 class TestExecutionWithMultipleSteps:
     """Tests for execution with multiple steps."""
 
+    @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
+    @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
+    @patch('Medic.Core.playbook_engine.record_playbook_execution')
     @patch('Medic.Core.playbook_engine.update_execution_status')
     @patch('Medic.Core.playbook_engine.time.sleep')
     @patch('Medic.Core.playbook_engine.update_step_result')
@@ -969,7 +1007,10 @@ class TestExecutionWithMultipleSteps:
         mock_create_step,
         mock_update_step,
         mock_sleep,
-        mock_update_exec
+        mock_update_exec,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
     ):
         """Test multiple wait steps execute in sequence."""
         from Medic.Core.playbook_engine import (
@@ -3152,3 +3193,404 @@ class TestEngineExecuteCondition:
             engine._execute_condition(step, execution)
 
         assert "Expected ConditionStep" in str(exc_info.value)
+
+
+class TestPendingApprovalCount:
+    """Tests for pending approval count functions."""
+
+    @patch("Medic.Core.playbook_engine.db.query_db")
+    def test_get_pending_approval_count_returns_count(self, mock_query_db):
+        """Test get_pending_approval_count returns correct count."""
+        from Medic.Core.playbook_engine import get_pending_approval_count
+
+        mock_query_db.return_value = json.dumps([{"count": 5}])
+
+        count = get_pending_approval_count()
+
+        assert count == 5
+        mock_query_db.assert_called_once()
+
+    @patch("Medic.Core.playbook_engine.db.query_db")
+    def test_get_pending_approval_count_returns_zero_on_empty(
+        self, mock_query_db
+    ):
+        """Test get_pending_approval_count returns 0 when no results."""
+        from Medic.Core.playbook_engine import get_pending_approval_count
+
+        mock_query_db.return_value = "[]"
+
+        count = get_pending_approval_count()
+
+        assert count == 0
+
+    @patch("Medic.Core.playbook_engine.db.query_db")
+    def test_get_pending_approval_count_returns_zero_on_error(
+        self, mock_query_db
+    ):
+        """Test get_pending_approval_count returns 0 on parse error."""
+        from Medic.Core.playbook_engine import get_pending_approval_count
+
+        mock_query_db.return_value = "invalid json"
+
+        count = get_pending_approval_count()
+
+        assert count == 0
+
+    @patch("Medic.Core.playbook_engine.update_pending_approval_count")
+    @patch("Medic.Core.playbook_engine.get_pending_approval_count")
+    def test_update_pending_approval_metric(
+        self, mock_get_count, mock_update_count
+    ):
+        """Test _update_pending_approval_metric calls update function."""
+        from Medic.Core.playbook_engine import _update_pending_approval_metric
+
+        mock_get_count.return_value = 3
+
+        _update_pending_approval_metric()
+
+        mock_get_count.assert_called_once()
+        mock_update_count.assert_called_once_with(3)
+
+
+class TestPlaybookExecutionMetrics:
+    """Tests for playbook execution metrics recording."""
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution")
+    @patch("Medic.Core.playbook_engine.update_execution_status")
+    def test_complete_execution_records_metrics(
+        self,
+        mock_update_status,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
+    ):
+        """Test _complete_execution records execution metrics."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import Playbook
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        playbook = Playbook(
+            name="test-playbook",
+            description="test description",
+            steps=[],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+            started_at=now - timedelta(seconds=10),
+            playbook=playbook,
+        )
+
+        engine = PlaybookExecutionEngine()
+        engine._complete_execution(execution)
+
+        # Verify metrics were recorded
+        mock_record_exec.assert_called_once_with("test-playbook", "completed")
+        mock_record_duration.assert_called_once()
+        # Duration should be approximately 10 seconds
+        call_args = mock_record_duration.call_args
+        assert call_args[0][0] == "test-playbook"
+        assert call_args[0][1] >= 10
+        mock_update_pending.assert_called_once()
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution")
+    @patch("Medic.Core.playbook_engine.update_execution_status")
+    def test_fail_execution_records_metrics(
+        self,
+        mock_update_status,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
+    ):
+        """Test _fail_execution records execution metrics."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import Playbook
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        playbook = Playbook(
+            name="failing-playbook",
+            description="test description",
+            steps=[],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+            started_at=now - timedelta(seconds=5),
+            playbook=playbook,
+        )
+
+        engine = PlaybookExecutionEngine()
+        engine._fail_execution(execution, "Test error message")
+
+        # Verify metrics were recorded
+        mock_record_exec.assert_called_once_with("failing-playbook", "failed")
+        mock_record_duration.assert_called_once()
+        call_args = mock_record_duration.call_args
+        assert call_args[0][0] == "failing-playbook"
+        mock_update_pending.assert_called_once()
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution")
+    @patch("Medic.Core.playbook_engine.get_playbook_by_id")
+    @patch("Medic.Core.playbook_engine.update_execution_status")
+    @patch("Medic.Core.playbook_engine.get_execution")
+    def test_cancel_execution_records_metrics(
+        self,
+        mock_get_exec,
+        mock_update_status,
+        mock_get_playbook,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
+    ):
+        """Test cancel_execution records execution metrics."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import Playbook
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+            started_at=now - timedelta(seconds=15),
+        )
+        playbook = Playbook(
+            name="cancelled-playbook",
+            description="test description",
+            steps=[],
+        )
+
+        mock_get_exec.return_value = execution
+        mock_update_status.return_value = True
+        mock_get_playbook.return_value = playbook
+
+        engine = PlaybookExecutionEngine()
+        result = engine.cancel_execution(100)
+
+        assert result is True
+        mock_record_exec.assert_called_once_with(
+            "cancelled-playbook", "cancelled"
+        )
+        mock_record_duration.assert_called_once()
+        mock_update_pending.assert_called_once()
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution")
+    @patch("Medic.Core.playbook_engine.update_execution_status")
+    def test_complete_execution_no_start_time_skips_duration(
+        self,
+        mock_update_status,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
+    ):
+        """Test _complete_execution skips duration when no start time."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import Playbook
+
+        playbook = Playbook(
+            name="no-start-playbook",
+            description="test description",
+            steps=[],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+            started_at=None,  # No start time
+            playbook=playbook,
+        )
+
+        engine = PlaybookExecutionEngine()
+        engine._complete_execution(execution)
+
+        mock_record_exec.assert_called_once_with(
+            "no-start-playbook", "completed"
+        )
+        mock_record_duration.assert_not_called()
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
+    @patch("Medic.Core.playbook_engine.record_playbook_execution")
+    @patch("Medic.Core.playbook_engine.update_execution_status")
+    def test_complete_execution_unknown_playbook_name(
+        self,
+        mock_update_status,
+        mock_record_exec,
+        mock_record_duration,
+        mock_update_pending
+    ):
+        """Test _complete_execution uses 'unknown' when no playbook."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+            started_at=now,
+            playbook=None,  # No playbook loaded
+        )
+
+        engine = PlaybookExecutionEngine()
+        engine._complete_execution(execution)
+
+        mock_record_exec.assert_called_once_with("unknown", "completed")
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.update_execution_status")
+    @patch("Medic.Core.playbook_engine.get_execution")
+    def test_approve_execution_updates_pending_metric(
+        self,
+        mock_get_exec,
+        mock_update_status,
+        mock_update_pending
+    ):
+        """Test approve_execution updates pending approval metric."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.PENDING_APPROVAL,
+            current_step=0,
+        )
+
+        mock_get_exec.return_value = execution
+        mock_update_status.return_value = True
+
+        engine = PlaybookExecutionEngine()
+
+        # Mock resume_execution to prevent full execution
+        with patch.object(engine, 'resume_execution'):
+            result = engine.approve_execution(100)
+
+        assert result is True
+        mock_update_pending.assert_called_once()
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.create_execution")
+    @patch("Medic.Core.playbook_engine.get_playbook_by_id")
+    def test_start_execution_pending_updates_metric(
+        self,
+        mock_get_playbook,
+        mock_create_execution,
+        mock_update_pending
+    ):
+        """Test start_execution updates pending metric for pending_approval."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import ApprovalMode, Playbook
+
+        playbook = Playbook(
+            name="approval-required-playbook",
+            description="test description",
+            steps=[],
+            approval=ApprovalMode.REQUIRED,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.PENDING_APPROVAL,
+            current_step=0,
+        )
+
+        mock_get_playbook.return_value = playbook
+        mock_create_execution.return_value = execution
+
+        engine = PlaybookExecutionEngine()
+        result = engine.start_execution(playbook_id=10, service_id=42)
+
+        assert result is not None
+        mock_update_pending.assert_called_once()
+
+    @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
+    @patch("Medic.Core.playbook_engine.create_execution")
+    @patch("Medic.Core.playbook_engine.get_playbook_by_id")
+    def test_start_execution_running_no_pending_update(
+        self,
+        mock_get_playbook,
+        mock_create_execution,
+        mock_update_pending
+    ):
+        """Test start_execution doesn't update pending for immediate run."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import ApprovalMode, Playbook
+
+        playbook = Playbook(
+            name="no-approval-playbook",
+            description="test description",
+            steps=[],
+            approval=ApprovalMode.NONE,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        mock_get_playbook.return_value = playbook
+        mock_create_execution.return_value = execution
+
+        engine = PlaybookExecutionEngine()
+
+        # Mock _execute_steps to prevent full execution
+        with patch.object(engine, '_execute_steps'):
+            result = engine.start_execution(playbook_id=10, service_id=42)
+
+        assert result is not None
+        # Pending approval metric should NOT be called for running status
+        mock_update_pending.assert_not_called()
