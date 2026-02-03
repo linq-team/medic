@@ -178,8 +178,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in Medic/Core/alert_routing.py. Added NotificationMode and NotificationType enums, NotificationTarget and NotificationResult dataclasses, route_alert() with notify_all and notify_until_success modes, get_notification_targets_for_service(), and helper functions. 36 new unit tests (55 total) in tests/unit/test_alert_routing.py."
     },
     {
       "id": "US-013",

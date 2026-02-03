@@ -16,6 +16,8 @@
 - HTTP retries: Use exponential backoff with configurable delays (default: 1s, 5s, 30s) for webhook delivery
 - Alert routing: Use get_slack_channel_for_service(service_id) from Medic/Core/alert_routing.py to get team channel with fallback to default
 - Notification targets: medic.notification_targets table stores type-specific config in JSONB, ordered by priority (lower = higher priority)
+- Flexible alert routing: Use route_alert(service_id, payload, mode) with NotificationMode.NOTIFY_ALL or NOTIFY_UNTIL_SUCCESS
+- Notification sender: Pass custom sender callback to route_alert() or use default_notification_sender() placeholder
 
 ---
 
@@ -128,4 +130,20 @@
   - Composite index on (service_id, priority) WHERE enabled = TRUE for common query pattern
   - Config field stores type-specific JSON (channel_id for slack, service_key for pagerduty, url/headers for webhook)
   - ON DELETE CASCADE from services - when service deleted, its targets are removed
+---
+
+## 2026-02-03 - US-012 - Linear Issue: SRE-10
+- Implemented flexible alert routing logic in Medic/Core/alert_routing.py
+- Files changed: Medic/Core/alert_routing.py (extended), tests/unit/test_alert_routing.py (extended)
+- **Learnings for future iterations:**
+  - NotificationMode enum: NOTIFY_ALL (send to all targets), NOTIFY_UNTIL_SUCCESS (stop after first success)
+  - NotificationType enum: SLACK, PAGERDUTY, WEBHOOK (matches notification_targets.type column)
+  - NotificationTarget dataclass: target_id, service_id, target_type, config, priority, enabled
+  - NotificationResult dataclass: target_id, target_type, success, error_message
+  - route_alert(service_id, payload, mode, sender) dispatches to all targets based on mode
+  - get_notification_targets_for_service() retrieves targets ordered by priority (lower first)
+  - Custom sender callback signature: (NotificationTarget, Dict[str, Any]) -> bool
+  - default_notification_sender() dispatches by type to placeholder _send_*_notification() functions
+  - Helper functions: has_notification_targets(), get_successful_results(), get_failed_results(), all_notifications_succeeded(), any_notification_succeeded()
+  - Disabled targets are skipped but still return a NotificationResult with success=False
 ---
