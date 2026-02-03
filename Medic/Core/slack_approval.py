@@ -52,6 +52,17 @@ from Medic.Core.playbook_engine import (
     update_execution_status,
 )
 
+# Import audit logging - use try/except for graceful degradation
+try:
+    from Medic.Core.audit_log import (
+        log_approval_requested,
+        log_approved,
+        log_rejected,
+    )
+    AUDIT_LOG_AVAILABLE = True
+except ImportError:
+    AUDIT_LOG_AVAILABLE = False
+
 # Log Setup
 logger = logging.getLogger(__name__)
 logger.setLevel(logLevel.logSetup())
@@ -677,6 +688,16 @@ def send_approval_request(
                 f"(message_ts: {message_ts})"
         )
 
+        # Log approval request to audit log
+        if AUDIT_LOG_AVAILABLE:
+            log_approval_requested(
+                execution_id=execution_id,
+                playbook_name=playbook_name,
+                service_name=service_name,
+                expires_at=expires_at,
+                channel_id=channel,
+            )
+
         return ApprovalResult(
             success=True,
             message="Approval request sent",
@@ -879,6 +900,13 @@ def approve_request(
         msg=f"Playbook execution {execution_id} approved by {decided_by}"
     )
 
+    # Log approval to audit log
+    if AUDIT_LOG_AVAILABLE:
+        log_approved(
+            execution_id=execution_id,
+            approved_by=decided_by,
+        )
+
     # Update the request object
     request.status = ApprovalStatus.APPROVED
     request.decided_by = decided_by
@@ -975,6 +1003,13 @@ def reject_request(
         level=20,
         msg=f"Playbook execution {execution_id} rejected by {decided_by}"
     )
+
+    # Log rejection to audit log
+    if AUDIT_LOG_AVAILABLE:
+        log_rejected(
+            execution_id=execution_id,
+            rejected_by=decided_by,
+        )
 
     # Update the request object
     request.status = ApprovalStatus.REJECTED

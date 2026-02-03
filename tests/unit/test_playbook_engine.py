@@ -632,6 +632,7 @@ class TestPlaybookExecutionEngine:
         assert result is None
         mock_create.assert_not_called()
 
+    @patch('Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE', False)
     @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
     @patch('Medic.Core.playbook_engine.update_execution_status')
     @patch('Medic.Core.playbook_engine.get_playbook_by_id')
@@ -677,6 +678,7 @@ class TestPlaybookExecutionEngine:
         # Should update pending approval metric
         mock_update_pending.assert_called_once()
 
+    @patch('Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE', False)
     @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
     @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
     @patch('Medic.Core.playbook_engine.record_playbook_execution')
@@ -991,6 +993,7 @@ class TestParseDateTime:
 class TestExecutionWithMultipleSteps:
     """Tests for execution with multiple steps."""
 
+    @patch('Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE', False)
     @patch('Medic.Core.playbook_engine._update_pending_approval_metric')
     @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
     @patch('Medic.Core.playbook_engine.record_playbook_execution')
@@ -3255,6 +3258,7 @@ class TestPendingApprovalCount:
 class TestPlaybookExecutionMetrics:
     """Tests for playbook execution metrics recording."""
 
+    @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False)
     @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
     @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
     @patch("Medic.Core.playbook_engine.record_playbook_execution")
@@ -3302,6 +3306,7 @@ class TestPlaybookExecutionMetrics:
         assert call_args[0][1] >= 10
         mock_update_pending.assert_called_once()
 
+    @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False)
     @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
     @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
     @patch("Medic.Core.playbook_engine.record_playbook_execution")
@@ -3399,6 +3404,7 @@ class TestPlaybookExecutionMetrics:
         mock_record_duration.assert_called_once()
         mock_update_pending.assert_called_once()
 
+    @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False)
     @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
     @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
     @patch("Medic.Core.playbook_engine.record_playbook_execution")
@@ -3441,6 +3447,7 @@ class TestPlaybookExecutionMetrics:
         )
         mock_record_duration.assert_not_called()
 
+    @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False)
     @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
     @patch("Medic.Core.playbook_engine.record_playbook_execution_duration")
     @patch("Medic.Core.playbook_engine.record_playbook_execution")
@@ -3511,6 +3518,7 @@ class TestPlaybookExecutionMetrics:
         assert result is True
         mock_update_pending.assert_called_once()
 
+    @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False)
     @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
     @patch("Medic.Core.playbook_engine.create_execution")
     @patch("Medic.Core.playbook_engine.get_playbook_by_id")
@@ -3551,6 +3559,7 @@ class TestPlaybookExecutionMetrics:
         assert result is not None
         mock_update_pending.assert_called_once()
 
+    @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False)
     @patch("Medic.Core.playbook_engine._update_pending_approval_metric")
     @patch("Medic.Core.playbook_engine.create_execution")
     @patch("Medic.Core.playbook_engine.get_playbook_by_id")

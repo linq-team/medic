@@ -50,6 +50,20 @@ from Medic.Core.metrics import (
     record_playbook_execution_duration,
     update_pending_approval_count,
 )
+
+# Import audit logging - use try/except for graceful degradation
+try:
+    from Medic.Core.audit_log import (
+        log_execution_started,
+        log_step_completed,
+        log_step_failed,
+        log_execution_completed,
+        log_execution_failed,
+    )
+    AUDIT_LOG_AVAILABLE = True
+except ImportError:
+    AUDIT_LOG_AVAILABLE = False
+
 from Medic.Core.playbook_parser import (
     ApprovalMode,
     ConditionStep,
@@ -1962,6 +1976,34 @@ class PlaybookExecutionEngine:
                 f"for '{playbook.name}' (status: {initial_status.value})"
         )
 
+        # Log execution started to audit log
+        if AUDIT_LOG_AVAILABLE:
+            # Get service name if we have service_id
+            service_name = None
+            if service_id:
+                svc_result = db.query_db(
+                    "SELECT name FROM services WHERE service_id = %s",
+                    (service_id,),
+                    show_columns=True
+                )
+                if svc_result and svc_result != '[]':
+                    try:
+                        rows = json.loads(str(svc_result))
+                        if rows:
+                            service_name = rows[0].get('name')
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        pass
+
+            log_execution_started(
+                execution_id=execution.execution_id or 0,
+                playbook_id=playbook_id,
+                playbook_name=playbook.name,
+                service_id=service_id,
+                service_name=service_name,
+                trigger=context.get('trigger') if context else None,
+                context=context,
+            )
+
         # Update pending approval metric if applicable
         if initial_status == ExecutionStatus.PENDING_APPROVAL:
             _update_pending_approval_metric()
@@ -2153,13 +2195,47 @@ class PlaybookExecutionEngine:
             result = self._execute_step(step, execution)
             execution.step_results.append(result)
 
+            # Calculate step duration
+            step_duration_ms = None
+            if result.started_at and result.completed_at:
+                step_duration_ms = int(
+                    (result.completed_at - result.started_at).total_seconds()
+                    * 1000
+                )
+
+            # Get step type for audit log
+            step_type_str = self._get_step_type(step).value
+
             # Check result
             if result.status == StepResultStatus.FAILED:
+                # Log step failure to audit log
+                if AUDIT_LOG_AVAILABLE:
+                    log_step_failed(
+                        execution_id=execution.execution_id or 0,
+                        step_name=step_name,
+                        step_index=execution.current_step,
+                        step_type=step_type_str,
+                        error_message=result.error_message,
+                        output=result.output,
+                        duration_ms=step_duration_ms,
+                    )
+
                 self._fail_execution(
                     execution,
                     f"Step '{step_name}' failed: {result.error_message}"
                 )
                 return
+
+            # Log step completion to audit log
+            if AUDIT_LOG_AVAILABLE and result.status == StepResultStatus.COMPLETED:
+                log_step_completed(
+                    execution_id=execution.execution_id or 0,
+                    step_name=step_name,
+                    step_index=execution.current_step,
+                    step_type=step_type_str,
+                    output=result.output,
+                    duration_ms=step_duration_ms,
+                )
 
             if result.status == StepResultStatus.PENDING:
                 # Step needs external completion (e.g., webhook not implemented)
@@ -2299,9 +2375,50 @@ class PlaybookExecutionEngine:
         record_playbook_execution(playbook_name, "failed")
 
         # Record duration if we have a start time
+        total_duration_ms = None
         if execution.started_at:
             duration = (now - execution.started_at).total_seconds()
             record_playbook_execution_duration(playbook_name, duration)
+            total_duration_ms = int(duration * 1000)
+
+        # Log execution failure to audit log
+        if AUDIT_LOG_AVAILABLE:
+            # Get service name if we have service_id
+            service_name = None
+            if execution.service_id:
+                svc_result = db.query_db(
+                    "SELECT name FROM services WHERE service_id = %s",
+                    (execution.service_id,),
+                    show_columns=True
+                )
+                if svc_result and svc_result != '[]':
+                    try:
+                        rows = json.loads(str(svc_result))
+                        if rows:
+                            service_name = rows[0].get('name')
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        pass
+
+            # Get failed step info
+            failed_step_name = None
+            failed_step_index = None
+            if execution.playbook and execution.current_step < len(
+                execution.playbook.steps
+            ):
+                failed_step = execution.playbook.steps[execution.current_step]
+                failed_step_name = failed_step.name
+                failed_step_index = execution.current_step
+
+            log_execution_failed(
+                execution_id=execution.execution_id or 0,
+                playbook_name=playbook_name,
+                error_message=error_message,
+                failed_step_name=failed_step_name,
+                failed_step_index=failed_step_index,
+                steps_completed=execution.current_step,
+                total_duration_ms=total_duration_ms,
+                service_name=service_name,
+            )
 
         # Update pending approval gauge
         _update_pending_approval_metric()
@@ -2330,9 +2447,37 @@ class PlaybookExecutionEngine:
         record_playbook_execution(playbook_name, "completed")
 
         # Record duration if we have a start time
+        total_duration_ms = None
         if execution.started_at:
             duration = (now - execution.started_at).total_seconds()
             record_playbook_execution_duration(playbook_name, duration)
+            total_duration_ms = int(duration * 1000)
+
+        # Log execution completion to audit log
+        if AUDIT_LOG_AVAILABLE:
+            # Get service name if we have service_id
+            service_name = None
+            if execution.service_id:
+                svc_result = db.query_db(
+                    "SELECT name FROM services WHERE service_id = %s",
+                    (execution.service_id,),
+                    show_columns=True
+                )
+                if svc_result and svc_result != '[]':
+                    try:
+                        rows = json.loads(str(svc_result))
+                        if rows:
+                            service_name = rows[0].get('name')
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        pass
+
+            log_execution_completed(
+                execution_id=execution.execution_id or 0,
+                playbook_name=playbook_name,
+                steps_completed=execution.current_step,
+                total_duration_ms=total_duration_ms,
+                service_name=service_name,
+            )
 
         # Update pending approval gauge
         _update_pending_approval_metric()
