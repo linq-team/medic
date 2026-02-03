@@ -439,8 +439,8 @@
         "Typecheck passes"
       ],
       "priority": 30,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/013_create_registered_scripts.sql. Table includes script_id, name (unique), content, interpreter (bash/python with CHECK), timeout_seconds (positive with CHECK), timestamps. Indexes on name, interpreter, and created_at."
     },
     {
       "id": "US-031",

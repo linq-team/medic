@@ -436,3 +436,15 @@
   - Output includes full HTTP request/response details: method, URL, status code, response body
   - Engine _execute_webhook() now calls execute_webhook_step() instead of placeholder
 ---
+
+## 2026-02-03 - US-030 - Linear Issue: SRE-20
+- Created registered_scripts database schema migration in migrations/013_create_registered_scripts.sql
+- Files changed: migrations/013_create_registered_scripts.sql (new)
+- **Learnings for future iterations:**
+  - registered_scripts table: script_id, name (unique), content, interpreter (bash/python), timeout_seconds (default 30), timestamps
+  - Interpreter constraint via CHECK ensures only valid interpreters: bash, python
+  - Timeout must be positive (CHECK constraint timeout_seconds > 0)
+  - Scripts referenced by name in playbook YAML script steps
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
+  - Security: only scripts in this table can be executed, preventing arbitrary code execution from playbooks
+---
