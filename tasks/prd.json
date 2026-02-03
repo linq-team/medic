@@ -235,8 +235,8 @@
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/007_create_maintenance_windows.sql. Table includes window_id, name (unique), start_time, end_time, recurrence (cron, nullable), timezone (IANA format with CHECK), service_ids (integer array), timestamps. Indexes on name, time range, service_ids (GIN), and recurrence."
     },
     {
       "id": "US-017",

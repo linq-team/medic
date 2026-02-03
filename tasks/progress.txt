@@ -192,3 +192,16 @@
   - When patching local imports in tests, patch at the source module (Medic.Core.working_hours.get_service_current_period), not the consuming module
   - Migration adds period column with DEFAULT 'always' so existing targets continue to work unchanged
 ---
+
+## 2026-02-03 - US-016 - Linear Issue: SRE-14
+- Created maintenance_windows database schema migration in migrations/007_create_maintenance_windows.sql
+- Files changed: migrations/007_create_maintenance_windows.sql (new)
+- **Learnings for future iterations:**
+  - maintenance_windows table: window_id, name (unique), start_time, end_time, recurrence (nullable cron), timezone (IANA), service_ids (integer array), timestamps
+  - Service_ids uses INTEGER[] array type with DEFAULT '{}' - empty array means "all services"
+  - GIN index on service_ids enables efficient array containment queries (e.g., WHERE service_id = ANY(service_ids))
+  - Recurrence field stores cron expression for recurring windows (NULL for one-time)
+  - end_time > start_time enforced via CHECK constraint
+  - IANA timezone constraint reused from schedules table pattern
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
+---
