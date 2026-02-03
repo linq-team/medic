@@ -1646,40 +1646,6 @@ class TestExecuteWebhookStep:
         assert captured_kwargs['method'] == "GET"
 
 
-class TestPlaceholderSteps:
-    """Tests for placeholder step executors."""
-
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    def test_condition_step_placeholder(self, mock_create):
-        """Test condition step placeholder returns pending."""
-        from Medic.Core.playbook_engine import (
-            ExecutionStatus,
-            PlaybookExecution,
-            StepResultStatus,
-            execute_condition_step_placeholder,
-        )
-        from Medic.Core.playbook_parser import ConditionStep, ConditionType
-
-        mock_create.return_value = MagicMock(result_id=1)
-
-        step = ConditionStep(
-            name="test-condition",
-            condition_type=ConditionType.HEARTBEAT_RECEIVED,
-        )
-        execution = PlaybookExecution(
-            execution_id=100,
-            playbook_id=10,
-            service_id=None,
-            status=ExecutionStatus.RUNNING,
-            current_step=0,
-        )
-
-        result = execute_condition_step_placeholder(step, execution)
-
-        assert result.status == StepResultStatus.PENDING
-        assert "not yet implemented" in result.output
-
-
 class TestRegisteredScript:
     """Tests for RegisteredScript dataclass."""
 
@@ -2545,3 +2511,644 @@ class TestExecuteScriptStep:
         assert env['MEDIC_EXECUTION_ID'] == '100'
         assert env['MEDIC_PLAYBOOK_ID'] == '10'
         assert env['MEDIC_SERVICE_ID'] == '42'
+
+
+class TestCheckHeartbeatReceived:
+    """Tests for check_heartbeat_received function."""
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_success(self, mock_db):
+        """Test heartbeat received check when heartbeat exists."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = json.dumps([{"count": 1}])
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        met, message = check_heartbeat_received(
+            service_id=42,
+            since=now - timedelta(minutes=5),
+            parameters={},
+        )
+
+        assert met is True
+        assert "Heartbeat received" in message
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_not_found(self, mock_db):
+        """Test heartbeat received check when no heartbeat found."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = json.dumps([{"count": 0}])
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        met, message = check_heartbeat_received(
+            service_id=42,
+            since=now,
+            parameters={},
+        )
+
+        assert met is False
+        assert "Waiting for heartbeat" in message
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_min_count(self, mock_db):
+        """Test heartbeat check with min_count parameter."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = json.dumps([{"count": 2}])
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        met, message = check_heartbeat_received(
+            service_id=42,
+            since=now - timedelta(minutes=10),
+            parameters={"min_count": 3},
+        )
+
+        assert met is False
+        assert "2/3" in message
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_min_count_met(self, mock_db):
+        """Test heartbeat check when min_count is met."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = json.dumps([{"count": 3}])
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        met, message = check_heartbeat_received(
+            service_id=42,
+            since=now - timedelta(minutes=10),
+            parameters={"min_count": 3},
+        )
+
+        assert met is True
+        assert "3 heartbeat(s)" in message
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_with_status_filter(self, mock_db):
+        """Test heartbeat check with status filter."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = json.dumps([{"count": 1}])
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        check_heartbeat_received(
+            service_id=42,
+            since=now,
+            parameters={"status": "UP"},
+        )
+
+        # Verify status filter was included in query
+        call_args = mock_db.query_db.call_args
+        query = call_args[0][0]
+        params = call_args[0][1]
+        assert "status = %s" in query
+        assert "UP" in params
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_db_failure(self, mock_db):
+        """Test heartbeat check handles DB failure."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = None
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        met, message = check_heartbeat_received(
+            service_id=42,
+            since=now,
+            parameters={},
+        )
+
+        assert met is False
+        assert "Failed to query" in message
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_check_heartbeat_received_json_error(self, mock_db):
+        """Test heartbeat check handles JSON parse error."""
+        from Medic.Core.playbook_engine import check_heartbeat_received
+
+        mock_db.query_db.return_value = "invalid json"
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        met, message = check_heartbeat_received(
+            service_id=42,
+            since=now,
+            parameters={},
+        )
+
+        assert met is False
+        assert "Error parsing" in message
+
+
+class TestExecuteConditionStep:
+    """Tests for execute_condition_step function."""
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_success_immediately(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step succeeds when condition met immediately."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (True, "Heartbeat received: 1")
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=60,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert "Condition 'heartbeat_received' met" in result.output
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_timeout_fail(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step fails on timeout with on_failure=fail."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import (
+            ConditionStep,
+            ConditionType,
+            OnFailureAction,
+        )
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (False, "No heartbeat found")
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=1,  # Very short timeout for test
+            on_failure=OnFailureAction.FAIL,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "timed out" in result.output
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_timeout_continue(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step continues on timeout with on_failure=continue."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import (
+            ConditionStep,
+            ConditionType,
+            OnFailureAction,
+        )
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (False, "No heartbeat found")
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=1,
+            on_failure=OnFailureAction.CONTINUE,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED  # Continues!
+        assert "on_failure=continue" in result.output
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_timeout_escalate(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step escalates on timeout with on_failure=escalate."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import (
+            ConditionStep,
+            ConditionType,
+            OnFailureAction,
+        )
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (False, "No heartbeat found")
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=1,
+            on_failure=OnFailureAction.ESCALATE,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "[ESCALATE]" in result.output
+        assert "escalating" in result.error_message.lower()
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_no_service_id(
+        self,
+        mock_create,
+        mock_update
+    ):
+        """Test condition step fails when no service_id available."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=60,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,  # No service_id
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "No service_id" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_service_id_from_parameters(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step uses service_id from parameters."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (True, "Heartbeat received")
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=60,
+            parameters={"service_id": 99},  # From parameters
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,  # No service_id on execution
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        # Verify check was called with service_id from parameters
+        mock_check_heartbeat.assert_called_once()
+        call_args = mock_check_heartbeat.call_args
+        assert call_args[1]["service_id"] == 99
+
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_creation_failure(self, mock_create):
+        """Test condition step handles step result creation failure."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = None  # Simulate creation failure
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=60,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "Failed to create step result" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_polls_until_success(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step polls until condition is met."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        # Fail first two times, succeed third time
+        mock_check_heartbeat.side_effect = [
+            (False, "Waiting"),
+            (False, "Still waiting"),
+            (True, "Got it!"),
+        ]
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=30,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert mock_check_heartbeat.call_count == 3
+        assert mock_sleep.call_count == 2  # Slept twice
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_uses_custom_timeout(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step respects custom timeout."""
+        from Medic.Core.playbook_engine import (
+            DEFAULT_CONDITION_TIMEOUT,
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (True, "Got it!")
+
+        custom_timeout = DEFAULT_CONDITION_TIMEOUT + 60
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=custom_timeout,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_condition_step(step, execution)
+
+        # Step should complete without timeout
+        assert result.status == StepResultStatus.COMPLETED
+
+    @patch('Medic.Core.playbook_engine.time.sleep')
+    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    def test_execute_condition_step_passes_parameters(
+        self,
+        mock_create,
+        mock_update,
+        mock_check_heartbeat,
+        mock_sleep
+    ):
+        """Test condition step passes parameters to check function."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            execute_condition_step,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_check_heartbeat.return_value = (True, "Success")
+
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=60,
+            parameters={"min_count": 5, "status": "UP"},
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        execute_condition_step(step, execution)
+
+        # Verify parameters were passed
+        call_args = mock_check_heartbeat.call_args
+        assert call_args[1]["parameters"]["min_count"] == 5
+        assert call_args[1]["parameters"]["status"] == "UP"
+
+
+class TestEngineExecuteCondition:
+    """Tests for engine _execute_condition method."""
+
+    @patch('Medic.Core.playbook_engine.execute_condition_step')
+    def test_engine_execute_condition_calls_step_function(
+        self,
+        mock_execute_condition
+    ):
+        """Test engine _execute_condition calls execute_condition_step."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+            StepResult,
+            StepResultStatus,
+        )
+        from Medic.Core.playbook_parser import ConditionStep, ConditionType
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        mock_execute_condition.return_value = StepResult(
+            result_id=1,
+            execution_id=100,
+            step_name="test",
+            step_index=0,
+            status=StepResultStatus.COMPLETED,
+            started_at=now,
+            completed_at=now,
+        )
+
+        engine = PlaybookExecutionEngine()
+        step = ConditionStep(
+            name="check-heartbeat",
+            condition_type=ConditionType.HEARTBEAT_RECEIVED,
+            timeout_seconds=60,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = engine._execute_condition(step, execution)
+
+        mock_execute_condition.assert_called_once_with(step, execution)
+        assert result.status == StepResultStatus.COMPLETED
+
+    def test_engine_execute_condition_wrong_type_raises(self):
+        """Test engine _execute_condition raises TypeError for wrong step type."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            PlaybookExecutionEngine,
+        )
+        from Medic.Core.playbook_parser import WaitStep
+
+        engine = PlaybookExecutionEngine()
+        step = WaitStep(
+            name="wait-step",
+            duration_seconds=10,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        with pytest.raises(TypeError) as exc_info:
+            engine._execute_condition(step, execution)
+
+        assert "Expected ConditionStep" in str(exc_info.value)

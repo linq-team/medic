@@ -470,8 +470,8 @@
         "Typecheck passes"
       ],
       "priority": 32,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented execute_condition_step() in Medic/Core/playbook_engine.py. Supports heartbeat_received check with polling, configurable timeout (default 5 min), and on_failure modes (fail/continue/escalate). check_heartbeat_received() queries medic.heartbeatEvents table for count since condition start. 19 new unit tests (108 total) in tests/unit/test_playbook_engine.py."
     },
     {
       "id": "US-033",

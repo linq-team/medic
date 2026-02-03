@@ -48,6 +48,8 @@ import Medic.Helpers.logSettings as logLevel
 from Medic.Core.playbook_parser import (
     ApprovalMode,
     ConditionStep,
+    ConditionType,
+    OnFailureAction,
     Playbook,
     PlaybookStep,
     ScriptStep,
@@ -1508,45 +1510,332 @@ def execute_script_step(
         )
 
 
-def execute_condition_step_placeholder(
+# ============================================================================
+# Condition Step Execution
+# ============================================================================
+
+# Default timeout for condition checks (seconds)
+DEFAULT_CONDITION_TIMEOUT = 300  # 5 minutes
+
+# Polling interval for condition checks (seconds)
+CONDITION_POLL_INTERVAL = 5
+
+
+def check_heartbeat_received(
+    service_id: int,
+    since: datetime,
+    parameters: Dict[str, Any]
+) -> tuple[bool, str]:
+    """
+    Check if a heartbeat has been received for a service since a given time.
+
+    Args:
+        service_id: The service ID to check
+        since: Check for heartbeats received after this time
+        parameters: Additional parameters (e.g., min_count, status filter)
+
+    Returns:
+        Tuple of (condition_met, message)
+    """
+    min_count = parameters.get('min_count', 1)
+    status_filter = parameters.get('status')
+
+    # Build query to check for heartbeats since the given time
+    query = """
+        SELECT COUNT(*) as count
+        FROM medic.heartbeatEvents
+        WHERE service_id = %s
+          AND time >= %s
+    """
+    params: List[Any] = [service_id, since]
+
+    # Add status filter if specified
+    if status_filter:
+        query += " AND status = %s"
+        params.append(status_filter)
+
+    result = db.query_db(query, tuple(params), show_columns=True)
+
+    if not result or result == '[]':
+        return (False, "Failed to query heartbeat events")
+
+    try:
+        rows = json.loads(str(result))
+        if not rows:
+            return (False, "No heartbeat data returned")
+
+        count = rows[0].get('count', 0)
+        if count >= min_count:
+            return (
+                True,
+                f"Heartbeat received: {count} heartbeat(s) since {since.isoformat()}"
+            )
+        else:
+            return (
+                False,
+                f"Waiting for heartbeat: {count}/{min_count} received since "
+                f"{since.isoformat()}"
+            )
+    except (json.JSONDecodeError, TypeError, KeyError) as e:
+        return (False, f"Error parsing heartbeat data: {e}")
+
+
+def execute_condition_step(
     step: ConditionStep,
     execution: PlaybookExecution
 ) -> StepResult:
     """
-    Placeholder for condition step execution.
+    Execute a condition step by polling until condition is met or timeout.
 
-    This will be implemented in US-032.
+    Supported condition types:
+    - heartbeat_received: Check if service received a heartbeat
+
+    The step will poll at regular intervals until:
+    - Condition is met: Returns COMPLETED status
+    - Timeout expires: Returns based on on_failure setting
+      - fail: Returns FAILED status
+      - continue: Returns COMPLETED status (allows playbook to continue)
+      - escalate: Returns FAILED status with escalation flag
 
     Args:
         step: The ConditionStep to execute
         execution: The current execution context
 
     Returns:
-        StepResult (placeholder - always returns pending)
+        StepResult with execution outcome
     """
     now = _now()
+    step_index = execution.current_step
+    condition_start = now
 
-    logger.log(
-        level=20,
-        msg=f"Condition step '{step.name}' execution not yet implemented"
-    )
-
+    # Create step result as running
     result = create_step_result(
         execution_id=execution.execution_id or 0,
         step_name=step.name,
-        step_index=execution.current_step,
-        status=StepResultStatus.PENDING
+        step_index=step_index,
+        status=StepResultStatus.RUNNING
     )
 
-    return StepResult(
-        result_id=result.result_id if result else None,
-        execution_id=execution.execution_id or 0,
-        step_name=step.name,
-        step_index=execution.current_step,
-        status=StepResultStatus.PENDING,
-        output="Condition check not yet implemented",
+    if not result:
+        return StepResult(
+            result_id=None,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message="Failed to create step result record",
+            started_at=now,
+            completed_at=now,
+        )
+
+    # Update with start time
+    update_step_result(
+        result_id=result.result_id or 0,
+        status=StepResultStatus.RUNNING,
         started_at=now,
     )
+
+    # Get service ID from execution context
+    service_id = execution.service_id
+    if not service_id:
+        # Try to get from parameters
+        service_id = step.parameters.get('service_id')
+
+    if not service_id:
+        completed_at = _now()
+        error_msg = (
+            "No service_id available for condition check. "
+            "Provide service_id in execution or step parameters."
+        )
+        logger.log(
+            level=30,
+            msg=f"Condition step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    # Determine timeout
+    timeout = step.timeout_seconds or DEFAULT_CONDITION_TIMEOUT
+
+    logger.log(
+        level=20,
+        msg=f"Condition step '{step.name}': checking {step.condition_type.value} "
+            f"for service {service_id} (timeout: {timeout}s)"
+    )
+
+    # Poll for condition until timeout
+    condition_met = False
+    last_message = ""
+
+    while True:
+        # Check if timeout has expired
+        elapsed = (_now() - condition_start).total_seconds()
+        if elapsed >= timeout:
+            break
+
+        # Evaluate condition based on type
+        if step.condition_type == ConditionType.HEARTBEAT_RECEIVED:
+            condition_met, last_message = check_heartbeat_received(
+                service_id=service_id,
+                since=condition_start,
+                parameters=step.parameters,
+            )
+        else:
+            last_message = f"Unknown condition type: {step.condition_type.value}"
+            break
+
+        if condition_met:
+            break
+
+        # Sleep before next poll
+        remaining = timeout - elapsed
+        sleep_time = min(CONDITION_POLL_INTERVAL, remaining)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
+    completed_at = _now()
+    elapsed_total = (completed_at - condition_start).total_seconds()
+
+    if condition_met:
+        # Condition was met
+        output_msg = (
+            f"Condition '{step.condition_type.value}' met after "
+            f"{elapsed_total:.1f}s\n{last_message}"
+        )
+        logger.log(
+            level=20,
+            msg=f"Condition step '{step.name}' completed: {last_message}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.COMPLETED,
+            output=output_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.COMPLETED,
+            output=output_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    # Condition timed out - handle based on on_failure setting
+    timeout_msg = (
+        f"Condition '{step.condition_type.value}' timed out after "
+        f"{elapsed_total:.1f}s\n{last_message}"
+    )
+
+    if step.on_failure == OnFailureAction.CONTINUE:
+        # Allow playbook to continue despite condition not being met
+        logger.log(
+            level=30,
+            msg=f"Condition step '{step.name}' timed out but continuing "
+                f"(on_failure=continue): {last_message}"
+        )
+
+        output_msg = f"{timeout_msg}\n(Continuing due to on_failure=continue)"
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.COMPLETED,
+            output=output_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.COMPLETED,
+            output=output_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    elif step.on_failure == OnFailureAction.ESCALATE:
+        # Fail and mark for escalation
+        error_msg = (
+            f"Condition timed out after {elapsed_total:.1f}s. "
+            f"Escalating to on-call: {last_message}"
+        )
+        logger.log(
+            level=40,
+            msg=f"Condition step '{step.name}' failed, escalating: {error_msg}"
+        )
+
+        # Include escalation flag in output for downstream processing
+        output_msg = f"{timeout_msg}\n[ESCALATE] Condition failure requires escalation"
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            output=output_msg,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            output=output_msg,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    else:
+        # Default: fail the step (on_failure=fail)
+        error_msg = f"Condition timed out after {elapsed_total:.1f}s: {last_message}"
+        logger.log(
+            level=30,
+            msg=f"Condition step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            output=timeout_msg,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            output=timeout_msg,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
 
 
 # ============================================================================
@@ -1917,10 +2206,10 @@ class PlaybookExecutionEngine:
         step: PlaybookStep,
         execution: PlaybookExecution
     ) -> StepResult:
-        """Execute a condition step (placeholder)."""
+        """Execute a condition step."""
         if not isinstance(step, ConditionStep):
             raise TypeError(f"Expected ConditionStep, got {type(step)}")
-        return execute_condition_step_placeholder(step, execution)
+        return execute_condition_step(step, execution)
 
     def _fail_execution(
         self,

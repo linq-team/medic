@@ -67,6 +67,13 @@
 - Script output: MAX_SCRIPT_OUTPUT_SIZE = 8192 bytes. Combines stdout and stderr (stderr prefixed with [STDERR]).
 - Script variables: _substitute_script_variables() merges context and parameters (params override). Uses ${VAR_NAME} syntax.
 - Script environment: MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID env vars available to scripts.
+- Condition step execution: Use execute_condition_step(step, execution) from Medic/Core/playbook_engine.py. Polls until condition met or timeout.
+- Condition check function: check_heartbeat_received(service_id, since, parameters) queries medic.heartbeatEvents for count since given time.
+- Condition polling: CONDITION_POLL_INTERVAL = 5 seconds. DEFAULT_CONDITION_TIMEOUT = 300 seconds (5 minutes).
+- Condition on_failure modes: OnFailureAction.FAIL (stop playbook), OnFailureAction.CONTINUE (mark completed, continue), OnFailureAction.ESCALATE (fail with escalation flag).
+- Condition parameters: min_count (default 1), status (filter by heartbeat status). Passed to check function.
+- Condition success: Output includes elapsed time and condition message. Status = COMPLETED.
+- Condition timeout: Output includes "[ESCALATE]" tag for escalate mode. Error message includes "Escalating to on-call".
 
 ---
 
@@ -473,4 +480,21 @@
   - Step timeout can be overridden at step level (step.timeout_seconds) - falls back to script.timeout_seconds or DEFAULT_SCRIPT_TIMEOUT (30s)
   - subprocess.TimeoutExpired handled separately from generic exceptions for clear error messages
   - Engine _execute_script() now calls execute_script_step() instead of placeholder
+---
+
+## 2026-02-03 - US-032 - Linear Issue: SRE-23
+- Implemented condition step executor in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (modified), tests/unit/test_playbook_engine.py (extended)
+- **Learnings for future iterations:**
+  - execute_condition_step() replaces execute_condition_step_placeholder() - now fully implemented
+  - check_heartbeat_received(service_id, since, parameters) queries medic.heartbeatEvents for heartbeat count since a given time
+  - Condition polling: CONDITION_POLL_INTERVAL = 5 seconds between checks, DEFAULT_CONDITION_TIMEOUT = 300 seconds (5 minutes)
+  - OnFailureAction enum (FAIL, CONTINUE, ESCALATE) determines behavior when condition times out:
+    - FAIL: Step fails, playbook stops (default)
+    - CONTINUE: Step returns COMPLETED, playbook continues (useful for optional checks)
+    - ESCALATE: Step fails with "[ESCALATE]" tag in output for downstream processing
+  - Condition parameters: min_count (minimum heartbeats required, default 1), status (filter by heartbeat status)
+  - service_id can come from execution.service_id or step.parameters['service_id'] - flexibility for multi-service playbooks
+  - ConditionType enum from playbook_parser.py defines check types (currently only HEARTBEAT_RECEIVED)
+  - Removed old placeholder test - replaced with 19 comprehensive unit tests covering all paths
 ---
