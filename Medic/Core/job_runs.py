@@ -402,3 +402,126 @@ def _parse_datetime(dt_str: str) -> Optional[datetime]:
         except ValueError:
             continue
     return None
+
+
+@dataclass
+class DurationStatistics:
+    """Duration statistics for a service's job runs."""
+    service_id: int
+    run_count: int
+    avg_duration_ms: Optional[float] = None
+    p50_duration_ms: Optional[int] = None
+    p95_duration_ms: Optional[int] = None
+    p99_duration_ms: Optional[int] = None
+    min_duration_ms: Optional[int] = None
+    max_duration_ms: Optional[int] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "service_id": self.service_id,
+            "run_count": self.run_count,
+            "avg_duration_ms": self.avg_duration_ms,
+            "p50_duration_ms": self.p50_duration_ms,
+            "p95_duration_ms": self.p95_duration_ms,
+            "p99_duration_ms": self.p99_duration_ms,
+            "min_duration_ms": self.min_duration_ms,
+            "max_duration_ms": self.max_duration_ms
+        }
+
+
+def get_duration_statistics(
+    service_id: int,
+    min_runs: int = 5,
+    max_runs: int = 100
+) -> DurationStatistics:
+    """
+    Calculate duration statistics for a service's job runs.
+
+    Returns avg, p50, p95, p99 durations from the last max_runs completed runs.
+    Returns empty stats if fewer than min_runs runs are available.
+
+    Args:
+        service_id: The service ID
+        min_runs: Minimum number of runs required for stats (default 5)
+        max_runs: Maximum number of runs to consider (default 100)
+
+    Returns:
+        DurationStatistics object with calculated percentiles
+    """
+    runs = get_completed_runs_for_service(service_id, limit=max_runs)
+
+    if len(runs) < min_runs:
+        return DurationStatistics(
+            service_id=service_id,
+            run_count=len(runs)
+        )
+
+    # Extract duration values, filtering out None
+    durations = [
+        r.duration_ms for r in runs
+        if r.duration_ms is not None and r.duration_ms >= 0
+    ]
+
+    if len(durations) < min_runs:
+        return DurationStatistics(
+            service_id=service_id,
+            run_count=len(runs)
+        )
+
+    # Sort for percentile calculations
+    durations_sorted = sorted(durations)
+    n = len(durations_sorted)
+
+    # Calculate statistics
+    avg_duration = sum(durations) / n
+    min_duration = durations_sorted[0]
+    max_duration = durations_sorted[-1]
+
+    # Percentile calculation using linear interpolation
+    p50 = _percentile(durations_sorted, 50)
+    p95 = _percentile(durations_sorted, 95)
+    p99 = _percentile(durations_sorted, 99)
+
+    return DurationStatistics(
+        service_id=service_id,
+        run_count=n,
+        avg_duration_ms=round(avg_duration, 2),
+        p50_duration_ms=p50,
+        p95_duration_ms=p95,
+        p99_duration_ms=p99,
+        min_duration_ms=min_duration,
+        max_duration_ms=max_duration
+    )
+
+
+def _percentile(sorted_data: List[int], p: float) -> int:
+    """
+    Calculate the p-th percentile of sorted data.
+
+    Uses linear interpolation (same as numpy's default).
+
+    Args:
+        sorted_data: Sorted list of values
+        p: Percentile to calculate (0-100)
+
+    Returns:
+        Percentile value as integer
+    """
+    n = len(sorted_data)
+    if n == 0:
+        return 0
+    if n == 1:
+        return sorted_data[0]
+
+    # Calculate index using linear interpolation
+    k = (n - 1) * (p / 100.0)
+    f = int(k)
+    c = f + 1 if f + 1 < n else f
+
+    # Linear interpolation between floor and ceiling values
+    if f == c:
+        return sorted_data[f]
+
+    d = k - f
+    return int(sorted_data[f] * (1 - d) + sorted_data[c] * d)

@@ -419,3 +419,127 @@ class TestV2HeartbeatSignals:
                 data = json.loads(response.data)
                 assert data["success"] is True
                 assert data["results"]["run_id"] is None
+
+
+@pytest.mark.integration
+class TestV2DurationStatistics:
+    """Integration tests for V2 duration statistics endpoint."""
+
+    def test_duration_stats_success_with_data(self, app, mock_env_vars):
+        """Test successful stats retrieval with sufficient data."""
+        client = app.test_client()
+
+        with patch("Medic.Core.routes.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps([{
+                "service_id": 1,
+                "heartbeat_name": "batch-job"
+            }])
+
+            with patch("Medic.Core.routes.job_runs.get_duration_statistics") as mock_stats:
+                from Medic.Core.job_runs import DurationStatistics
+                mock_stats.return_value = DurationStatistics(
+                    service_id=1,
+                    run_count=50,
+                    avg_duration_ms=1500.5,
+                    p50_duration_ms=1200,
+                    p95_duration_ms=2800,
+                    p99_duration_ms=3500,
+                    min_duration_ms=500,
+                    max_duration_ms=4000
+                )
+
+                response = client.get("/v2/services/1/stats")
+
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["service_id"] == 1
+                assert data["results"]["run_count"] == 50
+                assert data["results"]["avg_duration_ms"] == 1500.5
+                assert data["results"]["p50_duration_ms"] == 1200
+                assert data["results"]["p95_duration_ms"] == 2800
+                assert data["results"]["p99_duration_ms"] == 3500
+                assert data["results"]["min_duration_ms"] == 500
+                assert data["results"]["max_duration_ms"] == 4000
+
+    def test_duration_stats_insufficient_data(self, app, mock_env_vars):
+        """Test stats retrieval with insufficient data (< 5 runs)."""
+        client = app.test_client()
+
+        with patch("Medic.Core.routes.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps([{
+                "service_id": 1,
+                "heartbeat_name": "batch-job"
+            }])
+
+            with patch("Medic.Core.routes.job_runs.get_duration_statistics") as mock_stats:
+                from Medic.Core.job_runs import DurationStatistics
+                # Return empty stats (fewer than 5 runs)
+                mock_stats.return_value = DurationStatistics(
+                    service_id=1,
+                    run_count=3
+                )
+
+                response = client.get("/v2/services/1/stats")
+
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["service_id"] == 1
+                assert data["results"]["run_count"] == 3
+                assert data["results"]["avg_duration_ms"] is None
+                assert data["results"]["p50_duration_ms"] is None
+                assert data["results"]["p95_duration_ms"] is None
+                assert data["results"]["p99_duration_ms"] is None
+
+    def test_duration_stats_no_runs(self, app, mock_env_vars):
+        """Test stats retrieval with no runs."""
+        client = app.test_client()
+
+        with patch("Medic.Core.routes.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps([{
+                "service_id": 1,
+                "heartbeat_name": "batch-job"
+            }])
+
+            with patch("Medic.Core.routes.job_runs.get_duration_statistics") as mock_stats:
+                from Medic.Core.job_runs import DurationStatistics
+                mock_stats.return_value = DurationStatistics(
+                    service_id=1,
+                    run_count=0
+                )
+
+                response = client.get("/v2/services/1/stats")
+
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["run_count"] == 0
+                assert data["results"]["avg_duration_ms"] is None
+
+    def test_duration_stats_service_not_found(self, app, mock_env_vars):
+        """Test stats retrieval when service doesn't exist."""
+        client = app.test_client()
+
+        with patch("Medic.Core.routes.db.query_db") as mock_query:
+            mock_query.return_value = '[]'
+
+            response = client.get("/v2/services/999/stats")
+
+            assert response.status_code == 404
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "not found" in data["message"]
+
+    def test_duration_stats_service_null_result(self, app, mock_env_vars):
+        """Test stats retrieval when database returns null."""
+        client = app.test_client()
+
+        with patch("Medic.Core.routes.db.query_db") as mock_query:
+            mock_query.return_value = None
+
+            response = client.get("/v2/services/999/stats")
+
+            assert response.status_code == 404
+            data = json.loads(response.data)
+            assert data["success"] is False

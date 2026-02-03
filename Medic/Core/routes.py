@@ -459,6 +459,48 @@ def exposeRoutes(app):
             hbeat.HeartbeatStatus.FAILED.value
         )
 
+    @app.route('/v2/services/<int:service_id>/stats', methods=['GET'])
+    def service_duration_stats(service_id):
+        """
+        Get duration statistics for a service's job runs.
+
+        Returns avg, p50, p95, p99 durations from the last 100 completed runs.
+        Returns empty stats (null values) if fewer than 5 runs are available.
+        """
+        # Verify service exists
+        service_check = db.query_db(
+            "SELECT service_id, heartbeat_name FROM services "
+            "WHERE service_id = %s LIMIT 1",
+            (service_id,),
+            show_columns=True
+        )
+
+        if not service_check or service_check == '[]':
+            logger.log(
+                level=30,
+                msg=f"Service ID {service_id} not found for stats request"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Service ID {service_id} not found.",
+                "results": ""
+            }), 404
+
+        # Get duration statistics
+        stats = job_runs.get_duration_statistics(service_id)
+
+        logger.log(
+            level=10,
+            msg=f"Duration stats for service {service_id}: "
+                f"count={stats.run_count}"
+        )
+
+        return json.dumps({
+            "success": True,
+            "message": "",
+            "results": stats.to_dict()
+        }), 200
+
     def _record_job_signal(service_id, status):
         """
         Internal helper to record a job signal (start/complete/fail).

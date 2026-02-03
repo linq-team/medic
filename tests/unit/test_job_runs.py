@@ -469,3 +469,353 @@ class TestParseJobRun:
         result = _parse_job_run(data)
 
         assert result is None
+
+
+class TestDurationStatisticsDataclass:
+    """Tests for DurationStatistics dataclass."""
+
+    def test_duration_stats_initialization_full(self):
+        """Test DurationStatistics with all values."""
+        from Medic.Core.job_runs import DurationStatistics
+
+        stats = DurationStatistics(
+            service_id=10,
+            run_count=50,
+            avg_duration_ms=1500.5,
+            p50_duration_ms=1200,
+            p95_duration_ms=2800,
+            p99_duration_ms=3500,
+            min_duration_ms=500,
+            max_duration_ms=4000
+        )
+
+        assert stats.service_id == 10
+        assert stats.run_count == 50
+        assert stats.avg_duration_ms == 1500.5
+        assert stats.p50_duration_ms == 1200
+        assert stats.p95_duration_ms == 2800
+        assert stats.p99_duration_ms == 3500
+        assert stats.min_duration_ms == 500
+        assert stats.max_duration_ms == 4000
+
+    def test_duration_stats_initialization_empty(self):
+        """Test DurationStatistics with only required values."""
+        from Medic.Core.job_runs import DurationStatistics
+
+        stats = DurationStatistics(
+            service_id=10,
+            run_count=3
+        )
+
+        assert stats.service_id == 10
+        assert stats.run_count == 3
+        assert stats.avg_duration_ms is None
+        assert stats.p50_duration_ms is None
+        assert stats.p95_duration_ms is None
+        assert stats.p99_duration_ms is None
+        assert stats.min_duration_ms is None
+        assert stats.max_duration_ms is None
+
+    def test_duration_stats_to_dict(self):
+        """Test DurationStatistics to_dict method."""
+        from Medic.Core.job_runs import DurationStatistics
+
+        stats = DurationStatistics(
+            service_id=10,
+            run_count=50,
+            avg_duration_ms=1500.5,
+            p50_duration_ms=1200,
+            p95_duration_ms=2800,
+            p99_duration_ms=3500,
+            min_duration_ms=500,
+            max_duration_ms=4000
+        )
+
+        result = stats.to_dict()
+
+        assert result["service_id"] == 10
+        assert result["run_count"] == 50
+        assert result["avg_duration_ms"] == 1500.5
+        assert result["p50_duration_ms"] == 1200
+        assert result["p95_duration_ms"] == 2800
+        assert result["p99_duration_ms"] == 3500
+        assert result["min_duration_ms"] == 500
+        assert result["max_duration_ms"] == 4000
+
+    def test_duration_stats_to_dict_empty(self):
+        """Test DurationStatistics to_dict with empty stats."""
+        from Medic.Core.job_runs import DurationStatistics
+
+        stats = DurationStatistics(service_id=10, run_count=0)
+        result = stats.to_dict()
+
+        assert result["service_id"] == 10
+        assert result["run_count"] == 0
+        assert result["avg_duration_ms"] is None
+        assert result["p50_duration_ms"] is None
+
+
+class TestPercentile:
+    """Tests for _percentile helper function."""
+
+    def test_percentile_empty_data(self):
+        """Test percentile with empty data."""
+        from Medic.Core.job_runs import _percentile
+
+        result = _percentile([], 50)
+        assert result == 0
+
+    def test_percentile_single_value(self):
+        """Test percentile with single value."""
+        from Medic.Core.job_runs import _percentile
+
+        result = _percentile([1000], 50)
+        assert result == 1000
+
+        result = _percentile([1000], 99)
+        assert result == 1000
+
+    def test_percentile_two_values(self):
+        """Test percentile with two values."""
+        from Medic.Core.job_runs import _percentile
+
+        data = [1000, 2000]
+        assert _percentile(data, 50) == 1500  # Midpoint
+
+    def test_percentile_p50(self):
+        """Test 50th percentile (median)."""
+        from Medic.Core.job_runs import _percentile
+
+        # Odd number of values
+        data = [100, 200, 300, 400, 500]
+        assert _percentile(data, 50) == 300
+
+        # Even number of values
+        data = [100, 200, 300, 400]
+        assert _percentile(data, 50) == 250
+
+    def test_percentile_p95(self):
+        """Test 95th percentile."""
+        from Medic.Core.job_runs import _percentile
+
+        # 100 values from 1 to 100
+        data = list(range(1, 101))
+        result = _percentile(data, 95)
+        # p95 should be close to 95
+        assert 94 <= result <= 96
+
+    def test_percentile_p99(self):
+        """Test 99th percentile."""
+        from Medic.Core.job_runs import _percentile
+
+        # 100 values from 1 to 100
+        data = list(range(1, 101))
+        result = _percentile(data, 99)
+        # p99 should be close to 99
+        assert 98 <= result <= 100
+
+    def test_percentile_interpolation(self):
+        """Test that percentile uses linear interpolation."""
+        from Medic.Core.job_runs import _percentile
+
+        # 10 values
+        data = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        # p25: k = (10-1) * 0.25 = 2.25, interpolates between index 2 and 3
+        # Values at indices 2 and 3 are 30 and 40
+        # Interpolation: 30 * 0.75 + 40 * 0.25 = 22.5 + 10 = 32.5 -> 32
+        result = _percentile(data, 25)
+        assert 30 <= result <= 35
+
+
+class TestGetDurationStatistics:
+    """Tests for get_duration_statistics function."""
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_sufficient_data(self, mock_get_runs):
+        """Test statistics calculation with sufficient data."""
+        from Medic.Core.job_runs import (
+            get_duration_statistics, JobRun, DurationStatistics
+        )
+
+        # Create 10 mock runs with increasing durations
+        mock_runs = []
+        for i in range(10):
+            mock_runs.append(JobRun(
+                run_id_pk=i,
+                service_id=10,
+                run_id=f"run-{i}",
+                started_at=None,
+                completed_at=None,
+                duration_ms=(i + 1) * 1000,  # 1000, 2000, ... 10000
+                status="COMPLETED"
+            ))
+        mock_get_runs.return_value = mock_runs
+
+        result = get_duration_statistics(service_id=10)
+
+        assert isinstance(result, DurationStatistics)
+        assert result.service_id == 10
+        assert result.run_count == 10
+        assert result.avg_duration_ms == 5500.0  # Average of 1-10 thousand
+        assert result.min_duration_ms == 1000
+        assert result.max_duration_ms == 10000
+        # p50 should be around 5000-6000
+        assert 5000 <= result.p50_duration_ms <= 6000
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_insufficient_data(self, mock_get_runs):
+        """Test statistics with insufficient data (< 5 runs)."""
+        from Medic.Core.job_runs import (
+            get_duration_statistics, JobRun, DurationStatistics
+        )
+
+        # Only 3 runs - below minimum
+        mock_runs = [
+            JobRun(
+                run_id_pk=i, service_id=10, run_id=f"run-{i}",
+                started_at=None, completed_at=None,
+                duration_ms=1000, status="COMPLETED"
+            )
+            for i in range(3)
+        ]
+        mock_get_runs.return_value = mock_runs
+
+        result = get_duration_statistics(service_id=10)
+
+        assert result.service_id == 10
+        assert result.run_count == 3
+        assert result.avg_duration_ms is None
+        assert result.p50_duration_ms is None
+        assert result.p95_duration_ms is None
+        assert result.p99_duration_ms is None
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_no_data(self, mock_get_runs):
+        """Test statistics with no data."""
+        from Medic.Core.job_runs import (
+            get_duration_statistics, DurationStatistics
+        )
+
+        mock_get_runs.return_value = []
+
+        result = get_duration_statistics(service_id=10)
+
+        assert result.service_id == 10
+        assert result.run_count == 0
+        assert result.avg_duration_ms is None
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_custom_min_runs(self, mock_get_runs):
+        """Test statistics with custom min_runs threshold."""
+        from Medic.Core.job_runs import (
+            get_duration_statistics, JobRun
+        )
+
+        # 3 runs - meets custom threshold of 2
+        mock_runs = [
+            JobRun(
+                run_id_pk=i, service_id=10, run_id=f"run-{i}",
+                started_at=None, completed_at=None,
+                duration_ms=1000 * (i + 1), status="COMPLETED"
+            )
+            for i in range(3)
+        ]
+        mock_get_runs.return_value = mock_runs
+
+        result = get_duration_statistics(service_id=10, min_runs=2)
+
+        assert result.run_count == 3
+        assert result.avg_duration_ms is not None
+        assert result.p50_duration_ms == 2000
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_filters_null_durations(self, mock_get_runs):
+        """Test that null durations are filtered out."""
+        from Medic.Core.job_runs import (
+            get_duration_statistics, JobRun
+        )
+
+        # 7 runs but 2 have null duration
+        mock_runs = []
+        for i in range(7):
+            duration = (i + 1) * 1000 if i < 5 else None
+            mock_runs.append(JobRun(
+                run_id_pk=i, service_id=10, run_id=f"run-{i}",
+                started_at=None, completed_at=None,
+                duration_ms=duration, status="COMPLETED"
+            ))
+        mock_get_runs.return_value = mock_runs
+
+        result = get_duration_statistics(service_id=10)
+
+        # Only 5 runs have valid durations
+        assert result.run_count == 5
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_exactly_5_runs(self, mock_get_runs):
+        """Test statistics with exactly 5 runs (minimum threshold)."""
+        from Medic.Core.job_runs import (
+            get_duration_statistics, JobRun
+        )
+
+        mock_runs = [
+            JobRun(
+                run_id_pk=i, service_id=10, run_id=f"run-{i}",
+                started_at=None, completed_at=None,
+                duration_ms=1000 * (i + 1), status="COMPLETED"
+            )
+            for i in range(5)
+        ]
+        mock_get_runs.return_value = mock_runs
+
+        result = get_duration_statistics(service_id=10)
+
+        assert result.run_count == 5
+        assert result.avg_duration_ms == 3000.0  # (1+2+3+4+5)*1000/5
+        assert result.min_duration_ms == 1000
+        assert result.max_duration_ms == 5000
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_uses_last_100_runs(self, mock_get_runs):
+        """Test that statistics use at most 100 runs by default."""
+        from Medic.Core.job_runs import get_duration_statistics
+
+        mock_get_runs.return_value = []
+
+        get_duration_statistics(service_id=10)
+
+        mock_get_runs.assert_called_once_with(10, limit=100)
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_custom_max_runs(self, mock_get_runs):
+        """Test statistics with custom max_runs."""
+        from Medic.Core.job_runs import get_duration_statistics
+
+        mock_get_runs.return_value = []
+
+        get_duration_statistics(service_id=10, max_runs=50)
+
+        mock_get_runs.assert_called_once_with(10, limit=50)
+
+    @patch("Medic.Core.job_runs.get_completed_runs_for_service")
+    def test_get_duration_statistics_filters_negative_durations(
+        self, mock_get_runs
+    ):
+        """Test that negative durations are filtered out."""
+        from Medic.Core.job_runs import get_duration_statistics, JobRun
+
+        # 6 runs but 1 has negative duration
+        mock_runs = []
+        for i in range(6):
+            duration = (i + 1) * 1000 if i < 5 else -1000
+            mock_runs.append(JobRun(
+                run_id_pk=i, service_id=10, run_id=f"run-{i}",
+                started_at=None, completed_at=None,
+                duration_ms=duration, status="COMPLETED"
+            ))
+        mock_get_runs.return_value = mock_runs
+
+        result = get_duration_statistics(service_id=10)
+
+        # Only 5 runs have valid durations (positive)
+        assert result.run_count == 5
