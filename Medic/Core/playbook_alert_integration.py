@@ -8,6 +8,10 @@ Key functions:
 - trigger_playbook_for_alert: Check for matching playbook and start execution
 - should_trigger_playbook: Check if a playbook should be triggered for an alert
 
+The module also integrates with the circuit breaker to prevent runaway
+playbook executions. If a service exceeds the configured execution threshold
+within the time window, new executions are blocked.
+
 Usage:
     from Medic.Core.playbook_alert_integration import trigger_playbook_for_alert
 
@@ -36,6 +40,16 @@ from Medic.Core.playbook_triggers import (
     MatchedPlaybook,
     find_playbook_for_alert,
 )
+
+# Import circuit breaker (optional - allows graceful degradation)
+try:
+    from Medic.Core.circuit_breaker import (
+        check_circuit_breaker,
+        record_circuit_breaker_trip,
+    )
+    CIRCUIT_BREAKER_AVAILABLE = True
+except ImportError:
+    CIRCUIT_BREAKER_AVAILABLE = False
 
 # Log Setup
 logger = logging.getLogger(__name__)
@@ -98,9 +112,10 @@ def trigger_playbook_for_alert(
     Trigger a playbook execution for an alerting service.
 
     This is the main function to call when an alert fires. It:
-    1. Checks for a matching playbook trigger
-    2. Loads the playbook and checks its approval setting
-    3. Creates an execution with the appropriate status:
+    1. Checks the circuit breaker to prevent runaway executions
+    2. Checks for a matching playbook trigger
+    3. Loads the playbook and checks its approval setting
+    4. Creates an execution with the appropriate status:
        - approval=none: Starts execution immediately (status=running)
        - approval=required: Creates pending_approval execution
        - approval=timeout:Xm: Creates pending_approval with auto-approve
@@ -114,6 +129,26 @@ def trigger_playbook_for_alert(
     Returns:
         PlaybookTriggerResult with execution details
     """
+    # Check circuit breaker first to prevent runaway executions
+    if CIRCUIT_BREAKER_AVAILABLE:
+        cb_status = check_circuit_breaker(service_id)
+        if cb_status.is_open:
+            record_circuit_breaker_trip(
+                service_id=service_id,
+                execution_count=cb_status.execution_count,
+                playbook_name=None  # Don't know playbook yet
+            )
+            logger.log(
+                level=40,
+                msg=f"Circuit breaker blocked playbook execution for service "
+                    f"'{service_name}' (ID: {service_id}): {cb_status.message}"
+            )
+            return PlaybookTriggerResult(
+                triggered=False,
+                status="circuit_breaker_open",
+                message=cb_status.message
+            )
+
     # Check for matching playbook
     matched = find_playbook_for_alert(service_name, consecutive_failures)
 

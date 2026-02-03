@@ -117,6 +117,29 @@ class TestShouldTriggerPlaybook:
 class TestTriggerPlaybookForAlert:
     """Tests for trigger_playbook_for_alert function."""
 
+    @pytest.fixture(autouse=True)
+    def mock_circuit_breaker(self):
+        """Mock circuit breaker to allow tests to run without DB."""
+        from Medic.Core.circuit_breaker import CircuitBreakerStatus
+        from datetime import datetime
+        import pytz
+
+        mock_status = CircuitBreakerStatus(
+            service_id=0,
+            is_open=False,
+            execution_count=0,
+            window_start=datetime.now(pytz.UTC),
+            window_end=datetime.now(pytz.UTC),
+            threshold=5,
+            message="Circuit closed",
+        )
+
+        with patch(
+            "Medic.Core.playbook_alert_integration.check_circuit_breaker",
+            return_value=mock_status
+        ):
+            yield
+
     @patch("Medic.Core.playbook_alert_integration.find_playbook_for_alert")
     def test_no_match_returns_not_triggered(self, mock_find):
         """Test returns not triggered when no playbook matches."""
@@ -404,6 +427,47 @@ class TestTriggerPlaybookForAlert:
             consecutive_failures=3,
         )
         assert result.triggered is True
+
+    def test_circuit_breaker_blocks_execution(self):
+        """Test circuit breaker blocks execution when open."""
+        from Medic.Core.circuit_breaker import CircuitBreakerStatus
+        from datetime import datetime
+        import pytz
+
+        # Create an open circuit status
+        open_status = CircuitBreakerStatus(
+            service_id=100,
+            is_open=True,
+            execution_count=5,
+            window_start=datetime.now(pytz.UTC),
+            window_end=datetime.now(pytz.UTC),
+            threshold=5,
+            message="Circuit breaker tripped: 5 executions in window",
+        )
+
+        with patch(
+            "Medic.Core.playbook_alert_integration.check_circuit_breaker",
+            return_value=open_status
+        ), patch(
+            "Medic.Core.playbook_alert_integration.record_circuit_breaker_trip"
+        ) as mock_record, patch(
+            "Medic.Core.playbook_alert_integration.find_playbook_for_alert"
+        ) as mock_find:
+            result = trigger_playbook_for_alert(
+                service_id=100,
+                service_name="worker-prod-01",
+                consecutive_failures=3,
+            )
+
+            assert result.triggered is False
+            assert result.status == "circuit_breaker_open"
+            assert "Circuit breaker tripped" in result.message
+
+            # Verify trip was recorded
+            mock_record.assert_called_once()
+
+            # Verify playbook matching was never attempted
+            mock_find.assert_not_called()
 
 
 class TestMonitorIntegration:

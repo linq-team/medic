@@ -127,6 +127,18 @@ STALE_JOBS = Gauge(
     'Number of currently stale jobs exceeding max duration'
 )
 
+# Circuit breaker metrics
+CIRCUIT_BREAKER_TRIPS = Counter(
+    'medic_circuit_breaker_trips_total',
+    'Total circuit breaker trips (blocked playbook executions)',
+    ['service_id']
+)
+
+CIRCUIT_BREAKER_OPEN = Gauge(
+    'medic_circuit_breaker_open',
+    'Number of services with open circuit breakers'
+)
+
 
 def track_request_metrics(func: Callable) -> Callable:
     """Decorator to track request metrics."""
@@ -245,6 +257,26 @@ def record_duration_alert(alert_type: str):
 def update_stale_jobs_count(count: int):
     """Update the current count of stale jobs."""
     STALE_JOBS.set(count)
+
+
+def record_circuit_breaker_trip(service_id: int):
+    """
+    Record a circuit breaker trip metric.
+
+    Args:
+        service_id: The service ID that was blocked
+    """
+    CIRCUIT_BREAKER_TRIPS.labels(service_id=str(service_id)).inc()
+
+
+def update_circuit_breaker_open_count(count: int):
+    """
+    Update the count of services with open circuit breakers.
+
+    Args:
+        count: Number of services with open circuits
+    """
+    CIRCUIT_BREAKER_OPEN.set(count)
 
 
 def get_metrics() -> bytes:
