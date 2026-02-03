@@ -1,0 +1,50 @@
+# Ralph Progress Log
+Started: Tue Feb  3 10:49:12 CST 2026
+
+## Codebase Patterns
+- Database: PostgreSQL with raw SQL (no ORM, no migration framework like Alembic)
+- Tables are in the `medic` schema
+- Migrations stored in `/migrations/` directory as numbered SQL files
+- All queries use parameterized queries with `%s` placeholders
+- Python type checking via mypy (existing codebase has some pre-existing type errors)
+- Dependencies: argon2-cffi for password hashing
+- API keys module: Medic/Core/api_keys.py - use generate_api_key(), hash_api_key(), verify_api_key()
+---
+
+## 2026-02-03 11:01 CST - US-001
+- What was implemented:
+  - Created api_keys table migration (migrations/001_create_api_keys.sql)
+  - Added columns: api_key_id, name, key_hash, scopes (TEXT[]), expires_at, created_at, updated_at
+  - Added CHECK constraint to validate scopes contain only: read, write, admin
+  - Added index on key_hash for efficient authentication lookups
+  - Added argon2-cffi dependency to Medic/requirements.txt
+  - Updated README.md with api_keys table schema documentation
+- Files changed:
+  - migrations/001_create_api_keys.sql (new)
+  - Medic/requirements.txt
+  - requirements-dev.txt
+  - README.md
+- **Learnings for future iterations:**
+  - No migration framework exists - migrations are raw SQL files
+  - Schema documentation lives in README.md under "Deployment and Configuration"
+  - Pre-existing mypy type errors exist in Medic/Helpers/heartbeat.py and Medic/clients/python/medic.py
+  - Python version on local machine is 3.9.6 (requirements allow 3.12+)
+---
+
+## 2026-02-03 11:15 CST - US-002
+- What was implemented:
+  - Created API key generation function using secrets module (32+ bytes, cryptographically secure)
+  - Created API key hashing function using argon2-cffi
+  - Created API key verification function with proper error handling
+  - Added needs_rehash utility for future parameter updates
+  - Created 17 comprehensive unit tests
+- Files changed:
+  - Medic/Core/api_keys.py (new)
+  - tests/unit/test_api_keys.py (new)
+- **Learnings for future iterations:**
+  - Core functionality goes in Medic/Core/ directory
+  - Unit tests follow pattern: tests/unit/test_<module>.py
+  - Use `python3 -m pytest tests/unit/test_<file>.py -v` to run specific tests
+  - argon2-cffi is already installed as dependency from US-001
+  - API keys are prefixed with `mdk_` for easy identification
+---
