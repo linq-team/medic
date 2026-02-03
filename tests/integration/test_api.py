@@ -146,18 +146,22 @@ class TestV2HeartbeatSignals:
             with patch("Medic.Core.routes.hbeat.addHeartbeat") as mock_add:
                 mock_add.return_value = True
 
-                response = client.post(
-                    "/v2/heartbeat/1/start",
-                    data=json.dumps({"run_id": "job-run-123"}),
-                    content_type="application/json"
-                )
+                # Mock job_runs module to avoid database dependency
+                with patch("Medic.Core.routes.job_runs") as mock_job_runs:
+                    mock_job_runs.record_job_start.return_value = None
 
-                assert response.status_code == 201
-                data = json.loads(response.data)
-                assert data["success"] is True
-                assert data["message"] == "Job signal STARTED recorded successfully."
-                assert data["results"]["status"] == "STARTED"
-                assert data["results"]["run_id"] == "job-run-123"
+                    response = client.post(
+                        "/v2/heartbeat/1/start",
+                        data=json.dumps({"run_id": "job-run-123"}),
+                        content_type="application/json"
+                    )
+
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["success"] is True
+                    assert data["message"] == "Job signal STARTED recorded successfully."
+                    assert data["results"]["status"] == "STARTED"
+                    assert data["results"]["run_id"] == "job-run-123"
 
     def test_heartbeat_complete_success(self, app, mock_env_vars):
         """Test successful recording of COMPLETED signal."""
@@ -173,18 +177,22 @@ class TestV2HeartbeatSignals:
             with patch("Medic.Core.routes.hbeat.addHeartbeat") as mock_add:
                 mock_add.return_value = True
 
-                response = client.post(
-                    "/v2/heartbeat/1/complete",
-                    data=json.dumps({"run_id": "job-run-123"}),
-                    content_type="application/json"
-                )
+                # Mock job_runs module to avoid database dependency
+                with patch("Medic.Core.routes.job_runs") as mock_job_runs:
+                    mock_job_runs.record_job_completion.return_value = None
 
-                assert response.status_code == 201
-                data = json.loads(response.data)
-                assert data["success"] is True
-                assert data["message"] == "Job signal COMPLETED recorded successfully."
-                assert data["results"]["status"] == "COMPLETED"
-                assert data["results"]["run_id"] == "job-run-123"
+                    response = client.post(
+                        "/v2/heartbeat/1/complete",
+                        data=json.dumps({"run_id": "job-run-123"}),
+                        content_type="application/json"
+                    )
+
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["success"] is True
+                    assert data["message"] == "Job signal COMPLETED recorded successfully."
+                    assert data["results"]["status"] == "COMPLETED"
+                    assert data["results"]["run_id"] == "job-run-123"
 
     def test_heartbeat_fail_success(self, app, mock_env_vars):
         """Test successful recording of FAILED signal."""
@@ -200,18 +208,22 @@ class TestV2HeartbeatSignals:
             with patch("Medic.Core.routes.hbeat.addHeartbeat") as mock_add:
                 mock_add.return_value = True
 
-                response = client.post(
-                    "/v2/heartbeat/1/fail",
-                    data=json.dumps({"run_id": "job-run-123"}),
-                    content_type="application/json"
-                )
+                # Mock job_runs module to avoid database dependency
+                with patch("Medic.Core.routes.job_runs") as mock_job_runs:
+                    mock_job_runs.record_job_completion.return_value = None
 
-                assert response.status_code == 201
-                data = json.loads(response.data)
-                assert data["success"] is True
-                assert data["message"] == "Job signal FAILED recorded successfully."
-                assert data["results"]["status"] == "FAILED"
-                assert data["results"]["run_id"] == "job-run-123"
+                    response = client.post(
+                        "/v2/heartbeat/1/fail",
+                        data=json.dumps({"run_id": "job-run-123"}),
+                        content_type="application/json"
+                    )
+
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["success"] is True
+                    assert data["message"] == "Job signal FAILED recorded successfully."
+                    assert data["results"]["status"] == "FAILED"
+                    assert data["results"]["run_id"] == "job-run-123"
 
     def test_heartbeat_start_without_run_id(self, app, mock_env_vars):
         """Test recording STARTED signal without run_id."""
@@ -316,27 +328,32 @@ class TestV2HeartbeatSignals:
             with patch("Medic.Core.routes.hbeat.addHeartbeat") as mock_add:
                 mock_add.return_value = True
 
-                run_id = "batch-run-456"
+                # Mock job_runs module to avoid database dependency
+                with patch("Medic.Core.routes.job_runs") as mock_job_runs:
+                    mock_job_runs.record_job_start.return_value = None
+                    mock_job_runs.record_job_completion.return_value = None
 
-                # Start the job
-                response = client.post(
-                    "/v2/heartbeat/1/start",
-                    data=json.dumps({"run_id": run_id}),
-                    content_type="application/json"
-                )
-                assert response.status_code == 201
-                data = json.loads(response.data)
-                assert data["results"]["status"] == "STARTED"
+                    run_id = "batch-run-456"
 
-                # Complete the job
-                response = client.post(
-                    "/v2/heartbeat/1/complete",
-                    data=json.dumps({"run_id": run_id}),
-                    content_type="application/json"
-                )
-                assert response.status_code == 201
-                data = json.loads(response.data)
-                assert data["results"]["status"] == "COMPLETED"
+                    # Start the job
+                    response = client.post(
+                        "/v2/heartbeat/1/start",
+                        data=json.dumps({"run_id": run_id}),
+                        content_type="application/json"
+                    )
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["results"]["status"] == "STARTED"
+
+                    # Complete the job
+                    response = client.post(
+                        "/v2/heartbeat/1/complete",
+                        data=json.dumps({"run_id": run_id}),
+                        content_type="application/json"
+                    )
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["results"]["status"] == "COMPLETED"
 
     def test_full_job_lifecycle_with_failure(self, app, mock_env_vars):
         """Test job lifecycle with failure: start -> fail."""
@@ -352,25 +369,30 @@ class TestV2HeartbeatSignals:
             with patch("Medic.Core.routes.hbeat.addHeartbeat") as mock_add:
                 mock_add.return_value = True
 
-                run_id = "batch-run-789"
+                # Mock job_runs module to avoid database dependency
+                with patch("Medic.Core.routes.job_runs") as mock_job_runs:
+                    mock_job_runs.record_job_start.return_value = None
+                    mock_job_runs.record_job_completion.return_value = None
 
-                # Start the job
-                response = client.post(
-                    "/v2/heartbeat/1/start",
-                    data=json.dumps({"run_id": run_id}),
-                    content_type="application/json"
-                )
-                assert response.status_code == 201
+                    run_id = "batch-run-789"
 
-                # Fail the job
-                response = client.post(
-                    "/v2/heartbeat/1/fail",
-                    data=json.dumps({"run_id": run_id}),
-                    content_type="application/json"
-                )
-                assert response.status_code == 201
-                data = json.loads(response.data)
-                assert data["results"]["status"] == "FAILED"
+                    # Start the job
+                    response = client.post(
+                        "/v2/heartbeat/1/start",
+                        data=json.dumps({"run_id": run_id}),
+                        content_type="application/json"
+                    )
+                    assert response.status_code == 201
+
+                    # Fail the job
+                    response = client.post(
+                        "/v2/heartbeat/1/fail",
+                        data=json.dumps({"run_id": run_id}),
+                        content_type="application/json"
+                    )
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["results"]["status"] == "FAILED"
 
     def test_heartbeat_signal_invalid_json_body(self, app, mock_env_vars):
         """Test signal recording with invalid JSON body (still works, run_id=None)."""

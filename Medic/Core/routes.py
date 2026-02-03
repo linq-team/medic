@@ -11,6 +11,7 @@ import logging
 import Medic.Core.database as db
 import Medic.Core.metrics as metrics
 import Medic.Core.health as health
+import Medic.Core.job_runs as job_runs
 import Medic.Helpers.heartbeat as hbeat
 import Medic.Helpers.logSettings as logLevel
 
@@ -530,20 +531,41 @@ def exposeRoutes(app):
         res = hbeat.addHeartbeat(my_heartbeat)
 
         if res:
+            # Track job run for duration statistics if run_id is provided
+            job_run_result = None
+            if run_id:
+                if status == hbeat.HeartbeatStatus.STARTED.value:
+                    job_run_result = job_runs.record_job_start(
+                        service_id, run_id
+                    )
+                elif status in (
+                    hbeat.HeartbeatStatus.COMPLETED.value,
+                    hbeat.HeartbeatStatus.FAILED.value
+                ):
+                    job_run_result = job_runs.record_job_completion(
+                        service_id, run_id, status
+                    )
+
             logger.log(
                 level=10,
                 msg=f"Job signal {status} recorded for {heartbeat_name}"
                     f" (run_id: {run_id})"
             )
+
+            # Build response with optional duration info
+            results = {
+                "service_id": service_id,
+                "heartbeat_name": heartbeat_name,
+                "status": status,
+                "run_id": run_id
+            }
+            if job_run_result and job_run_result.duration_ms is not None:
+                results["duration_ms"] = job_run_result.duration_ms
+
             return json.dumps({
                 "success": True,
                 "message": f"Job signal {status} recorded successfully.",
-                "results": {
-                    "service_id": service_id,
-                    "heartbeat_name": heartbeat_name,
-                    "status": status,
-                    "run_id": run_id
-                }
+                "results": results
             }), 201
         else:
             logger.log(
