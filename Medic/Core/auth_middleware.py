@@ -9,6 +9,7 @@ from flask import request, g
 
 import Medic.Core.database as db
 from Medic.Core.api_keys import verify_api_key
+from Medic.Core.metrics import record_auth_failure
 import Medic.Helpers.logSettings as logLevel
 
 # Log Setup
@@ -205,6 +206,7 @@ def authenticate_request(required_scopes: Optional[List[str]] = None) -> Callabl
 
             if not key_data:
                 logger.debug("Invalid API key provided")
+                record_auth_failure("invalid_key")
                 return (
                     json.dumps(
                         {
@@ -219,6 +221,7 @@ def authenticate_request(required_scopes: Optional[List[str]] = None) -> Callabl
             # Check expiration
             if _is_key_expired(key_data.get("expires_at")):
                 logger.debug(f"Expired API key used: {key_data.get('name')}")
+                record_auth_failure("expired_key")
                 return (
                     json.dumps(
                         {
@@ -236,6 +239,7 @@ def authenticate_request(required_scopes: Optional[List[str]] = None) -> Callabl
                 logger.debug(
                     f"Insufficient scopes. Has: {key_scopes}, needs: {required_scopes}"
                 )
+                record_auth_failure("insufficient_scope")
                 return (
                     json.dumps(
                         {
@@ -310,6 +314,7 @@ def verify_request_auth(required_scopes: Optional[List[str]] = None) -> Optional
     key_data = _get_api_key_from_db(token)
 
     if not key_data:
+        record_auth_failure("invalid_key")
         return (
             json.dumps(
                 {
@@ -323,6 +328,7 @@ def verify_request_auth(required_scopes: Optional[List[str]] = None) -> Optional
 
     # Check expiration
     if _is_key_expired(key_data.get("expires_at")):
+        record_auth_failure("expired_key")
         return (
             json.dumps(
                 {
@@ -337,6 +343,7 @@ def verify_request_auth(required_scopes: Optional[List[str]] = None) -> Optional
     # Check scopes
     key_scopes = key_data.get("scopes", [])
     if not _has_required_scopes(key_scopes, required_scopes):
+        record_auth_failure("insufficient_scope")
         return (
             json.dumps(
                 {

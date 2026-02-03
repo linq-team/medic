@@ -88,6 +88,13 @@ DB_CONNECTION_ERRORS = Counter(
     'Total database connection errors'
 )
 
+# Authentication metrics
+AUTH_FAILURES = Counter(
+    'medic_auth_failures_total',
+    'Total authentication failures',
+    ['reason']
+)
+
 # External service metrics
 PAGERDUTY_REQUESTS = Counter(
     'medic_pagerduty_requests_total',
@@ -185,6 +192,19 @@ def record_pagerduty_request(action: str, success: bool):
 def record_slack_request(success: bool):
     """Record Slack request metric."""
     SLACK_REQUESTS.labels(status='success' if success else 'failure').inc()
+
+
+def record_auth_failure(reason: str):
+    """
+    Record an authentication failure metric.
+
+    Args:
+        reason: The reason for the failure. Should be one of:
+                - 'invalid_key': API key not found or doesn't match
+                - 'expired_key': API key has expired
+                - 'insufficient_scope': API key lacks required scopes
+    """
+    AUTH_FAILURES.labels(reason=reason).inc()
 
 
 def update_service_counts(registered: int, active: int):
