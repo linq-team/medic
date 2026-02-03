@@ -1,0 +1,118 @@
+## Codebase Patterns
+- Use argon2 for API key hashing (via argon2-cffi package)
+- Database queries use parameterized queries via psycopg2 with %s placeholders
+- Flask routes are registered via exposeRoutes() in Medic/Core/routes.py
+- Unit tests use pytest with fixtures defined in tests/conftest.py
+- Log levels use Medic.Helpers.logSettings.logSetup()
+- Return JSON responses as tuple (json_string, status_code)
+- Database returns JSON string when show_columns=True in query_db()
+- Health endpoints: /health, /health/live, /health/ready, /v1/healthcheck/network
+- API keys stored in medic.api_keys table with key_hash, scopes array, expires_at
+- Prometheus metrics: define Counter/Gauge/Histogram in Medic/Core/metrics.py, use record_*() helpers to increment
+- Rate limiting: Use InMemoryRateLimiter for single-instance, sliding window algorithm in Medic/Core/rate_limiter.py
+- Rate limit middleware: @rate_limit() decorator in Medic/Core/rate_limit_middleware.py, apply AFTER @authenticate_request()
+- Rate limit headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset (plus Retry-After when blocked)
+- Webhook delivery: Use WebhookDeliveryService in Medic/Core/webhook_delivery.py with deliver_webhook() convenience function
+- HTTP retries: Use exponential backoff with configurable delays (default: 1s, 5s, 30s) for webhook delivery
+- Alert routing: Use get_slack_channel_for_service(service_id) from Medic/Core/alert_routing.py to get team channel with fallback to default
+
+---
+
+## 2026-02-03 - US-003
+- Implemented authentication middleware in Medic/Core/auth_middleware.py
+- Files changed: Medic/Core/auth_middleware.py (new), tests/unit/test_auth_middleware.py (new)
+- **Learnings for future iterations:**
+  - query_db() returns Optional[Union[str, List]] - use str() cast before json.loads when show_columns=True
+  - Health endpoint bypass paths: /health, /v1/healthcheck, /metrics, /docs
+  - Flask g context is used to store authenticated key info (api_key_id, api_key_name, api_key_scopes)
+  - Admin scope grants all permissions (checked first in scope validation)
+  - Pre-existing test failures in tests/unit/test_monitor.py due to missing slack_client module - not related to this work
+---
+
+## 2026-02-03 - US-004
+- Added Prometheus metrics for authentication failures
+- Files changed: Medic/Core/metrics.py, Medic/Core/auth_middleware.py
+- **Learnings for future iterations:**
+  - Prometheus metrics use Counter from prometheus_client for incrementing counters
+  - Metrics are defined at module level (global) and imported where needed
+  - Use labels for categorizing metrics (e.g., reason: invalid_key, expired_key, insufficient_scope)
+  - record_*() helper functions are the pattern for incrementing metrics from other modules
+  - Pre-existing flake8 errors in metrics.py (unused import, unused variable) - not related to this work
+---
+
+## 2026-02-03 - US-005
+- Implemented rate limiting infrastructure in Medic/Core/rate_limiter.py
+- Files changed: Medic/Core/rate_limiter.py (new), tests/unit/test_rate_limiter.py (new)
+- **Learnings for future iterations:**
+  - RateLimiter is an abstract base class (ABC) with InMemoryRateLimiter and RedisRateLimiter (placeholder) implementations
+  - Sliding window algorithm tracks request timestamps per bucket (key:endpoint_type)
+  - Default limits: 100 req/min heartbeats, 20 req/min management (configurable via RateLimitConfig)
+  - Thread-safe with per-bucket locks (SlidingWindowEntry.lock) and global locks
+  - Use check_rate_limit() convenience function for global limiter access
+  - Per-key custom limits can be set via set_key_config() or set_key_rate_limit()
+  - RateLimitResult contains: allowed, limit, remaining, reset_at, retry_after
+  - Use get_rate_limiter() and set_rate_limiter() for global instance management
+---
+
+## 2026-02-03 - US-006
+- Implemented rate limiting middleware in Medic/Core/rate_limit_middleware.py
+- Files changed: Medic/Core/rate_limit_middleware.py (new), tests/unit/test_rate_limit_middleware.py (new)
+- **Learnings for future iterations:**
+  - @rate_limit() decorator should be applied AFTER @authenticate_request() so g.api_key_id is available
+  - Auto-detects endpoint type based on path: /heartbeat/* paths use heartbeat limits, others use management limits
+  - Falls back to IP-based rate limiting (ip:{remote_addr}) when no API key is present
+  - Returns 429 with JSON body containing success: false, message, and retry_after
+  - Headers always added: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+  - Retry-After header only added when rate limit is exceeded
+  - Health endpoints bypass rate limiting (same as auth): /health, /v1/healthcheck, /metrics, /docs
+  - verify_rate_limit() and get_rate_limit_headers() available for non-decorator usage
+---
+
+## 2026-02-03 - US-007
+- Created webhooks database schema migration in migrations/002_create_webhooks.sql
+- Files changed: migrations/002_create_webhooks.sql (new)
+- **Learnings for future iterations:**
+  - Foreign key references to services table use services(service_id) - not medic.services
+  - JSONB is preferred for flexible JSON data (headers, payload)
+  - Use CHECK constraints for enum-like values (status IN ('pending', 'success', 'failed', 'retrying'))
+  - Partial indexes (WHERE clause) are useful for common filtered queries
+  - ON DELETE CASCADE appropriate when child records should be deleted with parent
+  - SQL migrations are not type-checked by mypy - only Python code is
+---
+
+## 2026-02-03 - US-008
+- Implemented webhook delivery service in Medic/Core/webhook_delivery.py
+- Files changed: Medic/Core/webhook_delivery.py (new), tests/unit/test_webhook_delivery.py (new)
+- **Learnings for future iterations:**
+  - WebhookDeliveryService sends POST requests with JSON payload and custom headers
+  - Exponential backoff retry: 1s, 5s, 30s delays with max 3 attempts (configurable)
+  - Delivery tracking via webhook_deliveries table with status: pending, success, failed, retrying
+  - DeliveryStatus is a str Enum - can compare directly with strings (e.g., status == "pending")
+  - Use deliver_webhook() convenience function for global service access
+  - get_webhooks_for_service(service_id) returns webhooks for a service OR global webhooks
+  - Thread-safe parallel delivery via deliver_to_all() with async_delivery=True
+  - Response body truncated to 4096 bytes to prevent database bloat
+  - Flake8 line length limit is 79 chars - break long lines appropriately
+---
+
+## 2026-02-03 - US-009
+- Created teams database schema migration in migrations/003_create_teams.sql
+- Files changed: migrations/003_create_teams.sql (new)
+- **Learnings for future iterations:**
+  - Teams table: team_id, name (unique), slack_channel_id (optional), timestamps
+  - Services.team_id FK uses ON DELETE SET NULL (not CASCADE) - keeps service but clears team reference
+  - Pattern: ALTER TABLE to add columns to existing tables (services already exists)
+  - Partial index on slack_channel_id WHERE NOT NULL for efficient lookups
+  - Migration pattern follows existing 001/002 - use medic.tablename for new tables, no schema prefix for services
+---
+
+## 2026-02-03 - US-010
+- Implemented team-based alert routing in Medic/Core/alert_routing.py
+- Files changed: Medic/Core/alert_routing.py (new), tests/unit/test_alert_routing.py (new)
+- **Learnings for future iterations:**
+  - get_slack_channel_for_service(service_id) returns team's Slack channel or falls back to SLACK_CHANNEL_ID env var
+  - get_team_for_service(service_id) returns team dict with team_id, name, slack_channel_id or None
+  - Query joins medic.teams and services tables via team_id FK
+  - Empty string channel ("") is treated same as None - triggers fallback to default
+  - Pattern: routing priority is team channel > default channel
+---
