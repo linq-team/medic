@@ -1019,21 +1019,434 @@ class TestExecutionWithMultipleSteps:
         assert len(completed_calls) >= 1
 
 
-class TestPlaceholderSteps:
-    """Tests for placeholder step executors."""
+class TestSubstituteVariables:
+    """Tests for substitute_variables function."""
 
+    def test_substitute_simple_string(self):
+        """Test variable substitution in a simple string."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {"SERVICE_NAME": "my-service"}
+        result = substitute_variables(
+            "Restarting ${SERVICE_NAME}",
+            context
+        )
+        assert result == "Restarting my-service"
+
+    def test_substitute_multiple_variables(self):
+        """Test multiple variable substitution."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {
+            "SERVICE_NAME": "my-service",
+            "ALERT_ID": "alert-123",
+            "RUN_ID": "run-456",
+        }
+        result = substitute_variables(
+            "${SERVICE_NAME}: ${ALERT_ID} (${RUN_ID})",
+            context
+        )
+        assert result == "my-service: alert-123 (run-456)"
+
+    def test_substitute_in_dict(self):
+        """Test variable substitution in dictionary."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {"SERVICE_NAME": "worker-1", "SERVICE_ID": 42}
+        input_dict = {
+            "name": "${SERVICE_NAME}",
+            "id": "${SERVICE_ID}",
+            "action": "restart",
+        }
+        result = substitute_variables(input_dict, context)
+        assert result == {
+            "name": "worker-1",
+            "id": "42",
+            "action": "restart",
+        }
+
+    def test_substitute_in_nested_dict(self):
+        """Test variable substitution in nested dictionary."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {"SERVICE_NAME": "api-server"}
+        input_dict = {
+            "body": {
+                "service": "${SERVICE_NAME}",
+                "metadata": {
+                    "source": "${SERVICE_NAME}-alerts"
+                }
+            }
+        }
+        result = substitute_variables(input_dict, context)
+        assert result["body"]["service"] == "api-server"
+        assert result["body"]["metadata"]["source"] == "api-server-alerts"
+
+    def test_substitute_in_list(self):
+        """Test variable substitution in list."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {"SERVICE_NAME": "worker", "HOST": "localhost"}
+        input_list = ["${SERVICE_NAME}", "${HOST}", "static"]
+        result = substitute_variables(input_list, context)
+        assert result == ["worker", "localhost", "static"]
+
+    def test_substitute_missing_variable_unchanged(self):
+        """Test missing variable keeps original placeholder."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {"SERVICE_NAME": "my-service"}
+        result = substitute_variables(
+            "${SERVICE_NAME}: ${UNKNOWN_VAR}",
+            context
+        )
+        assert result == "my-service: ${UNKNOWN_VAR}"
+
+    def test_substitute_non_string_unchanged(self):
+        """Test non-string values pass through unchanged."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        context = {"FOO": "bar"}
+        assert substitute_variables(123, context) == 123
+        assert substitute_variables(True, context) is True
+        assert substitute_variables(None, context) is None
+
+    def test_substitute_empty_context(self):
+        """Test substitution with empty context."""
+        from Medic.Core.playbook_engine import substitute_variables
+
+        result = substitute_variables("${SERVICE_NAME}", {})
+        assert result == "${SERVICE_NAME}"
+
+
+class TestBuildWebhookContext:
+    """Tests for _build_webhook_context function."""
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_build_context_includes_execution_info(self, mock_db):
+        """Test context includes execution information."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _build_webhook_context,
+        )
+
+        mock_db.query_db.return_value = "[]"  # No service found
+
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+        )
+        context = _build_webhook_context(execution)
+
+        assert context['EXECUTION_ID'] == 100
+        assert context['PLAYBOOK_ID'] == 10
+        assert context['SERVICE_ID'] == 42
+
+    def test_build_context_includes_playbook_name(self):
+        """Test context includes playbook name when available."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _build_webhook_context,
+        )
+        from Medic.Core.playbook_parser import ApprovalMode, Playbook, WaitStep
+
+        playbook = Playbook(
+            name="restart-service",
+            description="Restart a service",
+            steps=[WaitStep(name="wait", duration_seconds=1)],
+            approval=ApprovalMode.NONE,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+        )
+        execution.playbook = playbook
+
+        context = _build_webhook_context(execution)
+
+        assert context['PLAYBOOK_NAME'] == "restart-service"
+
+    def test_build_context_preserves_existing_context(self):
+        """Test existing execution context is preserved."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _build_webhook_context,
+        )
+
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            context={
+                "ALERT_ID": "alert-123",
+                "RUN_ID": "run-456",
+                "CUSTOM_VAR": "custom-value",
+            }
+        )
+        context = _build_webhook_context(execution)
+
+        assert context['ALERT_ID'] == "alert-123"
+        assert context['RUN_ID'] == "run-456"
+        assert context['CUSTOM_VAR'] == "custom-value"
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_build_context_fetches_service_name(self, mock_db):
+        """Test context fetches service name from database."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _build_webhook_context,
+        )
+
+        mock_db.query_db.return_value = json.dumps([{"name": "worker-service"}])
+
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+        )
+        context = _build_webhook_context(execution)
+
+        assert context['SERVICE_NAME'] == "worker-service"
+
+
+class TestExecuteWebhookStep:
+    """Tests for execute_webhook_step function."""
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
     @patch('Medic.Core.playbook_engine.create_step_result')
-    def test_webhook_step_placeholder(self, mock_create):
-        """Test webhook step placeholder returns pending."""
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_success(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test successful webhook execution."""
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
             PlaybookExecution,
             StepResultStatus,
-            execute_webhook_step_placeholder,
+            execute_webhook_step,
         )
         from Medic.Core.playbook_parser import WebhookStep
 
+        mock_build_context.return_value = {"SERVICE_NAME": "test"}
         mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock HTTP client
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '{"status": "ok"}'
+
+        def mock_request(**kwargs):
+            return mock_response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+            method="POST",
+            body={"action": "restart"},
+            success_codes=[200, 201],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert "Status: 200" in result.output
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_failure_status_code(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook execution fails on unexpected status code."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock HTTP client returning 500
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = 'Internal Server Error'
+
+        def mock_request(**kwargs):
+            return mock_response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "Unexpected status code 500" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_variable_substitution(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook step performs variable substitution."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {
+            "SERVICE_NAME": "my-service",
+            "ALERT_ID": "alert-123",
+        }
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Capture the request
+        captured_kwargs = {}
+
+        def mock_request(**kwargs):
+            captured_kwargs.update(kwargs)
+            response = MagicMock()
+            response.status_code = 200
+            response.text = "OK"
+            return response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api/${SERVICE_NAME}",
+            method="POST",
+            headers={"X-Alert-Id": "${ALERT_ID}"},
+            body={"service": "${SERVICE_NAME}"},
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert captured_kwargs['url'] == "https://example.com/api/my-service"
+        assert "X-Alert-Id" in captured_kwargs['headers']
+        assert captured_kwargs['headers']['X-Alert-Id'] == "alert-123"
+        assert captured_kwargs['json']['service'] == "my-service"
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_timeout(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook step handles timeout."""
+        import requests
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        def mock_request(**kwargs):
+            raise requests.Timeout("Connection timed out")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+            timeout_seconds=5,
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "timed out" in result.error_message.lower()
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_connection_error(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook step handles connection error."""
+        import requests
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        def mock_request(**kwargs):
+            raise requests.ConnectionError("Failed to connect")
 
         step = WebhookStep(
             name="test-webhook",
@@ -1047,10 +1460,194 @@ class TestPlaceholderSteps:
             current_step=0,
         )
 
-        result = execute_webhook_step_placeholder(step, execution)
+        result = execute_webhook_step(step, execution, http_client=mock_request)
 
-        assert result.status == StepResultStatus.PENDING
-        assert "not yet implemented" in result.output
+        assert result.status == StepResultStatus.FAILED
+        assert "connection error" in result.error_message.lower()
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_custom_success_codes(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook step uses custom success codes."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock HTTP client returning 204
+        mock_response = MagicMock()
+        mock_response.status_code = 204
+        mock_response.text = ''
+
+        def mock_request(**kwargs):
+            return mock_response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+            success_codes=[200, 204],  # Include 204 as success
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.COMPLETED
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_truncates_long_response(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook step truncates long response body."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+            MAX_RESPONSE_BODY_SIZE,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock HTTP client returning large response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = 'x' * (MAX_RESPONSE_BODY_SIZE + 1000)
+
+        def mock_request(**kwargs):
+            return mock_response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert "[truncated]" in result.output
+
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_creation_failure(
+        self,
+        mock_build_context,
+        mock_create
+    ):
+        """Test webhook step handles step result creation failure."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = None  # Simulate creation failure
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "Failed to create step result" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_execute_webhook_step_get_method(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test webhook step with GET method."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        captured_kwargs = {}
+
+        def mock_request(**kwargs):
+            captured_kwargs.update(kwargs)
+            response = MagicMock()
+            response.status_code = 200
+            response.text = '{"data": []}'
+            return response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api/status",
+            method="GET",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution, http_client=mock_request)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert captured_kwargs['method'] == "GET"
+
+
+class TestPlaceholderSteps:
+    """Tests for placeholder step executors."""
 
     @patch('Medic.Core.playbook_engine.create_step_result')
     def test_script_step_placeholder(self, mock_create):
