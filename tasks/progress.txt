@@ -593,3 +593,22 @@
   - Partial index on actor WHERE NOT NULL for efficient user action queries
   - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE
 ---
+
+## 2026-02-03 - US-040 - Linear Issue: SRE-24
+- Implemented audit logging in execution engine with comprehensive coverage of all action types
+- Files changed: Medic/Core/audit_log.py (new), Medic/Core/playbook_engine.py, Medic/Core/slack_approval.py, tests/unit/test_audit_log.py (new), tests/unit/test_playbook_engine.py
+- **Learnings for future iterations:**
+  - Audit logging module: Medic/Core/audit_log.py with AuditActionType enum and create_audit_log_entry() core function
+  - Convenience functions for each action type: log_execution_started(), log_step_completed(), log_step_failed(), log_approval_requested(), log_approved(), log_rejected(), log_execution_completed(), log_execution_failed()
+  - Query functions: get_audit_logs_for_execution(), get_audit_logs_by_action_type(), get_audit_logs_by_actor()
+  - AUDIT_LOG_AVAILABLE flag pattern for graceful degradation when audit_log module unavailable
+  - Use try/except ImportError at module load time to set AUDIT_LOG_AVAILABLE = True/False
+  - All audit logging calls wrapped in: if AUDIT_LOG_AVAILABLE: log_X(...)
+  - Service name lookup via db.query_db() for richer context in audit logs
+  - Truncation for long values: MAX_OUTPUT_LENGTH = 8192, MAX_ERROR_LENGTH = 4096 for step outputs/errors
+  - Details field includes all relevant context: playbook_name, service_name, step_type, duration_ms, etc.
+  - Integration points in playbook_engine.py: start_execution(), _execute_steps() (completion and failure), _complete_execution(), _fail_execution()
+  - Integration points in slack_approval.py: send_approval_request(), approve_request(), reject_request()
+  - When adding new integration points that call db.query_db(), mock AUDIT_LOG_AVAILABLE = False in existing tests to avoid database connection errors
+  - Pattern: @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False) decorator on tests that don't mock the service lookup
+---
