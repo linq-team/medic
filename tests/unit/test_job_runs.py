@@ -819,3 +819,400 @@ class TestGetDurationStatistics:
 
         # Only 5 runs have valid durations (positive)
         assert result.run_count == 5
+
+
+class TestDurationAlertDataclass:
+    """Tests for DurationAlert dataclass."""
+
+    def test_duration_alert_initialization(self):
+        """Test DurationAlert object creation."""
+        from Medic.Core.job_runs import DurationAlert
+
+        started_at = datetime.now(pytz.timezone('America/Chicago'))
+        completed_at = started_at + timedelta(seconds=60)
+
+        alert = DurationAlert(
+            service_id=10,
+            service_name="test-service",
+            run_id="test-run-123",
+            alert_type="exceeded",
+            duration_ms=60000,
+            max_duration_ms=30000,
+            started_at=started_at,
+            completed_at=completed_at
+        )
+
+        assert alert.service_id == 10
+        assert alert.service_name == "test-service"
+        assert alert.run_id == "test-run-123"
+        assert alert.alert_type == "exceeded"
+        assert alert.duration_ms == 60000
+        assert alert.max_duration_ms == 30000
+        assert alert.started_at == started_at
+        assert alert.completed_at == completed_at
+
+    def test_duration_alert_stale_type(self):
+        """Test DurationAlert with stale alert type."""
+        from Medic.Core.job_runs import DurationAlert
+
+        started_at = datetime.now(pytz.timezone('America/Chicago'))
+
+        alert = DurationAlert(
+            service_id=10,
+            service_name="test-service",
+            run_id="test-run-123",
+            alert_type="stale",
+            duration_ms=120000,
+            max_duration_ms=60000,
+            started_at=started_at,
+            completed_at=None
+        )
+
+        assert alert.alert_type == "stale"
+        assert alert.completed_at is None
+
+    def test_duration_alert_to_dict(self):
+        """Test DurationAlert to_dict method."""
+        from Medic.Core.job_runs import DurationAlert
+
+        started_at = datetime(2026, 2, 3, 10, 0, 0, tzinfo=pytz.UTC)
+        completed_at = datetime(2026, 2, 3, 10, 1, 0, tzinfo=pytz.UTC)
+
+        alert = DurationAlert(
+            service_id=10,
+            service_name="test-service",
+            run_id="test-run-123",
+            alert_type="exceeded",
+            duration_ms=60000,
+            max_duration_ms=30000,
+            started_at=started_at,
+            completed_at=completed_at
+        )
+
+        result = alert.to_dict()
+
+        assert result["service_id"] == 10
+        assert result["service_name"] == "test-service"
+        assert result["run_id"] == "test-run-123"
+        assert result["alert_type"] == "exceeded"
+        assert result["duration_ms"] == 60000
+        assert result["max_duration_ms"] == 30000
+        assert result["started_at"] == started_at.isoformat()
+        assert result["completed_at"] == completed_at.isoformat()
+
+
+class TestGetServiceMaxDuration:
+    """Tests for get_service_max_duration function."""
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_service_max_duration_found(self, mock_db):
+        """Test getting max_duration when configured."""
+        from Medic.Core.job_runs import get_service_max_duration
+
+        mock_db.query_db.return_value = json.dumps([{"max_duration_ms": 30000}])
+
+        result = get_service_max_duration(service_id=10)
+
+        assert result == 30000
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_service_max_duration_not_configured(self, mock_db):
+        """Test getting max_duration when not configured."""
+        from Medic.Core.job_runs import get_service_max_duration
+
+        mock_db.query_db.return_value = json.dumps([{"max_duration_ms": None}])
+
+        result = get_service_max_duration(service_id=10)
+
+        assert result is None
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_service_max_duration_service_not_found(self, mock_db):
+        """Test getting max_duration for non-existent service."""
+        from Medic.Core.job_runs import get_service_max_duration
+
+        mock_db.query_db.return_value = "[]"
+
+        result = get_service_max_duration(service_id=999)
+
+        assert result is None
+
+
+class TestCheckDurationThreshold:
+    """Tests for check_duration_threshold function."""
+
+    @patch("Medic.Core.job_runs.get_service_max_duration")
+    @patch("Medic.Core.job_runs.db")
+    def test_check_duration_threshold_exceeded(
+        self, mock_db, mock_get_max
+    ):
+        """Test alert is created when duration exceeds threshold."""
+        from Medic.Core.job_runs import (
+            check_duration_threshold, JobRun, DurationAlert
+        )
+
+        mock_get_max.return_value = 30000  # 30 seconds max
+        mock_db.query_db.return_value = json.dumps([
+            {"heartbeat_name": "test-service"}
+        ])
+
+        started_at = datetime.now(pytz.timezone('America/Chicago'))
+        completed_at = started_at + timedelta(seconds=60)
+
+        job_run = JobRun(
+            run_id_pk=1,
+            service_id=10,
+            run_id="test-run-123",
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_ms=60000,  # 60 seconds - exceeds threshold
+            status="COMPLETED"
+        )
+
+        result = check_duration_threshold(job_run)
+
+        assert result is not None
+        assert isinstance(result, DurationAlert)
+        assert result.alert_type == "exceeded"
+        assert result.duration_ms == 60000
+        assert result.max_duration_ms == 30000
+
+    @patch("Medic.Core.job_runs.get_service_max_duration")
+    def test_check_duration_threshold_within_limit(self, mock_get_max):
+        """Test no alert when duration is within threshold."""
+        from Medic.Core.job_runs import check_duration_threshold, JobRun
+
+        mock_get_max.return_value = 60000  # 60 seconds max
+
+        started_at = datetime.now(pytz.timezone('America/Chicago'))
+        completed_at = started_at + timedelta(seconds=30)
+
+        job_run = JobRun(
+            run_id_pk=1,
+            service_id=10,
+            run_id="test-run-123",
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_ms=30000,  # 30 seconds - within threshold
+            status="COMPLETED"
+        )
+
+        result = check_duration_threshold(job_run)
+
+        assert result is None
+
+    @patch("Medic.Core.job_runs.get_service_max_duration")
+    def test_check_duration_threshold_no_max_configured(self, mock_get_max):
+        """Test no alert when max_duration is not configured."""
+        from Medic.Core.job_runs import check_duration_threshold, JobRun
+
+        mock_get_max.return_value = None  # Not configured
+
+        job_run = JobRun(
+            run_id_pk=1,
+            service_id=10,
+            run_id="test-run-123",
+            started_at=datetime.now(pytz.timezone('America/Chicago')),
+            duration_ms=60000,
+            status="COMPLETED"
+        )
+
+        result = check_duration_threshold(job_run)
+
+        assert result is None
+
+    def test_check_duration_threshold_no_duration(self):
+        """Test no alert when job has no duration."""
+        from Medic.Core.job_runs import check_duration_threshold, JobRun
+
+        job_run = JobRun(
+            run_id_pk=1,
+            service_id=10,
+            run_id="test-run-123",
+            started_at=datetime.now(pytz.timezone('America/Chicago')),
+            duration_ms=None,
+            status="COMPLETED"
+        )
+
+        result = check_duration_threshold(job_run)
+
+        assert result is None
+
+    @patch("Medic.Core.job_runs.db")
+    def test_check_duration_threshold_with_override(self, mock_db):
+        """Test alert with provided max_duration_ms override."""
+        from Medic.Core.job_runs import check_duration_threshold, JobRun
+
+        mock_db.query_db.return_value = json.dumps([
+            {"heartbeat_name": "test-service"}
+        ])
+
+        job_run = JobRun(
+            run_id_pk=1,
+            service_id=10,
+            run_id="test-run-123",
+            started_at=datetime.now(pytz.timezone('America/Chicago')),
+            duration_ms=20000,  # 20 seconds
+            status="COMPLETED"
+        )
+
+        # Override with 10 second threshold
+        result = check_duration_threshold(job_run, max_duration_ms=10000)
+
+        assert result is not None
+        assert result.max_duration_ms == 10000
+
+    @patch("Medic.Core.job_runs.get_service_max_duration")
+    def test_check_duration_threshold_zero_max(self, mock_get_max):
+        """Test no alert when max_duration is zero."""
+        from Medic.Core.job_runs import check_duration_threshold, JobRun
+
+        mock_get_max.return_value = 0  # Zero threshold = disabled
+
+        job_run = JobRun(
+            run_id_pk=1,
+            service_id=10,
+            run_id="test-run-123",
+            started_at=datetime.now(pytz.timezone('America/Chicago')),
+            duration_ms=60000,
+            status="COMPLETED"
+        )
+
+        result = check_duration_threshold(job_run)
+
+        assert result is None
+
+
+class TestGetStaleRunsExceedingMaxDuration:
+    """Tests for get_stale_runs_exceeding_max_duration function."""
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_stale_runs_found(self, mock_db):
+        """Test finding stale runs that exceed max_duration."""
+        from Medic.Core.job_runs import get_stale_runs_exceeding_max_duration
+
+        # Job started 2 hours ago with 1 hour max duration
+        started_at = datetime.now(pytz.timezone('America/Chicago')) - timedelta(
+            hours=2
+        )
+
+        mock_db.query_db.return_value = json.dumps([{
+            "run_id_pk": 1,
+            "service_id": 10,
+            "run_id": "stale-run",
+            "started_at": started_at.isoformat(),
+            "completed_at": None,
+            "duration_ms": None,
+            "status": "STARTED",
+            "max_duration_ms": 3600000,  # 1 hour in ms
+            "heartbeat_name": "test-service"
+        }])
+
+        result = get_stale_runs_exceeding_max_duration()
+
+        assert len(result) == 1
+        assert result[0].service_id == 10
+        assert result[0].run_id == "stale-run"
+        assert result[0].alert_type == "stale"
+        # Elapsed time should be > max_duration
+        assert result[0].duration_ms > result[0].max_duration_ms
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_stale_runs_none_found(self, mock_db):
+        """Test when no stale runs exceed threshold."""
+        from Medic.Core.job_runs import get_stale_runs_exceeding_max_duration
+
+        mock_db.query_db.return_value = "[]"
+
+        result = get_stale_runs_exceeding_max_duration()
+
+        assert result == []
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_stale_runs_within_threshold(self, mock_db):
+        """Test stale runs that are still within threshold are not returned."""
+        from Medic.Core.job_runs import get_stale_runs_exceeding_max_duration
+
+        # Job started 30 minutes ago with 1 hour max duration
+        started_at = datetime.now(pytz.timezone('America/Chicago')) - timedelta(
+            minutes=30
+        )
+
+        mock_db.query_db.return_value = json.dumps([{
+            "run_id_pk": 1,
+            "service_id": 10,
+            "run_id": "running-job",
+            "started_at": started_at.isoformat(),
+            "completed_at": None,
+            "duration_ms": None,
+            "status": "STARTED",
+            "max_duration_ms": 3600000,  # 1 hour in ms
+            "heartbeat_name": "test-service"
+        }])
+
+        result = get_stale_runs_exceeding_max_duration()
+
+        # Should be empty as job is still within threshold
+        assert len(result) == 0
+
+    @patch("Medic.Core.job_runs.db")
+    def test_get_stale_runs_with_check_time(self, mock_db):
+        """Test stale runs check with custom check time."""
+        from Medic.Core.job_runs import get_stale_runs_exceeding_max_duration
+
+        # Job started 30 minutes ago
+        started_at = datetime(
+            2026, 2, 3, 10, 0, 0, tzinfo=pytz.timezone('America/Chicago')
+        )
+
+        mock_db.query_db.return_value = json.dumps([{
+            "run_id_pk": 1,
+            "service_id": 10,
+            "run_id": "stale-run",
+            "started_at": started_at.isoformat(),
+            "completed_at": None,
+            "duration_ms": None,
+            "status": "STARTED",
+            "max_duration_ms": 1800000,  # 30 minutes in ms
+            "heartbeat_name": "test-service"
+        }])
+
+        # Check 1 hour after start - job should be stale
+        check_time = datetime(
+            2026, 2, 3, 11, 0, 0, tzinfo=pytz.timezone('America/Chicago')
+        )
+
+        result = get_stale_runs_exceeding_max_duration(check_time=check_time)
+
+        assert len(result) == 1
+        assert result[0].duration_ms == 3600000  # 1 hour elapsed
+
+
+class TestMarkStaleRunAlerted:
+    """Tests for mark_stale_run_alerted function."""
+
+    @patch("Medic.Core.job_runs.db")
+    def test_mark_stale_run_alerted_success(self, mock_db):
+        """Test successfully marking a stale run as alerted."""
+        from Medic.Core.job_runs import mark_stale_run_alerted
+
+        mock_db.insert_db.return_value = True
+
+        result = mark_stale_run_alerted(service_id=10, run_id="stale-run")
+
+        assert result is True
+        mock_db.insert_db.assert_called_once()
+        # Verify the UPDATE query sets status to STALE_ALERTED
+        call_args = mock_db.insert_db.call_args[0][0]
+        assert "STALE_ALERTED" in call_args
+
+    @patch("Medic.Core.job_runs.db")
+    def test_mark_stale_run_alerted_failure(self, mock_db):
+        """Test failure to mark stale run as alerted."""
+        from Medic.Core.job_runs import mark_stale_run_alerted
+
+        mock_db.insert_db.return_value = False
+
+        result = mark_stale_run_alerted(service_id=10, run_id="stale-run")
+
+        assert result is False

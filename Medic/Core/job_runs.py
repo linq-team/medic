@@ -525,3 +525,241 @@ def _percentile(sorted_data: List[int], p: float) -> int:
 
     d = k - f
     return int(sorted_data[f] * (1 - d) + sorted_data[c] * d)
+
+
+@dataclass
+class DurationAlert:
+    """Represents a duration threshold alert."""
+    service_id: int
+    service_name: str
+    run_id: str
+    alert_type: str  # "exceeded" or "stale"
+    duration_ms: Optional[int]
+    max_duration_ms: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "service_id": self.service_id,
+            "service_name": self.service_name,
+            "run_id": self.run_id,
+            "alert_type": self.alert_type,
+            "duration_ms": self.duration_ms,
+            "max_duration_ms": self.max_duration_ms,
+            "started_at": (
+                self.started_at.isoformat() if self.started_at else None
+            ),
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            )
+        }
+
+
+def get_service_max_duration(service_id: int) -> Optional[int]:
+    """
+    Get the max_duration_ms for a service.
+
+    Args:
+        service_id: The service ID
+
+    Returns:
+        max_duration_ms if configured, None otherwise
+    """
+    import json
+    result = db.query_db(
+        "SELECT max_duration_ms FROM services WHERE service_id = %s",
+        (service_id,),
+        show_columns=True
+    )
+
+    if not result or result == '[]':
+        return None
+
+    services = json.loads(str(result))
+    if not services:
+        return None
+
+    return services[0].get('max_duration_ms')
+
+
+def check_duration_threshold(
+    job_run: JobRun,
+    max_duration_ms: Optional[int] = None
+) -> Optional[DurationAlert]:
+    """
+    Check if a completed job's duration exceeds the threshold.
+
+    Args:
+        job_run: The completed JobRun to check
+        max_duration_ms: Optional override for max duration threshold.
+                        If not provided, fetches from service config.
+
+    Returns:
+        DurationAlert if threshold exceeded, None otherwise
+    """
+    if job_run.duration_ms is None:
+        return None
+
+    # Get max_duration from service config if not provided
+    if max_duration_ms is None:
+        max_duration_ms = get_service_max_duration(job_run.service_id)
+
+    if max_duration_ms is None or max_duration_ms <= 0:
+        # No threshold configured
+        return None
+
+    if job_run.duration_ms > max_duration_ms:
+        # Get service name for alert
+        import json
+        service_result = db.query_db(
+            "SELECT heartbeat_name FROM services WHERE service_id = %s",
+            (job_run.service_id,),
+            show_columns=True
+        )
+        service_name = "Unknown"
+        if service_result and service_result != '[]':
+            services = json.loads(str(service_result))
+            if services:
+                service_name = services[0].get('heartbeat_name', 'Unknown')
+
+        logger.log(
+            level=30,
+            msg=f"Duration threshold exceeded for service {service_name} "
+                f"(ID: {job_run.service_id}): {job_run.duration_ms}ms > "
+                f"{max_duration_ms}ms (run_id: {job_run.run_id})"
+        )
+
+        return DurationAlert(
+            service_id=job_run.service_id,
+            service_name=service_name,
+            run_id=job_run.run_id,
+            alert_type="exceeded",
+            duration_ms=job_run.duration_ms,
+            max_duration_ms=max_duration_ms,
+            started_at=job_run.started_at,
+            completed_at=job_run.completed_at
+        )
+
+    return None
+
+
+def get_stale_runs_exceeding_max_duration(
+    check_time: Optional[datetime] = None
+) -> List[DurationAlert]:
+    """
+    Find jobs that started but haven't completed and have exceeded
+    their service's max_duration threshold.
+
+    This is used to detect hung/stale jobs that are taking too long.
+
+    Args:
+        check_time: Optional time to check against (defaults to now)
+
+    Returns:
+        List of DurationAlert objects for stale jobs exceeding threshold
+    """
+    import json
+    if check_time is None:
+        check_time = datetime.now(pytz.timezone('America/Chicago'))
+
+    # Query for STARTED jobs with services that have max_duration configured
+    # Join with services to get max_duration_ms and heartbeat_name
+    result = db.query_db(
+        """
+        SELECT jr.run_id_pk, jr.service_id, jr.run_id, jr.started_at,
+               jr.completed_at, jr.duration_ms, jr.status,
+               s.max_duration_ms, s.heartbeat_name
+        FROM medic.job_runs jr
+        JOIN services s ON s.service_id = jr.service_id
+        WHERE jr.status = 'STARTED'
+          AND jr.completed_at IS NULL
+          AND s.max_duration_ms IS NOT NULL
+          AND s.max_duration_ms > 0
+        ORDER BY jr.started_at ASC
+        """,
+        show_columns=True
+    )
+
+    if not result or result == '[]':
+        return []
+
+    alerts: List[DurationAlert] = []
+    runs = json.loads(str(result))
+
+    for run_data in runs:
+        started_at = run_data.get('started_at')
+        max_duration_ms = run_data.get('max_duration_ms')
+
+        if started_at is None or max_duration_ms is None:
+            continue
+
+        # Parse started_at if string
+        if isinstance(started_at, str):
+            started_at = _parse_datetime(started_at)
+
+        if started_at is None:
+            continue
+
+        # Ensure timezone awareness
+        if started_at.tzinfo is None:
+            started_at = pytz.timezone('America/Chicago').localize(started_at)
+        if check_time.tzinfo is None:
+            check_time = pytz.timezone('America/Chicago').localize(check_time)
+
+        # Calculate elapsed time
+        elapsed_ms = int((check_time - started_at).total_seconds() * 1000)
+
+        if elapsed_ms > max_duration_ms:
+            logger.log(
+                level=30,
+                msg=f"Stale job detected for service "
+                    f"{run_data.get('heartbeat_name', 'Unknown')} "
+                    f"(ID: {run_data['service_id']}): running for "
+                    f"{elapsed_ms}ms > {max_duration_ms}ms max "
+                    f"(run_id: {run_data['run_id']})"
+            )
+
+            alerts.append(DurationAlert(
+                service_id=run_data['service_id'],
+                service_name=run_data.get('heartbeat_name', 'Unknown'),
+                run_id=run_data['run_id'],
+                alert_type="stale",
+                duration_ms=elapsed_ms,
+                max_duration_ms=max_duration_ms,
+                started_at=started_at,
+                completed_at=None
+            ))
+
+    return alerts
+
+
+def mark_stale_run_alerted(service_id: int, run_id: str) -> bool:
+    """
+    Mark a stale run as having been alerted to prevent duplicate alerts.
+
+    Updates the job run status to 'STALE_ALERTED'.
+
+    Args:
+        service_id: The service ID
+        run_id: The run ID
+
+    Returns:
+        True if updated successfully, False otherwise
+    """
+    result = db.insert_db(
+        "UPDATE medic.job_runs SET status = 'STALE_ALERTED', "
+        "updated_at = NOW() "
+        "WHERE service_id = %s AND run_id = %s AND status = 'STARTED'",
+        (service_id, run_id)
+    )
+
+    if result:
+        logger.log(
+            level=20,
+            msg=f"Marked stale run as alerted: service {service_id}, "
+                f"run_id {run_id}"
+        )
+
+    return result if result else False

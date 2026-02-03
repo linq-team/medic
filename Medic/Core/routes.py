@@ -575,6 +575,7 @@ def exposeRoutes(app):
         if res:
             # Track job run for duration statistics if run_id is provided
             job_run_result = None
+            duration_alert = None
             if run_id:
                 if status == hbeat.HeartbeatStatus.STARTED.value:
                     job_run_result = job_runs.record_job_start(
@@ -587,6 +588,14 @@ def exposeRoutes(app):
                     job_run_result = job_runs.record_job_completion(
                         service_id, run_id, status
                     )
+                    # Check duration threshold for completed jobs
+                    if job_run_result:
+                        duration_alert = job_runs.check_duration_threshold(
+                            job_run_result
+                        )
+                        if duration_alert:
+                            # Record metric for duration exceeded
+                            metrics.record_duration_alert("exceeded")
 
             logger.log(
                 level=10,
@@ -603,6 +612,15 @@ def exposeRoutes(app):
             }
             if job_run_result and job_run_result.duration_ms is not None:
                 results["duration_ms"] = job_run_result.duration_ms
+            if duration_alert:
+                results["duration_alert"] = {
+                    "alert_type": duration_alert.alert_type,
+                    "max_duration_ms": duration_alert.max_duration_ms,
+                    "exceeded_by_ms": (
+                        (duration_alert.duration_ms or 0) -
+                        duration_alert.max_duration_ms
+                    )
+                }
 
             return json.dumps({
                 "success": True,

@@ -115,6 +115,18 @@ HEALTH_STATUS = Gauge(
     ['component']
 )
 
+# Duration threshold alerts
+DURATION_ALERTS = Counter(
+    'medic_duration_alerts_total',
+    'Total duration threshold alerts triggered',
+    ['alert_type']  # exceeded, stale
+)
+
+STALE_JOBS = Gauge(
+    'medic_stale_jobs_current',
+    'Number of currently stale jobs exceeding max duration'
+)
+
 
 def track_request_metrics(func: Callable) -> Callable:
     """Decorator to track request metrics."""
@@ -216,6 +228,23 @@ def update_service_counts(registered: int, active: int):
 def update_health_status(component: str, healthy: bool):
     """Update health status gauge."""
     HEALTH_STATUS.labels(component=component).set(1 if healthy else 0)
+
+
+def record_duration_alert(alert_type: str):
+    """
+    Record a duration threshold alert metric.
+
+    Args:
+        alert_type: The type of alert. Should be one of:
+                   - 'exceeded': Job completed but exceeded max_duration
+                   - 'stale': Job started but hasn't completed within max_duration
+    """
+    DURATION_ALERTS.labels(alert_type=alert_type).inc()
+
+
+def update_stale_jobs_count(count: int):
+    """Update the current count of stale jobs."""
+    STALE_JOBS.set(count)
 
 
 def get_metrics() -> bytes:

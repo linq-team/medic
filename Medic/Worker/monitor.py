@@ -20,6 +20,26 @@ except ImportError:
     is_service_in_maintenance = None  # type: ignore[misc, assignment]
     get_active_maintenance_window_for_service = None  # type: ignore[misc, assignment]
 
+# Import duration threshold checker
+try:
+    from Medic.Core.job_runs import (
+        get_stale_runs_exceeding_max_duration,
+        mark_stale_run_alerted,
+        DurationAlert,
+    )
+    from Medic.Core.metrics import (
+        record_duration_alert,
+        update_stale_jobs_count,
+    )
+    DURATION_ALERTS_AVAILABLE = True
+except ImportError:
+    DURATION_ALERTS_AVAILABLE = False
+    get_stale_runs_exceeding_max_duration = None  # type: ignore[misc, assignment]
+    mark_stale_run_alerted = None  # type: ignore[misc, assignment]
+    DurationAlert = None  # type: ignore[misc, assignment]
+    record_duration_alert = None  # type: ignore[misc, assignment]
+    update_stale_jobs_count = None  # type: ignore[misc, assignment]
+
 # Log Setup
 logging.basicConfig(level=logging.WARNING, format='%(relativeCreated)6d %(threadName)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -271,10 +291,147 @@ def color_code(severity):
         return "#F35A00"
 
 
+def checkForStaleJobs():
+    """
+    Check for jobs that started but haven't completed within max_duration.
+
+    Sends alerts for stale jobs and marks them as alerted to prevent
+    duplicate notifications.
+    """
+    if not DURATION_ALERTS_AVAILABLE:
+        return
+
+    try:
+        stale_alerts = get_stale_runs_exceeding_max_duration()
+        update_stale_jobs_count(len(stale_alerts))
+
+        for alert in stale_alerts:
+            # Check if service is in maintenance window
+            if MAINTENANCE_WINDOWS_AVAILABLE and is_service_in_maintenance(
+                alert.service_id
+            ):
+                window = get_active_maintenance_window_for_service(
+                    alert.service_id
+                )
+                window_name = window.name if window else "Unknown"
+                logger.log(
+                    level=20,
+                    msg=f"Stale job alert suppressed for {alert.service_name}: "
+                        f"service is in maintenance window '{window_name}'"
+                )
+                continue
+
+            # Send alert for stale job
+            sendStaleJobAlert(alert)
+
+            # Mark as alerted to prevent duplicate alerts
+            mark_stale_run_alerted(alert.service_id, alert.run_id)
+
+            # Record metric
+            record_duration_alert("stale")
+
+    except Exception as e:
+        logger.log(
+            level=40,
+            msg=f"Error checking for stale jobs: {str(e)}"
+        )
+
+
+def sendStaleJobAlert(alert):
+    """
+    Send an alert for a stale job that has exceeded max_duration.
+
+    Args:
+        alert: DurationAlert object containing stale job information
+    """
+    # Get service info for team routing
+    service_info = query_db(
+        "SELECT team, priority, muted FROM services WHERE service_id = %s",
+        (alert.service_id,),
+        show_columns=True
+    )
+
+    if not service_info:
+        logger.log(
+            level=30,
+            msg=f"Could not find service info for stale job alert: "
+                f"service_id={alert.service_id}"
+        )
+        return
+
+    service = service_info[0]
+    team = service.get('team', 'site-reliability')
+    priority = service.get('priority', 'p3')
+    muted = service.get('muted', 0)
+
+    if muted == 1:
+        logger.log(
+            level=20,
+            msg=f"Stale job alert suppressed for {alert.service_name}: "
+                f"service is muted"
+        )
+        return
+
+    # Calculate elapsed time in human-readable format
+    elapsed_seconds = (alert.duration_ms or 0) // 1000
+    elapsed_minutes = elapsed_seconds // 60
+    elapsed_hours = elapsed_minutes // 60
+
+    if elapsed_hours > 0:
+        elapsed_str = f"{elapsed_hours}h {elapsed_minutes % 60}m"
+    elif elapsed_minutes > 0:
+        elapsed_str = f"{elapsed_minutes}m {elapsed_seconds % 60}s"
+    else:
+        elapsed_str = f"{elapsed_seconds}s"
+
+    max_seconds = alert.max_duration_ms // 1000
+    max_minutes = max_seconds // 60
+
+    if max_minutes > 0:
+        max_str = f"{max_minutes}m {max_seconds % 60}s"
+    else:
+        max_str = f"{max_seconds}s"
+
+    alert_message = (
+        f"Medic - Stale job detected for {alert.service_name}"
+    )
+
+    # Send PagerDuty alert
+    pd_key = pagerduty.create_alert(
+        alert_message=alert_message,
+        service_name=alert.service_name,
+        heartbeat_name=alert.service_name,
+        team=team,
+        priority=priority,
+        runbook=None
+    )
+
+    # Send Slack message
+    message = (
+        f":hourglass: Stale job detected for `{alert.service_name}` "
+        f"(run_id: `{alert.run_id}`). "
+        f"Job has been running for {elapsed_str}, "
+        f"exceeding max duration of {max_str}. "
+        f"Alert routed to `{team}`."
+    )
+    slack.send_message(message)
+
+    logger.log(
+        level=30,
+        msg=f"Stale job alert sent for {alert.service_name} "
+            f"(run_id: {alert.run_id})"
+    )
+
+
 def thread_function():
     t = threading.Thread(target=queryForNoHeartbeat)
     logger.log(level=20, msg="Thread starting.")
     t.start()
+
+    # Also check for stale jobs
+    if DURATION_ALERTS_AVAILABLE:
+        t2 = threading.Thread(target=checkForStaleJobs)
+        t2.start()
 
 
 if __name__ == "__main__":
