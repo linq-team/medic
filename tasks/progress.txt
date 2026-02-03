@@ -34,6 +34,7 @@
 - Duration calculation: Duration in milliseconds calculated as completed_at - started_at. Stored in job_runs.duration_ms column.
 - Job run queries: get_completed_runs_for_service(service_id, limit=100) returns runs ordered by completion time for stats. get_stale_runs() finds jobs that started but never completed.
 - Max duration: services.max_duration_ms column defines threshold for duration alerts (to be used by US-023).
+- Duration statistics: GET /v2/services/:id/stats returns DurationStatistics (avg, p50, p95, p99, min, max). Returns empty stats (null values) if fewer than 5 runs. Uses get_duration_statistics() from Medic/Core/job_runs.py.
 
 ---
 
@@ -285,4 +286,18 @@
   - services.max_duration_ms column added for threshold-based alerting (to be implemented in US-023)
   - Unique constraint on (service_id, run_id) prevents duplicate runs per service
   - get_stale_runs() useful for finding jobs that started but never completed (hung jobs)
+---
+
+## 2026-02-03 - US-022 - Linear Issue: SRE-16
+- Implemented duration statistics API endpoint in Medic/Core/routes.py
+- Files changed: Medic/Core/job_runs.py (extended), Medic/Core/routes.py (extended), tests/unit/test_job_runs.py (extended), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - DurationStatistics dataclass provides structured response for stats endpoint
+  - get_duration_statistics() calculates avg, p50, p95, p99 from completed runs with valid duration_ms
+  - Minimum 5 runs required for meaningful statistics (returns nulls otherwise)
+  - _percentile() uses linear interpolation (same as numpy default)
+  - Percentile calculation: k = (n-1) * (p/100), then interpolate between floor and ceiling indices
+  - GET /v2/services/:id/stats verifies service exists before calculating stats
+  - Response includes min_duration_ms and max_duration_ms in addition to percentiles
+  - Filter out null and negative duration values before calculating statistics
 ---

@@ -323,8 +323,8 @@
         "Typecheck passes"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented GET /v2/services/:id/stats endpoint in routes.py. Added DurationStatistics dataclass and get_duration_statistics() function with percentile calculations in job_runs.py. 20 unit tests + 5 integration tests added."
     },
     {
       "id": "US-023",
