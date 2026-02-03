@@ -638,6 +638,96 @@ def exposeRoutes(app):
                 "results": ""
             }), 500
 
+    # =========================================================================
+    # Slack Interaction Webhook Endpoint
+    # =========================================================================
+
+    @app.route('/v2/slack/interactions', methods=['POST'])
+    def slack_interactions():
+        """
+        Handle Slack interactive component callbacks.
+
+        This endpoint receives webhook callbacks when users click interactive
+        buttons in Slack messages, such as the approve/reject buttons for
+        playbook executions.
+
+        The payload comes as form-urlencoded data with a 'payload' field
+        containing JSON.
+
+        Slack signature verification is performed if SLACK_SIGNING_SECRET is
+        configured.
+        """
+        # Import here to avoid circular imports
+        from Medic.Core.slack_approval import (
+            get_slack_signing_secret,
+            handle_slack_interaction,
+            verify_slack_signature,
+        )
+
+        # Get raw body for signature verification
+        raw_body = request.get_data(as_text=True)
+
+        # Verify Slack signature if signing secret is configured
+        signing_secret = get_slack_signing_secret()
+        if signing_secret:
+            timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+            signature = request.headers.get('X-Slack-Signature', '')
+
+            if not verify_slack_signature(
+                signing_secret, timestamp, raw_body, signature
+            ):
+                logger.log(
+                    level=30,
+                    msg="Slack signature verification failed"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid signature"
+                }), 401
+
+        # Parse the payload
+        try:
+            # Slack sends the payload as form-urlencoded with a 'payload' field
+            payload_str = request.form.get('payload')
+            if not payload_str:
+                logger.log(
+                    level=30,
+                    msg="No payload in Slack interaction request"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Missing payload"
+                }), 400
+
+            payload = json.loads(payload_str)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.log(
+                level=30,
+                msg=f"Failed to parse Slack interaction payload: {e}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Invalid payload format"
+            }), 400
+
+        # Handle the interaction
+        result = handle_slack_interaction(payload)
+
+        if result.success:
+            # Slack expects an empty 200 response for successful actions
+            # when we update the message ourselves
+            return '', 200
+        else:
+            logger.log(
+                level=30,
+                msg=f"Slack interaction handling failed: {result.message}"
+            )
+            # Return error message that will be shown to user
+            return json.dumps({
+                "response_type": "ephemeral",
+                "text": f"Error: {result.message}"
+            }), 200  # Slack expects 200 even for errors
+
 
 def validateRequestData(schema, jData):
     """Validate request data against a schema."""

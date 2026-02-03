@@ -26,3 +26,30 @@ Started: Tue Feb  3 13:50:31 CST 2026
   - CHECK constraints can enforce business logic (e.g., decided_by must be set when status is approved/rejected)
   - Unique constraint on execution_id ensures one approval request per execution
 ---
+
+## 2026-02-03 14:45 CST - US-036 - Linear Issue: SRE-22
+- What was implemented:
+  - Created Medic/Core/slack_approval.py module with:
+    - ApprovalStatus enum (pending, approved, rejected, expired)
+    - ApprovalRequest and ApprovalResult dataclasses
+    - Database operations: create/get/update approval_requests records
+    - Slack Block Kit message building with interactive buttons
+    - send_approval_request(): Sends Slack message with Approve/Decline buttons
+    - handle_slack_interaction(): Processes button click callbacks
+    - approve_request(): Updates status to approved, resumes playbook execution
+    - reject_request(): Updates status to rejected, cancels playbook execution
+    - Slack signature verification for webhook security
+    - expire_pending_requests(): Handles auto-expiration of timed-out requests
+  - Added POST /v2/slack/interactions endpoint in routes.py
+- Files changed:
+  - Medic/Core/slack_approval.py (new, ~1200 lines)
+  - Medic/Core/routes.py (added Slack interactions endpoint)
+  - tests/unit/test_slack_approval.py (new, 42 unit tests)
+- **Learnings for future iterations:**
+  - Slack interactive messages use Block Kit format with specific block types (header, section, actions, context)
+  - Slack webhook payloads come as form-urlencoded with a 'payload' JSON field
+  - Signature verification uses HMAC-SHA256 with v0:timestamp:body format
+  - For button actions, action_id identifies the action and value carries the payload (e.g., execution_id)
+  - chat_update can replace interactive buttons with static result after decision
+  - Import slack_approval inside route function to avoid circular imports
+---
