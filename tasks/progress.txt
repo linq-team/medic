@@ -15,6 +15,7 @@
 - Webhook delivery: Use WebhookDeliveryService in Medic/Core/webhook_delivery.py with deliver_webhook() convenience function
 - HTTP retries: Use exponential backoff with configurable delays (default: 1s, 5s, 30s) for webhook delivery
 - Alert routing: Use get_slack_channel_for_service(service_id) from Medic/Core/alert_routing.py to get team channel with fallback to default
+- Notification targets: medic.notification_targets table stores type-specific config in JSONB, ordered by priority (lower = higher priority)
 
 ---
 
@@ -115,4 +116,16 @@
   - Query joins medic.teams and services tables via team_id FK
   - Empty string channel ("") is treated same as None - triggers fallback to default
   - Pattern: routing priority is team channel > default channel
+---
+
+## 2026-02-03 - US-011 - Linear Issue: SRE-10
+- Created notification_targets database schema migration in migrations/004_create_notification_targets.sql
+- Files changed: migrations/004_create_notification_targets.sql (new)
+- **Learnings for future iterations:**
+  - notification_targets table: target_id, service_id, type (slack/pagerduty/webhook), config (jsonb), priority, enabled, timestamps
+  - Type constraint via CHECK ensures only valid types: slack, pagerduty, webhook
+  - Priority field (integer) used for ordering targets in notify_until_success mode - lower = higher priority
+  - Composite index on (service_id, priority) WHERE enabled = TRUE for common query pattern
+  - Config field stores type-specific JSON (channel_id for slack, service_key for pagerduty, url/headers for webhook)
+  - ON DELETE CASCADE from services - when service deleted, its targets are removed
 ---

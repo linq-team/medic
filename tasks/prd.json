@@ -163,8 +163,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/004_create_notification_targets.sql. Table includes target_id, service_id, type (slack/pagerduty/webhook), config (jsonb), priority, enabled, timestamps. Indexes on service_id, enabled, type, and composite service+priority."
     },
     {
       "id": "US-012",
