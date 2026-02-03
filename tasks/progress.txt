@@ -49,6 +49,12 @@
 - Playbook validation: Use validate_playbook_yaml() for error list or is_valid_playbook_yaml() for boolean check.
 - Playbook executions: medic.playbook_executions tracks execution state (pending_approval, running, waiting, completed, failed, cancelled). FK to playbooks with CASCADE, FK to services with SET NULL.
 - Step results: medic.playbook_step_results tracks individual step outcomes. step_index is zero-based. Unique constraint on (execution_id, step_index).
+- Execution engine: Use PlaybookExecutionEngine from Medic/Core/playbook_engine.py. start_execution(), resume_execution(), approve_execution(), cancel_execution() methods.
+- Execution status helpers: ExecutionStatus.is_terminal() checks for completed/failed/cancelled. ExecutionStatus.is_active() checks for running/waiting.
+- Step result status: StepResultStatus enum with PENDING, RUNNING, COMPLETED, FAILED, SKIPPED values.
+- Convenience functions: start_playbook_execution(), resume_playbook_execution(), approve_playbook_execution(), cancel_playbook_execution() use global engine singleton.
+- Wait step execution: execute_wait_step() uses time.sleep() for synchronous wait. Creates step result, sleeps, updates completion.
+- State persistence: Engine updates database after each step. Use get_active_executions() to resume after restart.
 
 ---
 
@@ -391,4 +397,21 @@
   - current_step is zero-based index into playbook steps array
   - output column stores step execution output (webhook response, script stdout)
   - error_message column separate from output for clarity on failure details
+---
+
+## 2026-02-03 - US-028 - Linear Issue: SRE-23
+- Implemented playbook execution engine core in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (new), tests/unit/test_playbook_engine.py (new)
+- **Learnings for future iterations:**
+  - PlaybookExecutionEngine class orchestrates sequential step execution with state persistence
+  - ExecutionStatus enum: PENDING_APPROVAL, RUNNING, WAITING, COMPLETED, FAILED, CANCELLED
+  - StepResultStatus enum: PENDING, RUNNING, COMPLETED, FAILED, SKIPPED
+  - create_execution() uses RETURNING clause to get execution_id from INSERT
+  - update_execution_status() dynamically builds SET clause based on provided parameters
+  - Wait step uses time.sleep() for synchronous execution - future: make async with scheduled resume
+  - Placeholder executors for webhook/script/condition return PENDING status until implemented
+  - State persisted via create_step_result() and update_step_result() after each step operation
+  - get_active_executions() queries for running/waiting status to support restart resume
+  - Global engine singleton via get_engine() for module-level convenience functions
+  - Output/error_message fields truncated to 4096/2048 chars to prevent database bloat
 ---
