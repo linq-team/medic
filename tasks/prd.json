@@ -455,8 +455,8 @@
         "Typecheck passes"
       ],
       "priority": 31,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented execute_script_step() in Medic/Core/playbook_engine.py. Looks up scripts from medic.registered_scripts by name, rejects unregistered scripts. Supports bash/python interpreters. Resource limits: timeout, memory (256MB), output truncation (8KB). Variable substitution with ${VAR_NAME} syntax. Sets MEDIC_* env vars for scripts. 20 new unit tests (90 total) in tests/unit/test_playbook_engine.py."
     },
     {
       "id": "US-032",

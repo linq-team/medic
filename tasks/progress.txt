@@ -60,6 +60,13 @@
 - Webhook context: _build_webhook_context(execution) provides standard variables: EXECUTION_ID, PLAYBOOK_ID, SERVICE_ID, SERVICE_NAME, PLAYBOOK_NAME, plus execution.context.
 - Webhook success: success_codes list on WebhookStep defines acceptable HTTP status codes. Default: [200, 201, 202].
 - Response truncation: MAX_RESPONSE_BODY_SIZE = 4096 bytes. Large responses truncated with "[truncated]" suffix.
+- Script step execution: Use execute_script_step(step, execution) from Medic/Core/playbook_engine.py. Looks up pre-registered scripts by name.
+- Registered scripts: get_registered_script(script_name) retrieves from medic.registered_scripts table. Returns None if not found.
+- Script interpreters: Only 'bash' and 'python' supported. bash uses '-e' (exit on error), python3 uses '-u' (unbuffered).
+- Script resource limits: preexec_fn sets RLIMIT_AS (256MB memory), RLIMIT_CPU (timeout + 5/10 seconds).
+- Script output: MAX_SCRIPT_OUTPUT_SIZE = 8192 bytes. Combines stdout and stderr (stderr prefixed with [STDERR]).
+- Script variables: _substitute_script_variables() merges context and parameters (params override). Uses ${VAR_NAME} syntax.
+- Script environment: MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID env vars available to scripts.
 
 ---
 
@@ -447,4 +454,23 @@
   - Scripts referenced by name in playbook YAML script steps
   - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
   - Security: only scripts in this table can be executed, preventing arbitrary code execution from playbooks
+---
+
+## 2026-02-03 - US-031 - Linear Issue: SRE-20
+- Implemented script step executor in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (modified), tests/unit/test_playbook_engine.py (extended)
+- **Learnings for future iterations:**
+  - RegisteredScript dataclass: script_id, name, content, interpreter, timeout_seconds
+  - get_registered_script(script_name) retrieves scripts from medic.registered_scripts by name, returns None if not found
+  - execute_script_step() is the main function - rejects unregistered scripts with clear error message
+  - Only bash and python interpreters supported - bash uses '-e' flag (exit on error), python3 uses '-u' (unbuffered output)
+  - Resource limits via subprocess preexec_fn: memory limit (RLIMIT_AS = 256MB), CPU time limit (timeout + 5/10 seconds)
+  - Script content written to temp file, executed, temp file deleted (cleanup in try/finally)
+  - _substitute_script_variables() merges context and parameters (parameters override), uses existing substitute_variables()
+  - Output captures both stdout and stderr, stderr prefixed with [STDERR] in combined output
+  - Output truncated to MAX_SCRIPT_OUTPUT_SIZE (8192 bytes) with "[output truncated]" suffix
+  - MEDIC_* environment variables set for scripts: MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID
+  - Step timeout can be overridden at step level (step.timeout_seconds) - falls back to script.timeout_seconds or DEFAULT_SCRIPT_TIMEOUT (30s)
+  - subprocess.TimeoutExpired handled separately from generic exceptions for clear error messages
+  - Engine _execute_script() now calls execute_script_step() instead of placeholder
 ---
