@@ -55,6 +55,11 @@
 - Convenience functions: start_playbook_execution(), resume_playbook_execution(), approve_playbook_execution(), cancel_playbook_execution() use global engine singleton.
 - Wait step execution: execute_wait_step() uses time.sleep() for synchronous wait. Creates step result, sleeps, updates completion.
 - State persistence: Engine updates database after each step. Use get_active_executions() to resume after restart.
+- Webhook step execution: Use execute_webhook_step(step, execution, http_client) from Medic/Core/playbook_engine.py. Performs HTTP request with variable substitution.
+- Variable substitution: Use substitute_variables(value, context) for ${VAR_NAME} replacement. Handles strings, dicts, lists. Missing variables kept as-is.
+- Webhook context: _build_webhook_context(execution) provides standard variables: EXECUTION_ID, PLAYBOOK_ID, SERVICE_ID, SERVICE_NAME, PLAYBOOK_NAME, plus execution.context.
+- Webhook success: success_codes list on WebhookStep defines acceptable HTTP status codes. Default: [200, 201, 202].
+- Response truncation: MAX_RESPONSE_BODY_SIZE = 4096 bytes. Large responses truncated with "[truncated]" suffix.
 
 ---
 
@@ -414,4 +419,20 @@
   - get_active_executions() queries for running/waiting status to support restart resume
   - Global engine singleton via get_engine() for module-level convenience functions
   - Output/error_message fields truncated to 4096/2048 chars to prevent database bloat
+---
+
+## 2026-02-03 - US-029 - Linear Issue: SRE-19
+- Implemented webhook step executor in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (modified), tests/unit/test_playbook_engine.py (extended)
+- **Learnings for future iterations:**
+  - execute_webhook_step() performs HTTP request with requests library, supports custom http_client for testing
+  - substitute_variables() handles ${VAR_NAME} substitution recursively for strings, dicts, and lists
+  - Missing variables in substitution are kept as-is (e.g., "${UNKNOWN}" remains unchanged)
+  - _build_webhook_context() provides standard context: EXECUTION_ID, PLAYBOOK_ID, SERVICE_ID, SERVICE_NAME (from DB), PLAYBOOK_NAME
+  - Execution context variables (ALERT_ID, RUN_ID, custom) are copied and merged with standard variables
+  - success_codes list on WebhookStep defines acceptable HTTP status codes (default: [200, 201, 202])
+  - Response body truncated to MAX_RESPONSE_BODY_SIZE (4096 bytes) to prevent database bloat
+  - requests.Timeout, requests.ConnectionError, requests.RequestException all result in FAILED step status
+  - Output includes full HTTP request/response details: method, URL, status code, response body
+  - Engine _execute_webhook() now calls execute_webhook_step() instead of placeholder
 ---

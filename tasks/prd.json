@@ -426,8 +426,8 @@
         "Typecheck passes"
       ],
       "priority": 29,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented execute_webhook_step() in Medic/Core/playbook_engine.py. Supports variable substitution (${SERVICE_NAME}, ${SERVICE_ID}, ${ALERT_ID}, ${RUN_ID}, ${EXECUTION_ID}, ${PLAYBOOK_NAME}), configurable success_codes, response truncation. substitute_variables() handles strings/dicts/lists. _build_webhook_context() fetches service name from DB. 20 new webhook tests (70 total) in tests/unit/test_playbook_engine.py."
     },
     {
       "id": "US-030",
