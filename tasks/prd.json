@@ -513,8 +513,8 @@
         "Typecheck passes"
       ],
       "priority": 35,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/014_create_approval_requests.sql. Table includes request_id, execution_id (unique FK to playbook_executions), requested_at, expires_at, status (pending/approved/rejected/expired), decided_by, decided_at. CHECK constraint ensures decided_by/decided_at are set appropriately per status. Indexes for pending requests, expiration, and audit queries."
     },
     {
       "id": "US-036",
