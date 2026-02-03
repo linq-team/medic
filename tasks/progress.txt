@@ -24,6 +24,9 @@
 - Period detection: Use get_current_period(schedule) or get_service_current_period(service_id) to get "during_hours" or "after_hours" string.
 - Working hours routing: Use route_alert_with_schedule(service_id, payload, mode, sender, check_time) for working hours-aware alert routing. Automatically uses correct targets based on service schedule.
 - Notification target periods: notification_targets.period column values: 'always' (default), 'during_hours', 'after_hours'. Targets with 'always' included in all routing.
+- Maintenance windows: Use is_service_in_maintenance(service_id, check_time) from Medic/Core/maintenance_windows.py. Returns True if service is in any active window.
+- Recurring maintenance: Cron expressions evaluated via croniter library. Window duration = end_time - start_time from original definition.
+- Maintenance window queries: Empty service_ids means ALL services. Query: WHERE service_ids = '{}' OR %s = ANY(service_ids)
 
 ---
 
@@ -204,4 +207,20 @@
   - end_time > start_time enforced via CHECK constraint
   - IANA timezone constraint reused from schedules table pattern
   - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
+---
+
+## 2026-02-03 - US-017 - Linear Issue: SRE-14
+- Implemented maintenance window evaluation in Medic/Core/maintenance_windows.py
+- Files changed: Medic/Core/maintenance_windows.py (new), tests/unit/test_maintenance_windows.py (new), Medic/requirements.txt (added croniter)
+- **Learnings for future iterations:**
+  - MaintenanceWindow dataclass: window_id, name, start_time, end_time, timezone, recurrence, service_ids
+  - is_service_in_maintenance(service_id, check_time) is the primary function for alert suppression logic
+  - One-time windows: direct comparison of start_time <= check_time < end_time
+  - Recurring windows: use croniter to find prev occurrence, add duration to get window end
+  - croniter is optional - module works without it but recurring windows won't evaluate
+  - Type ignore comments needed for croniter import: # type: ignore[import-untyped]
+  - get_maintenance_status() returns detailed dict with window info and maintenance_end time
+  - Empty service_ids array means window applies to ALL services - query with WHERE service_ids = '{}' OR %s = ANY(service_ids)
+  - Feb 1, 2026 is a Sunday (weekday=6), Feb 2, 2026 is Monday (weekday=0) - always verify day calculations
+  - parse_maintenance_window() handles both string and datetime objects from database
 ---

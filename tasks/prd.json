@@ -251,8 +251,8 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in Medic/Core/maintenance_windows.py. Primary function is_service_in_maintenance() checks if service is in active window. Supports one-time and recurring (cron) windows with timezone/DST handling. 57 unit tests in tests/unit/test_maintenance_windows.py."
     },
     {
       "id": "US-018",
