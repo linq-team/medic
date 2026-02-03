@@ -22,6 +22,8 @@
 - Working hours evaluation: Use is_within_working_hours(schedule, check_time) from Medic/Core/working_hours.py. Uses zoneinfo for DST-aware timezone handling.
 - Service working hours: Use is_service_within_working_hours(service_id) which returns (bool, schedule_name) tuple. Returns (True, None) if no schedule (always in hours).
 - Period detection: Use get_current_period(schedule) or get_service_current_period(service_id) to get "during_hours" or "after_hours" string.
+- Working hours routing: Use route_alert_with_schedule(service_id, payload, mode, sender, check_time) for working hours-aware alert routing. Automatically uses correct targets based on service schedule.
+- Notification target periods: notification_targets.period column values: 'always' (default), 'during_hours', 'after_hours'. Targets with 'always' included in all routing.
 
 ---
 
@@ -176,4 +178,17 @@
   - is_service_within_working_hours() returns (True, None) when no schedule - services without schedules are always "within hours"
   - get_current_period() returns "during_hours" or "after_hours" for routing decisions
   - Naive datetimes are assumed to be UTC
+---
+
+## 2026-02-03 - US-015 - Linear Issue: SRE-12
+- Implemented working hours-aware alert routing in Medic/Core/alert_routing.py
+- Files changed: Medic/Core/alert_routing.py (extended), tests/unit/test_alert_routing.py (extended), migrations/006_add_period_to_notification_targets.sql (new)
+- **Learnings for future iterations:**
+  - NotificationPeriod enum: ALWAYS (default), DURING_HOURS, AFTER_HOURS - matches database period column values
+  - Targets with period='always' are included in ALL routing decisions regardless of working hours
+  - get_notification_targets_for_service() now accepts optional period parameter to filter by working hours period
+  - SQL uses COALESCE(period, 'always') to handle NULL values from pre-migration data
+  - route_alert_with_schedule() uses local import of get_service_current_period to avoid circular imports
+  - When patching local imports in tests, patch at the source module (Medic.Core.working_hours.get_service_current_period), not the consuming module
+  - Migration adds period column with DEFAULT 'always' so existing targets continue to work unchanged
 ---

@@ -222,8 +222,8 @@
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added period column to notification_targets table (always/during_hours/after_hours) via migration 006. Implemented route_alert_with_schedule() in Medic/Core/alert_routing.py that uses get_service_current_period() from working_hours module to select appropriate targets. 24 new unit tests (79 total) in tests/unit/test_alert_routing.py."
     },
     {
       "id": "US-016",
