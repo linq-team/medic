@@ -136,6 +136,7 @@ def queryForNoHeartbeat():
         muted = heartbeat['muted']
         down = heartbeat['down']
         runbook = heartbeat.get('runbook')
+        grace_period = heartbeat.get('grace_period_seconds', 0) or 0
         fmt = "%Y-%m-%d %H:%M:%S"
         now_cdt = datetime.now(tz).strftime(fmt)
 
@@ -167,6 +168,27 @@ def queryForNoHeartbeat():
             lh_cvtd = (last_hbeat[0][0]).astimezone(tz).strftime(fmt)
 
             if int(last_hbeat_count) < int(threshold):
+                # Check grace period before alerting
+                # Grace period adds additional delay after expected heartbeat window
+                if grace_period > 0:
+                    last_hbeat_time = last_hbeat[0][0]
+                    now_utc = datetime.now(pytz.UTC)
+                    # Ensure last_hbeat_time is timezone-aware
+                    if last_hbeat_time.tzinfo is None:
+                        last_hbeat_time = pytz.UTC.localize(last_hbeat_time)
+                    time_since_last = (now_utc - last_hbeat_time).total_seconds()
+                    # Alert interval is in minutes, grace period is in seconds
+                    interval_seconds = int(interval) * 60
+                    required_delay = interval_seconds + grace_period
+                    if time_since_last < required_delay:
+                        grace_remaining = int(required_delay - time_since_last)
+                        logger.log(
+                            level=20,
+                            msg=f"Alert delayed for {name}: grace period "
+                                f"({grace_remaining}s remaining)"
+                        )
+                        continue
+
                 # Check if service is in maintenance window before alerting
                 if MAINTENANCE_WINDOWS_AVAILABLE and is_service_in_maintenance(s_id):
                     window = get_active_maintenance_window_for_service(s_id)
