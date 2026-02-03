@@ -485,8 +485,8 @@
         "Typecheck passes"
       ],
       "priority": 33,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in Medic/Core/playbook_triggers.py. PlaybookTrigger dataclass with matches_service() using fnmatch glob patterns and meets_failure_threshold() for consecutive failures. find_matching_trigger() returns most specific trigger (highest failure threshold first). find_playbook_for_alert() returns MatchedPlaybook with full playbook details. 40 unit tests in tests/unit/test_playbook_triggers.py."
     },
     {
       "id": "US-034",

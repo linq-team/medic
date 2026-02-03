@@ -74,6 +74,10 @@
 - Condition parameters: min_count (default 1), status (filter by heartbeat status). Passed to check function.
 - Condition success: Output includes elapsed time and condition message. Status = COMPLETED.
 - Condition timeout: Output includes "[ESCALATE]" tag for escalate mode. Error message includes "Escalating to on-call".
+- Playbook trigger matching: Use find_playbook_for_alert(service_name, consecutive_failures) from Medic/Core/playbook_triggers.py. Returns MatchedPlaybook or None.
+- Trigger glob patterns: fnmatch library for *, ?, [seq] matching. Case-insensitive. Use matches_glob_pattern(pattern, value) for direct matching.
+- Trigger ordering: get_enabled_triggers() returns by consecutive_failures DESC. Higher thresholds matched first (more specific).
+- Service-based trigger lookup: find_playbook_for_service_alert(service_id) convenience function looks up name and failures from database.
 
 ---
 
@@ -497,4 +501,21 @@
   - service_id can come from execution.service_id or step.parameters['service_id'] - flexibility for multi-service playbooks
   - ConditionType enum from playbook_parser.py defines check types (currently only HEARTBEAT_RECEIVED)
   - Removed old placeholder test - replaced with 19 comprehensive unit tests covering all paths
+---
+
+## 2026-02-03 - US-033 - Linear Issue: SRE-23
+- Implemented playbook trigger matching in Medic/Core/playbook_triggers.py
+- Files changed: Medic/Core/playbook_triggers.py (new), tests/unit/test_playbook_triggers.py (new)
+- **Learnings for future iterations:**
+  - PlaybookTrigger dataclass with trigger_id, playbook_id, service_pattern, consecutive_failures, enabled
+  - Glob pattern matching uses fnmatch library - supports *, ?, [seq], [!seq] patterns
+  - matches_service() is case-insensitive (both pattern and service name lowercased)
+  - meets_failure_threshold() returns True when failure_count >= consecutive_failures
+  - matches() combines enabled check, service pattern match, and failure threshold check
+  - get_enabled_triggers() returns triggers ordered by consecutive_failures DESC (most specific first)
+  - find_matching_trigger() iterates triggers in order and returns first match
+  - find_playbook_for_alert() returns MatchedPlaybook with full playbook details (name, trigger info)
+  - find_playbook_for_service_alert() convenience function looks up service name and failure count
+  - get_consecutive_failures_for_service() retrieves from services table (returns 0 if null/not found)
+  - matches_glob_pattern() utility function for direct pattern matching
 ---
