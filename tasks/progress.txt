@@ -86,6 +86,9 @@
 - Circuit breaker: Use is_circuit_open(service_id) or check_circuit_breaker(service_id) from Medic/Core/circuit_breaker.py before starting playbook executions.
 - Circuit breaker config: Default 5 executions per hour per service. Configure via set_config(CircuitBreakerConfig(window_seconds=X, max_executions=Y)).
 - Circuit breaker integration: Check integrated at START of trigger_playbook_for_alert() - runs before playbook matching. Returns status="circuit_breaker_open" when blocked.
+- Playbook metrics: medic_playbook_executions_total{playbook, status} Counter, medic_playbook_execution_duration_seconds{playbook} Histogram, medic_playbook_executions_pending_approval Gauge.
+- Playbook metrics helpers: record_playbook_execution(playbook_name, status), record_playbook_execution_duration(playbook_name, duration_seconds), update_pending_approval_count(count).
+- Playbook metrics integration: Metrics recorded in _complete_execution(), _fail_execution(), cancel_execution(). Pending approval updated when status changes.
 
 ---
 
@@ -558,4 +561,19 @@
   - record_circuit_breaker_trip() logs at level 40 (ERROR) and records metric
   - get_services_with_open_circuit() useful for monitoring dashboard
   - When mocking circuit breaker in tests, mock check_circuit_breaker to return a CircuitBreakerStatus with is_open=False
+---
+
+## 2026-02-03 - US-038 - Linear Issue: SRE-23
+- Implemented playbook execution Prometheus metrics for monitoring
+- Files changed: Medic/Core/metrics.py, Medic/Core/playbook_engine.py, tests/unit/test_playbook_engine.py
+- **Learnings for future iterations:**
+  - PLAYBOOK_EXECUTIONS Counter with playbook/status labels for tracking execution counts
+  - PLAYBOOK_EXECUTION_DURATION Histogram with playbook label and buckets [1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600] seconds for duration distribution
+  - PLAYBOOK_EXECUTIONS_PENDING_APPROVAL Gauge for real-time pending approval count
+  - Metrics recorded at terminal states: _complete_execution(), _fail_execution(), cancel_execution()
+  - Pending approval gauge updated via get_pending_approval_count() -> _update_pending_approval_metric()
+  - Use record_playbook_execution(playbook_name, status) where status is "completed", "failed", or "cancelled"
+  - Duration only recorded if execution.started_at is set (skip for executions with no start time)
+  - When playbook is None, use "unknown" as playbook_name for metrics
+  - When adding metrics integration, remember to mock the metric recording functions in existing tests to prevent DB calls
 ---
