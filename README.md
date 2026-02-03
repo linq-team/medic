@@ -115,6 +115,30 @@ WITH (
 );
 ```
 
+`api_keys`
+```
+CREATE TABLE medic.api_keys
+(
+    api_key_id SERIAL,
+    name text COLLATE pg_catalog."default" NOT NULL,
+    key_hash text COLLATE pg_catalog."default" NOT NULL,
+    scopes text[] NOT NULL DEFAULT ARRAY['read']::text[],
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT NOW(),
+    updated_at timestamp with time zone NOT NULL DEFAULT NOW(),
+    CONSTRAINT api_key_id PRIMARY KEY (api_key_id),
+    CONSTRAINT api_keys_name_unique UNIQUE (name),
+    CONSTRAINT api_keys_scopes_check CHECK (
+        scopes <@ ARRAY['read', 'write', 'admin']::text[]
+    )
+)
+WITH (
+    OIDS = FALSE
+);
+
+CREATE INDEX idx_api_keys_key_hash ON medic.api_keys(key_hash);
+```
+
 ## Running Locally
 - First, clone the repo locally and then CD to it.
 - Pull all the env variables from vault and store them in `.env` file 
