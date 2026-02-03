@@ -9,6 +9,11 @@ It also supports flexible alert routing with multiple notification targets
 per service, with two routing modes:
 - notify_all: Send to all enabled targets
 - notify_until_success: Send to targets in priority order until one succeeds
+
+Working hours support:
+- Targets can be configured for 'always', 'during_hours', or 'after_hours'
+- Use route_alert_with_schedule() for working hours-aware routing
+- The current period is determined by the service's schedule (if any)
 """
 import os
 import json
@@ -17,6 +22,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
+from datetime import datetime
 from Medic.Core.database import query_db
 
 logger = logging.getLogger(__name__)
@@ -141,6 +147,14 @@ class NotificationType(str, Enum):
     WEBHOOK = "webhook"
 
 
+class NotificationPeriod(str, Enum):
+    """When a notification target is active relative to working hours."""
+
+    ALWAYS = "always"
+    DURING_HOURS = "during_hours"
+    AFTER_HOURS = "after_hours"
+
+
 @dataclass
 class NotificationTarget:
     """A notification target configuration."""
@@ -151,6 +165,7 @@ class NotificationTarget:
     config: Dict[str, Any]
     priority: int
     enabled: bool
+    period: NotificationPeriod = NotificationPeriod.ALWAYS
 
 
 @dataclass
@@ -166,6 +181,7 @@ class NotificationResult:
 def get_notification_targets_for_service(
     service_id: int,
     enabled_only: bool = True,
+    period: Optional[str] = None,
 ) -> List[NotificationTarget]:
     """
     Get notification targets for a service, ordered by priority.
@@ -173,26 +189,53 @@ def get_notification_targets_for_service(
     Args:
         service_id: The service ID to get targets for
         enabled_only: If True, only return enabled targets (default: True)
+        period: If specified, filter targets by period ('during_hours' or
+               'after_hours'). Targets with 'always' period are included
+               regardless. If None, returns all targets without period filter.
 
     Returns:
         List of NotificationTarget objects ordered by priority (lower first)
     """
-    if enabled_only:
+    if period and enabled_only:
         query = """
-            SELECT target_id, service_id, type, config, priority, enabled
+            SELECT target_id, service_id, type, config, priority, enabled,
+                   COALESCE(period, 'always') as period
+            FROM medic.notification_targets
+            WHERE service_id = %s AND enabled = TRUE
+                AND (COALESCE(period, 'always') = 'always'
+                     OR COALESCE(period, 'always') = %s)
+            ORDER BY priority ASC, target_id ASC
+        """
+        result = query_db(query, (service_id, period), show_columns=True)
+    elif period and not enabled_only:
+        query = """
+            SELECT target_id, service_id, type, config, priority, enabled,
+                   COALESCE(period, 'always') as period
+            FROM medic.notification_targets
+            WHERE service_id = %s
+                AND (COALESCE(period, 'always') = 'always'
+                     OR COALESCE(period, 'always') = %s)
+            ORDER BY priority ASC, target_id ASC
+        """
+        result = query_db(query, (service_id, period), show_columns=True)
+    elif enabled_only:
+        query = """
+            SELECT target_id, service_id, type, config, priority, enabled,
+                   COALESCE(period, 'always') as period
             FROM medic.notification_targets
             WHERE service_id = %s AND enabled = TRUE
             ORDER BY priority ASC, target_id ASC
         """
+        result = query_db(query, (service_id,), show_columns=True)
     else:
         query = """
-            SELECT target_id, service_id, type, config, priority, enabled
+            SELECT target_id, service_id, type, config, priority, enabled,
+                   COALESCE(period, 'always') as period
             FROM medic.notification_targets
             WHERE service_id = %s
             ORDER BY priority ASC, target_id ASC
         """
-
-    result = query_db(query, (service_id,), show_columns=True)
+        result = query_db(query, (service_id,), show_columns=True)
 
     if not result:
         return []
@@ -205,6 +248,13 @@ def get_notification_targets_for_service(
             if isinstance(config, str):
                 config = json.loads(config)
 
+            # Parse period, defaulting to ALWAYS
+            period_str = row.get("period", "always")
+            try:
+                target_period = NotificationPeriod(period_str)
+            except ValueError:
+                target_period = NotificationPeriod.ALWAYS
+
             targets.append(
                 NotificationTarget(
                     target_id=row["target_id"],
@@ -213,6 +263,7 @@ def get_notification_targets_for_service(
                     config=config,
                     priority=row["priority"],
                     enabled=row.get("enabled", True),
+                    period=target_period,
                 )
             )
         return targets
@@ -585,3 +636,120 @@ def any_notification_succeeded(results: List[NotificationResult]) -> bool:
         True if at least one result is successful, False otherwise
     """
     return any(r.success for r in results)
+
+
+def get_notification_targets_for_period(
+    service_id: int,
+    period: str,
+    enabled_only: bool = True,
+) -> List[NotificationTarget]:
+    """
+    Get notification targets for a service filtered by working hours period.
+
+    This function returns targets that match the specified period or have
+    period='always'. Use 'during_hours' or 'after_hours' as the period.
+
+    Args:
+        service_id: The service ID to get targets for
+        period: The working hours period ('during_hours' or 'after_hours')
+        enabled_only: If True, only return enabled targets (default: True)
+
+    Returns:
+        List of NotificationTarget objects for the given period
+    """
+    return get_notification_targets_for_service(
+        service_id=service_id,
+        enabled_only=enabled_only,
+        period=period,
+    )
+
+
+def route_alert_with_schedule(
+    service_id: int,
+    payload: Dict[str, Any],
+    mode: NotificationMode = NotificationMode.NOTIFY_ALL,
+    sender: Optional[Callable[[NotificationTarget, Dict[str, Any]], bool]] = None,
+    check_time: Optional[datetime] = None,
+) -> List[NotificationResult]:
+    """
+    Route an alert using working hours-aware target selection.
+
+    This function determines the current period (during_hours or after_hours)
+    based on the service's schedule and routes the alert to appropriate
+    targets. Targets with period='always' are always included, while targets
+    with period='during_hours' or 'after_hours' are only included when the
+    current time matches that period.
+
+    If the service has no schedule, all targets are treated as if the
+    current period is 'during_hours' (service is always "within hours").
+
+    Args:
+        service_id: The service ID to route alerts for
+        payload: The alert payload to send
+        mode: Routing mode - NOTIFY_ALL or NOTIFY_UNTIL_SUCCESS
+        sender: Optional callback to send notification. If None, uses
+               default_notification_sender. Signature: (target, payload) -> bool
+        check_time: Optional datetime to use for working hours check.
+                   If None, uses current time.
+
+    Returns:
+        List of NotificationResult objects for each target attempted
+    """
+    # Import here to avoid circular imports
+    from Medic.Core.working_hours import get_service_current_period
+
+    # Determine the current period based on the service's schedule
+    current_period = get_service_current_period(service_id, check_time)
+
+    logger.debug(
+        f"Routing alert for service {service_id} with period '{current_period}'"
+    )
+
+    # Get targets filtered by the current period
+    targets = get_notification_targets_for_period(
+        service_id=service_id,
+        period=current_period,
+        enabled_only=True,
+    )
+
+    if not targets:
+        logger.debug(
+            f"No notification targets found for service {service_id} "
+            f"in period '{current_period}'"
+        )
+        return []
+
+    if sender is None:
+        sender = default_notification_sender
+
+    results: List[NotificationResult] = []
+
+    if mode == NotificationMode.NOTIFY_ALL:
+        results = _route_notify_all(targets, payload, sender)
+    elif mode == NotificationMode.NOTIFY_UNTIL_SUCCESS:
+        results = _route_notify_until_success(targets, payload, sender)
+    else:
+        logger.warning(
+            f"Unknown routing mode: {mode}, defaulting to notify_all"
+        )
+        results = _route_notify_all(targets, payload, sender)
+
+    return results
+
+
+def has_notification_targets_for_period(
+    service_id: int,
+    period: str,
+) -> bool:
+    """
+    Check if a service has any enabled notification targets for a period.
+
+    Args:
+        service_id: The service ID to check
+        period: The working hours period ('during_hours' or 'after_hours')
+
+    Returns:
+        True if service has at least one enabled target for the period
+    """
+    targets = get_notification_targets_for_period(service_id, period)
+    return len(targets) > 0

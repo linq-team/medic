@@ -1132,3 +1132,654 @@ class TestDefaultNotificationSender:
         result = default_notification_sender(target, {"alert": "test"})
 
         assert result is True
+
+
+class TestNotificationPeriodEnum:
+    """Tests for NotificationPeriod enum."""
+
+    def test_always_value(self):
+        """Test ALWAYS enum value."""
+        from Medic.Core.alert_routing import NotificationPeriod
+
+        assert NotificationPeriod.ALWAYS.value == "always"
+
+    def test_during_hours_value(self):
+        """Test DURING_HOURS enum value."""
+        from Medic.Core.alert_routing import NotificationPeriod
+
+        assert NotificationPeriod.DURING_HOURS.value == "during_hours"
+
+    def test_after_hours_value(self):
+        """Test AFTER_HOURS enum value."""
+        from Medic.Core.alert_routing import NotificationPeriod
+
+        assert NotificationPeriod.AFTER_HOURS.value == "after_hours"
+
+
+class TestNotificationTargetPeriod:
+    """Tests for NotificationTarget period field."""
+
+    def test_default_period_is_always(self):
+        """Test that default period is ALWAYS."""
+        from Medic.Core.alert_routing import (
+            NotificationTarget, NotificationType, NotificationPeriod
+        )
+
+        target = NotificationTarget(
+            target_id=1,
+            service_id=123,
+            target_type=NotificationType.SLACK,
+            config={"channel_id": "C123"},
+            priority=0,
+            enabled=True,
+        )
+
+        assert target.period == NotificationPeriod.ALWAYS
+
+    def test_can_set_during_hours_period(self):
+        """Test setting DURING_HOURS period."""
+        from Medic.Core.alert_routing import (
+            NotificationTarget, NotificationType, NotificationPeriod
+        )
+
+        target = NotificationTarget(
+            target_id=1,
+            service_id=123,
+            target_type=NotificationType.SLACK,
+            config={"channel_id": "C123"},
+            priority=0,
+            enabled=True,
+            period=NotificationPeriod.DURING_HOURS,
+        )
+
+        assert target.period == NotificationPeriod.DURING_HOURS
+
+    def test_can_set_after_hours_period(self):
+        """Test setting AFTER_HOURS period."""
+        from Medic.Core.alert_routing import (
+            NotificationTarget, NotificationType, NotificationPeriod
+        )
+
+        target = NotificationTarget(
+            target_id=1,
+            service_id=123,
+            target_type=NotificationType.SLACK,
+            config={"channel_id": "C123"},
+            priority=0,
+            enabled=True,
+            period=NotificationPeriod.AFTER_HOURS,
+        )
+
+        assert target.period == NotificationPeriod.AFTER_HOURS
+
+
+class TestGetNotificationTargetsForServiceWithPeriod:
+    """Tests for get_notification_targets_for_service with period filter."""
+
+    def test_returns_always_targets_when_during_hours(self, mock_env_vars):
+        """Test that 'always' targets are included during business hours."""
+        from Medic.Core.alert_routing import (
+            get_notification_targets_for_service, NotificationPeriod
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "always"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_service(
+                123, period="during_hours"
+            )
+
+            assert len(result) == 1
+            assert result[0].period == NotificationPeriod.ALWAYS
+
+    def test_returns_during_hours_targets_when_during_hours(self, mock_env_vars):
+        """Test that 'during_hours' targets are included during work hours."""
+        from Medic.Core.alert_routing import (
+            get_notification_targets_for_service, NotificationPeriod
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "during_hours"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_service(
+                123, period="during_hours"
+            )
+
+            assert len(result) == 1
+            assert result[0].period == NotificationPeriod.DURING_HOURS
+
+    def test_returns_after_hours_targets_when_after_hours(self, mock_env_vars):
+        """Test that 'after_hours' targets are included after work hours."""
+        from Medic.Core.alert_routing import (
+            get_notification_targets_for_service, NotificationPeriod
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "pagerduty",
+                "config": {"service_key": "key123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "after_hours"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_service(
+                123, period="after_hours"
+            )
+
+            assert len(result) == 1
+            assert result[0].period == NotificationPeriod.AFTER_HOURS
+
+    def test_query_includes_period_filter(self, mock_env_vars):
+        """Test that query filters by period."""
+        from Medic.Core.alert_routing import get_notification_targets_for_service
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps([])
+
+            get_notification_targets_for_service(123, period="during_hours")
+
+            mock_query.assert_called_once()
+            call_args = mock_query.call_args
+            query = call_args[0][0]
+            params = call_args[0][1]
+
+            # Query should filter by period
+            assert "period" in query.lower()
+            assert params == (123, "during_hours")
+
+    def test_parses_period_from_database(self, mock_env_vars):
+        """Test that period is parsed from database result."""
+        from Medic.Core.alert_routing import (
+            get_notification_targets_for_service, NotificationPeriod
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "during_hours"
+            },
+            {
+                "target_id": 2,
+                "service_id": 123,
+                "type": "pagerduty",
+                "config": {"service_key": "key123"},
+                "priority": 1,
+                "enabled": True,
+                "period": "after_hours"
+            },
+            {
+                "target_id": 3,
+                "service_id": 123,
+                "type": "webhook",
+                "config": {"url": "https://example.com"},
+                "priority": 2,
+                "enabled": True,
+                "period": "always"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_service(123)
+
+            assert result[0].period == NotificationPeriod.DURING_HOURS
+            assert result[1].period == NotificationPeriod.AFTER_HOURS
+            assert result[2].period == NotificationPeriod.ALWAYS
+
+    def test_defaults_to_always_when_period_missing(self, mock_env_vars):
+        """Test that period defaults to ALWAYS when not in DB result."""
+        from Medic.Core.alert_routing import (
+            get_notification_targets_for_service, NotificationPeriod
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                # period is missing
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_service(123)
+
+            assert len(result) == 1
+            assert result[0].period == NotificationPeriod.ALWAYS
+
+    def test_defaults_to_always_for_invalid_period(self, mock_env_vars):
+        """Test that period defaults to ALWAYS for invalid values."""
+        from Medic.Core.alert_routing import (
+            get_notification_targets_for_service, NotificationPeriod
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "invalid_period"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_service(123)
+
+            assert len(result) == 1
+            assert result[0].period == NotificationPeriod.ALWAYS
+
+
+class TestGetNotificationTargetsForPeriod:
+    """Tests for get_notification_targets_for_period function."""
+
+    def test_returns_targets_for_during_hours(self, mock_env_vars):
+        """Test getting targets for during_hours period."""
+        from Medic.Core.alert_routing import get_notification_targets_for_period
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "during_hours"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_period(123, "during_hours")
+
+            assert len(result) == 1
+
+    def test_returns_targets_for_after_hours(self, mock_env_vars):
+        """Test getting targets for after_hours period."""
+        from Medic.Core.alert_routing import get_notification_targets_for_period
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "pagerduty",
+                "config": {"service_key": "key123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "after_hours"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = get_notification_targets_for_period(123, "after_hours")
+
+            assert len(result) == 1
+
+
+class TestRouteAlertWithSchedule:
+    """Tests for route_alert_with_schedule function."""
+
+    def test_routes_to_during_hours_targets_during_work_hours(
+        self, mock_env_vars
+    ):
+        """Test routing to during_hours targets during working hours."""
+        from Medic.Core.alert_routing import (
+            route_alert_with_schedule, NotificationMode
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "during_hours"
+            },
+        ]
+
+        calls = []
+
+        def mock_sender(target, payload):
+            calls.append(target.target_id)
+            return True
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "during_hours"
+
+                results = route_alert_with_schedule(
+                    123,
+                    {"alert": "test"},
+                    mode=NotificationMode.NOTIFY_ALL,
+                    sender=mock_sender
+                )
+
+                assert len(results) == 1
+                assert results[0].success is True
+                assert 1 in calls
+
+    def test_routes_to_after_hours_targets_after_work_hours(self, mock_env_vars):
+        """Test routing to after_hours targets outside working hours."""
+        from Medic.Core.alert_routing import (
+            route_alert_with_schedule, NotificationMode
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "pagerduty",
+                "config": {"service_key": "key123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "after_hours"
+            },
+        ]
+
+        calls = []
+
+        def mock_sender(target, payload):
+            calls.append(target.target_id)
+            return True
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "after_hours"
+
+                results = route_alert_with_schedule(
+                    123,
+                    {"alert": "test"},
+                    mode=NotificationMode.NOTIFY_ALL,
+                    sender=mock_sender
+                )
+
+                assert len(results) == 1
+                assert results[0].success is True
+                assert 1 in calls
+
+    def test_includes_always_targets_during_work_hours(self, mock_env_vars):
+        """Test that 'always' targets are included during working hours."""
+        from Medic.Core.alert_routing import (
+            route_alert_with_schedule, NotificationMode
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "always"
+            },
+            {
+                "target_id": 2,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C456"},
+                "priority": 1,
+                "enabled": True,
+                "period": "during_hours"
+            },
+        ]
+
+        calls = []
+
+        def mock_sender(target, payload):
+            calls.append(target.target_id)
+            return True
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "during_hours"
+
+                results = route_alert_with_schedule(
+                    123,
+                    {"alert": "test"},
+                    mode=NotificationMode.NOTIFY_ALL,
+                    sender=mock_sender
+                )
+
+                assert len(results) == 2
+                assert 1 in calls
+                assert 2 in calls
+
+    def test_includes_always_targets_after_work_hours(self, mock_env_vars):
+        """Test that 'always' targets are included after working hours."""
+        from Medic.Core.alert_routing import (
+            route_alert_with_schedule, NotificationMode
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "always"
+            },
+            {
+                "target_id": 2,
+                "service_id": 123,
+                "type": "pagerduty",
+                "config": {"service_key": "key123"},
+                "priority": 1,
+                "enabled": True,
+                "period": "after_hours"
+            },
+        ]
+
+        calls = []
+
+        def mock_sender(target, payload):
+            calls.append(target.target_id)
+            return True
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "after_hours"
+
+                results = route_alert_with_schedule(
+                    123,
+                    {"alert": "test"},
+                    mode=NotificationMode.NOTIFY_ALL,
+                    sender=mock_sender
+                )
+
+                assert len(results) == 2
+                assert 1 in calls
+                assert 2 in calls
+
+    def test_uses_notify_until_success_mode(self, mock_env_vars):
+        """Test notify_until_success mode with schedule."""
+        from Medic.Core.alert_routing import (
+            route_alert_with_schedule, NotificationMode
+        )
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "always"
+            },
+            {
+                "target_id": 2,
+                "service_id": 123,
+                "type": "pagerduty",
+                "config": {"service_key": "key123"},
+                "priority": 1,
+                "enabled": True,
+                "period": "always"
+            },
+        ]
+
+        calls = []
+
+        def mock_sender(target, payload):
+            calls.append(target.target_id)
+            return True  # First one succeeds
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "during_hours"
+
+                results = route_alert_with_schedule(
+                    123,
+                    {"alert": "test"},
+                    mode=NotificationMode.NOTIFY_UNTIL_SUCCESS,
+                    sender=mock_sender
+                )
+
+                # Should stop after first success
+                assert len(results) == 1
+                assert len(calls) == 1
+                assert calls[0] == 1
+
+    def test_returns_empty_when_no_targets_for_period(self, mock_env_vars):
+        """Test empty result when no targets for current period."""
+        from Medic.Core.alert_routing import route_alert_with_schedule
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps([])
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "after_hours"
+
+                results = route_alert_with_schedule(123, {"alert": "test"})
+
+                assert results == []
+
+    def test_uses_check_time_parameter(self, mock_env_vars):
+        """Test that check_time is passed to get_service_current_period."""
+        from Medic.Core.alert_routing import route_alert_with_schedule
+        from datetime import datetime
+
+        check_time = datetime(2026, 1, 15, 10, 30)
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps([])
+            with patch(
+                "Medic.Core.working_hours.get_service_current_period"
+            ) as mock_period:
+                mock_period.return_value = "during_hours"
+
+                route_alert_with_schedule(
+                    123,
+                    {"alert": "test"},
+                    check_time=check_time
+                )
+
+                mock_period.assert_called_once_with(123, check_time)
+
+
+class TestHasNotificationTargetsForPeriod:
+    """Tests for has_notification_targets_for_period function."""
+
+    def test_returns_true_when_targets_exist(self, mock_env_vars):
+        """Test returns True when targets exist for period."""
+        from Medic.Core.alert_routing import has_notification_targets_for_period
+
+        targets_data = [
+            {
+                "target_id": 1,
+                "service_id": 123,
+                "type": "slack",
+                "config": {"channel_id": "C123"},
+                "priority": 0,
+                "enabled": True,
+                "period": "during_hours"
+            },
+        ]
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps(targets_data)
+
+            result = has_notification_targets_for_period(123, "during_hours")
+
+            assert result is True
+
+    def test_returns_false_when_no_targets(self, mock_env_vars):
+        """Test returns False when no targets exist for period."""
+        from Medic.Core.alert_routing import has_notification_targets_for_period
+
+        with patch("Medic.Core.alert_routing.query_db") as mock_query:
+            mock_query.return_value = json.dumps([])
+
+            result = has_notification_targets_for_period(123, "after_hours")
+
+            assert result is False
