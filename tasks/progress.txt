@@ -27,6 +27,8 @@
 - Maintenance windows: Use is_service_in_maintenance(service_id, check_time) from Medic/Core/maintenance_windows.py. Returns True if service is in any active window.
 - Recurring maintenance: Cron expressions evaluated via croniter library. Window duration = end_time - start_time from original definition.
 - Maintenance window queries: Empty service_ids means ALL services. Query: WHERE service_ids = '{}' OR %s = ANY(service_ids)
+- Heartbeat status: HeartbeatStatus enum in Medic/Helpers/heartbeat.py defines valid values (UP, DOWN, STARTED, COMPLETED, FAILED). Use is_valid() to validate, is_job_status() to check job-related.
+- Job correlation: Heartbeat objects support optional run_id parameter for correlating STARTED/COMPLETED/FAILED events. Use queryHeartbeatsByRunId(run_id) to find correlated events.
 
 ---
 
@@ -236,4 +238,17 @@
   - Logger level 20 = INFO for maintenance suppression messages
   - Pre-existing test failures in test_monitor.py due to slack_client module import - fixed with PYTHONPATH
   - When patching module-level variables like MAINTENANCE_WINDOWS_AVAILABLE, use @patch decorator on the module path
+---
+
+## 2026-02-03 - US-019 - Linear Issue: SRE-15
+- Implemented start/complete signal statuses with HeartbeatStatus enum and run_id support
+- Files changed: Medic/Helpers/heartbeat.py (modified), tests/unit/test_heartbeat.py (extended), migrations/008_add_heartbeat_status_and_run_id.sql (new)
+- **Learnings for future iterations:**
+  - HeartbeatStatus is a str Enum (inherits from both str and Enum) - can compare directly with strings
+  - Use is_valid() class method to validate status strings, is_job_status() to check if job-related
+  - run_id is optional on Heartbeat class - defaults to None for backward compatibility
+  - heartbeatEvents table stores status as TEXT - enforcement is application-level not database-level
+  - Use partial indexes (WHERE run_id IS NOT NULL) for run_id column since most heartbeats won't have it
+  - Query functions updated to include run_id in SELECT - enables job correlation in results
+  - Pre-existing mypy type errors in heartbeat.py - query_db returns Union[str, List, None] but functions declare Optional[str]
 ---

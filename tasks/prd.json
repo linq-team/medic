@@ -279,8 +279,8 @@
         "Typecheck passes"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added HeartbeatStatus enum with STARTED/COMPLETED/FAILED values in Medic/Helpers/heartbeat.py. Migration 008 adds run_id column to heartbeatEvents table with indexes. Heartbeat class updated to support run_id parameter. 21 unit tests in tests/unit/test_heartbeat.py."
     },
     {
       "id": "US-020",
