@@ -83,6 +83,9 @@
 - Playbook trigger result: PlaybookTriggerResult.triggered indicates if playbook was started. Check status for "running", "pending_approval", or "error".
 - Monitor playbook integration: _check_playbook_triggers() in monitor.py called after sendAlert() sends notifications. Wraps with error handling.
 - Playbook Slack notifications: :robot_face: for started playbooks, :hourglass: for pending_approval. Includes playbook name and execution ID.
+- Circuit breaker: Use is_circuit_open(service_id) or check_circuit_breaker(service_id) from Medic/Core/circuit_breaker.py before starting playbook executions.
+- Circuit breaker config: Default 5 executions per hour per service. Configure via set_config(CircuitBreakerConfig(window_seconds=X, max_executions=Y)).
+- Circuit breaker integration: Check integrated at START of trigger_playbook_for_alert() - runs before playbook matching. Returns status="circuit_breaker_open" when blocked.
 
 ---
 
@@ -539,4 +542,20 @@
   - PLAYBOOK_TRIGGERS_AVAILABLE flag allows graceful degradation if integration module not importable
   - Integration called in sendAlert() after alerts/notifications are sent (both new alerts and subsequent cycles)
   - Monitor.py requires mocking slack_client and pagerduty_client modules for unit tests
+---
+
+## 2026-02-03 - US-037 - Linear Issue: SRE-23
+- Implemented circuit breaker for playbook executions
+- Files changed: Medic/Core/circuit_breaker.py (new), Medic/Core/metrics.py (modified), Medic/Core/playbook_alert_integration.py (modified), tests/unit/test_circuit_breaker.py (new), tests/unit/test_playbook_alert_integration.py (modified)
+- **Learnings for future iterations:**
+  - CircuitBreakerConfig dataclass holds window_seconds (default 3600) and max_executions (default 5)
+  - is_circuit_open(service_id) returns True if service exceeds threshold in window
+  - check_circuit_breaker(service_id) returns full CircuitBreakerStatus with count, times, message
+  - get_execution_count_in_window() queries medic.playbook_executions table for count since window start
+  - Circuit breaker check integrated at the START of trigger_playbook_for_alert() - runs before playbook matching
+  - CIRCUIT_BREAKER_AVAILABLE flag allows graceful degradation if module not importable
+  - Prometheus metrics: medic_circuit_breaker_trips_total (Counter by service_id), medic_circuit_breaker_open (Gauge)
+  - record_circuit_breaker_trip() logs at level 40 (ERROR) and records metric
+  - get_services_with_open_circuit() useful for monitoring dashboard
+  - When mocking circuit breaker in tests, mock check_circuit_breaker to return a CircuitBreakerStatus with is_open=False
 ---
