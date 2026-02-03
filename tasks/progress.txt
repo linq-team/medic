@@ -35,6 +35,10 @@
 - Job run queries: get_completed_runs_for_service(service_id, limit=100) returns runs ordered by completion time for stats. get_stale_runs() finds jobs that started but never completed.
 - Max duration: services.max_duration_ms column defines threshold for duration alerts (to be used by US-023).
 - Duration statistics: GET /v2/services/:id/stats returns DurationStatistics (avg, p50, p95, p99, min, max). Returns empty stats (null values) if fewer than 5 runs. Uses get_duration_statistics() from Medic/Core/job_runs.py.
+- Duration alerts: Use check_duration_threshold(job_run) to check if completed job exceeded max_duration_ms. Returns DurationAlert if exceeded, None otherwise.
+- Stale job detection: Use get_stale_runs_exceeding_max_duration() to find STARTED jobs that haven't completed within max_duration_ms. Returns list of DurationAlert objects.
+- Duration alert metrics: medic_duration_alerts_total{alert_type} (exceeded, stale), medic_stale_jobs_current gauge. Use record_duration_alert() and update_stale_jobs_count() helpers.
+- Stale run marking: Use mark_stale_run_alerted(service_id, run_id) to mark job as STALE_ALERTED and prevent duplicate alerts.
 
 ---
 
@@ -300,4 +304,19 @@
   - GET /v2/services/:id/stats verifies service exists before calculating stats
   - Response includes min_duration_ms and max_duration_ms in addition to percentiles
   - Filter out null and negative duration values before calculating statistics
+---
+
+## 2026-02-03 - US-023 - Linear Issue: SRE-16
+- Implemented duration threshold alerting for completed jobs and stale job detection
+- Files changed: Medic/Core/job_runs.py (extended), Medic/Core/metrics.py (extended), Medic/Core/routes.py (extended), Medic/Worker/monitor.py (extended), tests/unit/test_job_runs.py (extended)
+- **Learnings for future iterations:**
+  - DurationAlert dataclass holds alert info: service_id, service_name, run_id, alert_type (exceeded/stale), duration_ms, max_duration_ms
+  - check_duration_threshold(job_run) checks if completed job exceeded max_duration_ms, returns DurationAlert or None
+  - get_stale_runs_exceeding_max_duration() joins job_runs with services to find STARTED jobs where elapsed time > max_duration_ms
+  - mark_stale_run_alerted() sets status to STALE_ALERTED to prevent duplicate alerts
+  - Duration check integrated in routes.py _record_job_signal() after job_runs.record_job_completion() is called
+  - Stale job check added to monitor.py thread_function() - runs on same 15-second cycle as heartbeat monitoring
+  - Import guards (DURATION_ALERTS_AVAILABLE) allow graceful degradation if module imports fail
+  - Prometheus metrics: medic_duration_alerts_total (Counter with alert_type label), medic_stale_jobs_current (Gauge)
+  - Stale job alerts include human-readable elapsed time (hours/minutes/seconds) in Slack message
 ---
