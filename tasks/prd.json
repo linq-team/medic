@@ -192,8 +192,8 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/005_create_schedules.sql. Table includes schedule_id, name (unique), timezone (IANA format with CHECK constraint), hours (JSONB for day/hour ranges), timestamps. Services table gets schedule_id FK with ON DELETE SET NULL."
     },
     {
       "id": "US-014",

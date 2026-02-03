@@ -18,6 +18,7 @@
 - Notification targets: medic.notification_targets table stores type-specific config in JSONB, ordered by priority (lower = higher priority)
 - Flexible alert routing: Use route_alert(service_id, payload, mode) with NotificationMode.NOTIFY_ALL or NOTIFY_UNTIL_SUCCESS
 - Notification sender: Pass custom sender callback to route_alert() or use default_notification_sender() placeholder
+- Working hours: medic.schedules table stores timezone (IANA format) and hours (JSONB with day/hour ranges). Services link via schedule_id FK.
 
 ---
 
@@ -146,4 +147,15 @@
   - default_notification_sender() dispatches by type to placeholder _send_*_notification() functions
   - Helper functions: has_notification_targets(), get_successful_results(), get_failed_results(), all_notifications_succeeded(), any_notification_succeeded()
   - Disabled targets are skipped but still return a NotificationResult with success=False
+---
+
+## 2026-02-03 - US-013 - Linear Issue: SRE-12
+- Created schedules database schema migration in migrations/005_create_schedules.sql
+- Files changed: migrations/005_create_schedules.sql (new)
+- **Learnings for future iterations:**
+  - schedules table: schedule_id, name (unique), timezone, hours (JSONB), timestamps
+  - IANA timezone format enforced via CHECK constraint (Area/Location pattern, UTC, or Etc/ prefix)
+  - Hours field uses JSONB for flexible day/hour ranges: {"monday": [{"start": "09:00", "end": "17:00"}], ...}
+  - Services.schedule_id FK uses ON DELETE SET NULL (not CASCADE) - keeps service but clears schedule reference
+  - Pattern follows teams migration: ALTER TABLE to add FK column to services
 ---
