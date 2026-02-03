@@ -39,6 +39,7 @@
 - Stale job detection: Use get_stale_runs_exceeding_max_duration() to find STARTED jobs that haven't completed within max_duration_ms. Returns list of DurationAlert objects.
 - Duration alert metrics: medic_duration_alerts_total{alert_type} (exceeded, stale), medic_stale_jobs_current gauge. Use record_duration_alert() and update_stale_jobs_count() helpers.
 - Stale run marking: Use mark_stale_run_alerted(service_id, run_id) to mark job as STALE_ALERTED and prevent duplicate alerts.
+- Grace periods: services.grace_period_seconds column delays alerting after missed heartbeat. Check in monitor.py with: required_delay = (interval * 60) + grace_period_seconds; if time_since_last < required_delay: continue.
 
 ---
 
@@ -319,4 +320,18 @@
   - Import guards (DURATION_ALERTS_AVAILABLE) allow graceful degradation if module imports fail
   - Prometheus metrics: medic_duration_alerts_total (Counter with alert_type label), medic_stale_jobs_current (Gauge)
   - Stale job alerts include human-readable elapsed time (hours/minutes/seconds) in Slack message
+---
+
+## 2026-02-03 - US-024 - Linear Issue: SRE-17
+- Implemented grace period support for heartbeat alert delays
+- Files changed: migrations/010_add_grace_period_to_services.sql (new), Medic/Worker/monitor.py (modified), tests/unit/test_monitor.py (extended)
+- **Learnings for future iterations:**
+  - grace_period_seconds column added to services table with DEFAULT 0 (no grace period)
+  - Grace period is checked before maintenance window check in queryForNoHeartbeat()
+  - Grace period calculation: required_delay = (interval_minutes * 60) + grace_period_seconds
+  - Alert delayed if time_since_last_heartbeat < required_delay
+  - Use `heartbeat.get('grace_period_seconds', 0) or 0` to handle None values from legacy data
+  - Naive datetimes are handled by localizing to UTC: `pytz.UTC.localize(last_hbeat_time)`
+  - Grace period does not affect recovery alerts - only initial alerts are delayed
+  - Use `continue` to skip to next service when within grace period
 ---

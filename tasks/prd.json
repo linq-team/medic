@@ -351,8 +351,8 @@
         "Typecheck passes"
       ],
       "priority": 24,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration 010 adds grace_period_seconds column to services table. Monitor.py checks grace period before alerting - computes required_delay = interval + grace_period and delays alert if time_since_last < required_delay. 8 new unit tests in tests/unit/test_monitor.py."
     },
     {
       "id": "US-025",
