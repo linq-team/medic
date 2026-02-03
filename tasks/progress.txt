@@ -42,6 +42,11 @@
 - Grace periods: services.grace_period_seconds column delays alerting after missed heartbeat. Check in monitor.py with: required_delay = (interval * 60) + grace_period_seconds; if time_since_last < required_delay: continue.
 - Playbooks schema: medic.playbooks stores YAML definitions (playbook_id, name, description, yaml_content, version). medic.playbook_triggers defines conditions for triggering playbooks.
 - Playbook triggers: service_pattern uses glob syntax (e.g., "worker-*", "*"), consecutive_failures threshold, enabled boolean. Triggers link to playbooks via FK with CASCADE delete.
+- Playbook YAML parser: Use parse_playbook_yaml(yaml_content) from Medic/Core/playbook_parser.py to parse YAML into typed Playbook object.
+- Playbook step types: StepType enum has WEBHOOK, SCRIPT, WAIT, CONDITION. Each has corresponding dataclass (WebhookStep, etc.)
+- Playbook approval: ApprovalMode.parse() handles "none", "required", "timeout:Xm" formats. Returns (ApprovalMode, Optional[int]).
+- Duration parsing: _parse_duration() handles "30s", "5m", "1h" formats - plain integers default to seconds.
+- Playbook validation: Use validate_playbook_yaml() for error list or is_valid_playbook_yaml() for boolean check.
 
 ---
 
@@ -349,4 +354,22 @@
   - Version field on playbooks enables audit trail - increment on each update
   - Composite index on (enabled, service_pattern, consecutive_failures) optimizes trigger matching queries
   - Partial index on enabled WHERE TRUE for efficient filtering of active triggers
+---
+
+## 2026-02-03 - US-026 - Linear Issue: SRE-18
+- Implemented playbook YAML parser in Medic/Core/playbook_parser.py
+- Files changed: Medic/Core/playbook_parser.py (new), tests/unit/test_playbook_parser.py (new), Medic/requirements.txt (added PyYAML)
+- **Learnings for future iterations:**
+  - StepType enum: WEBHOOK, SCRIPT, WAIT, CONDITION - use StepType.is_valid() to validate step type strings
+  - ApprovalMode.parse() returns tuple of (ApprovalMode, Optional[int]) for timeout minutes
+  - Supported approval formats: "none", "required", "timeout:Xm" (e.g., "timeout:5m")
+  - _parse_duration() handles "30s", "5m", "1h" formats - plain integers default to seconds
+  - WebhookStep: url, method, headers, body, success_codes, timeout_seconds
+  - ScriptStep: script_name (use 'script' field in YAML), parameters, timeout_seconds
+  - WaitStep: duration_seconds
+  - ConditionStep: condition_type (heartbeat_received), on_failure (fail/continue/escalate), timeout_seconds
+  - PlaybookParseError includes field context for better error messages
+  - All step names must be unique within a playbook - enforced during parsing
+  - Extra YAML fields (not name/description/steps/approval/version) preserved in metadata dict
+  - URL validation allows ${VAR} syntax for variable substitution
 ---
