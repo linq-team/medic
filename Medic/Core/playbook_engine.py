@@ -9,6 +9,7 @@ The engine is designed to:
 - Persist state after each step (survives restart)
 - Support wait steps (pause execution for duration)
 - Support webhook steps with variable substitution
+- Support script steps with sandboxed execution
 - Track execution status and step results in the database
 
 Execution statuses:
@@ -28,7 +29,11 @@ Step result statuses:
 """
 import json
 import logging
+import os
 import re
+import resource
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -1098,45 +1103,409 @@ def execute_webhook_step(
         )
 
 
-def execute_script_step_placeholder(
+# ============================================================================
+# Script Step Execution
+# ============================================================================
+
+# Default timeout for script execution (seconds)
+DEFAULT_SCRIPT_TIMEOUT = 30
+
+# Maximum memory limit for script execution (bytes) - 256 MB
+MAX_SCRIPT_MEMORY_BYTES = 256 * 1024 * 1024
+
+# Maximum output size to capture (bytes)
+MAX_SCRIPT_OUTPUT_SIZE = 8192
+
+
+@dataclass
+class RegisteredScript:
+    """A pre-registered script from the database."""
+
+    script_id: int
+    name: str
+    content: str
+    interpreter: str
+    timeout_seconds: int
+
+
+def get_registered_script(script_name: str) -> Optional[RegisteredScript]:
+    """
+    Get a registered script by name from the database.
+
+    Args:
+        script_name: Name of the script to retrieve
+
+    Returns:
+        RegisteredScript object if found, None otherwise
+    """
+    result = db.query_db(
+        """
+        SELECT script_id, name, content, interpreter, timeout_seconds
+        FROM medic.registered_scripts
+        WHERE name = %s
+        """,
+        (script_name,),
+        show_columns=True
+    )
+
+    if not result or result == '[]':
+        return None
+
+    rows = json.loads(str(result))
+    if not rows:
+        return None
+
+    row = rows[0]
+    return RegisteredScript(
+        script_id=row['script_id'],
+        name=row['name'],
+        content=row['content'],
+        interpreter=row['interpreter'],
+        timeout_seconds=row.get('timeout_seconds', DEFAULT_SCRIPT_TIMEOUT),
+    )
+
+
+def _substitute_script_variables(
+    script_content: str,
+    context: Dict[str, Any],
+    parameters: Dict[str, Any]
+) -> str:
+    """
+    Substitute variables in script content.
+
+    Supports ${VAR_NAME} syntax from context and parameters.
+    Parameters override context variables.
+
+    Args:
+        script_content: The script content with variables
+        context: Execution context variables
+        parameters: Step-specific parameters
+
+    Returns:
+        Script content with variables substituted
+    """
+    # Merge context and parameters (parameters take precedence)
+    merged = dict(context)
+    merged.update(parameters)
+
+    # Use the existing substitute_variables function for string substitution
+    return str(substitute_variables(script_content, merged))
+
+
+def execute_script_step(
     step: ScriptStep,
     execution: PlaybookExecution
 ) -> StepResult:
     """
-    Placeholder for script step execution.
+    Execute a script step by running a pre-registered script.
 
-    This will be implemented in US-031.
+    Security measures:
+    - Only pre-registered scripts can be executed (by name lookup)
+    - Scripts run with resource limits (timeout, memory)
+    - Output is captured and truncated if too large
 
     Args:
         step: The ScriptStep to execute
         execution: The current execution context
 
     Returns:
-        StepResult (placeholder - always returns pending)
+        StepResult with execution outcome
     """
     now = _now()
+    step_index = execution.current_step
 
-    logger.log(
-        level=20,
-        msg=f"Script step '{step.name}' execution not yet implemented"
-    )
-
+    # Create step result as running
     result = create_step_result(
         execution_id=execution.execution_id or 0,
         step_name=step.name,
-        step_index=execution.current_step,
-        status=StepResultStatus.PENDING
+        step_index=step_index,
+        status=StepResultStatus.RUNNING
     )
 
-    return StepResult(
-        result_id=result.result_id if result else None,
-        execution_id=execution.execution_id or 0,
-        step_name=step.name,
-        step_index=execution.current_step,
-        status=StepResultStatus.PENDING,
-        output="Script execution not yet implemented",
+    if not result:
+        return StepResult(
+            result_id=None,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message="Failed to create step result record",
+            started_at=now,
+            completed_at=now,
+        )
+
+    # Update with start time
+    update_step_result(
+        result_id=result.result_id or 0,
+        status=StepResultStatus.RUNNING,
         started_at=now,
     )
+
+    # Look up the registered script by name
+    script = get_registered_script(step.script_name)
+    if not script:
+        completed_at = _now()
+        error_msg = (
+            f"Script '{step.script_name}' not found in registered scripts. "
+            "Only pre-registered scripts can be executed for security."
+        )
+        logger.log(
+            level=30,
+            msg=f"Script step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    # Build variable context
+    context = _build_webhook_context(execution)
+
+    # Substitute variables in script content
+    script_content = _substitute_script_variables(
+        script.content,
+        context,
+        step.parameters
+    )
+
+    # Determine interpreter command
+    if script.interpreter == 'python':
+        interpreter_cmd = ['python3', '-u']
+    elif script.interpreter == 'bash':
+        interpreter_cmd = ['bash', '-e']
+    else:
+        completed_at = _now()
+        error_msg = f"Unsupported interpreter: {script.interpreter}"
+        logger.log(
+            level=30,
+            msg=f"Script step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    # Determine timeout (use step timeout or script timeout or default)
+    timeout = step.timeout_seconds or script.timeout_seconds or DEFAULT_SCRIPT_TIMEOUT
+
+    logger.log(
+        level=20,
+        msg=f"Script step '{step.name}': executing '{script.name}' "
+            f"with {script.interpreter} (timeout: {timeout}s)"
+    )
+
+    try:
+        # Write script to temporary file
+        suffix = '.py' if script.interpreter == 'python' else '.sh'
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            suffix=suffix,
+            delete=False
+        ) as f:
+            f.write(script_content)
+            script_path = f.name
+
+        # Set resource limits for the subprocess
+        def set_limits():
+            """Set resource limits for the child process."""
+            try:
+                # Set memory limit (virtual memory)
+                resource.setrlimit(
+                    resource.RLIMIT_AS,
+                    (MAX_SCRIPT_MEMORY_BYTES, MAX_SCRIPT_MEMORY_BYTES)
+                )
+                # Set CPU time limit (as backup to timeout)
+                resource.setrlimit(
+                    resource.RLIMIT_CPU,
+                    (timeout + 5, timeout + 10)
+                )
+            except (ValueError, resource.error):
+                # Resource limits may not be available on all platforms
+                pass
+
+        # Execute the script
+        proc = subprocess.run(
+            interpreter_cmd + [script_path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            preexec_fn=set_limits,
+            env={
+                **dict(os.environ),
+                'MEDIC_EXECUTION_ID': str(execution.execution_id or ''),
+                'MEDIC_PLAYBOOK_ID': str(execution.playbook_id),
+                'MEDIC_SERVICE_ID': str(execution.service_id or ''),
+            }
+        )
+
+        # Clean up temp file
+        try:
+            os.unlink(script_path)
+        except OSError:
+            pass
+
+        # Capture output (truncate if needed)
+        stdout = proc.stdout or ''
+        stderr = proc.stderr or ''
+        combined_output = stdout + (f"\n[STDERR]\n{stderr}" if stderr else "")
+
+        if len(combined_output) > MAX_SCRIPT_OUTPUT_SIZE:
+            combined_output = combined_output[:MAX_SCRIPT_OUTPUT_SIZE]
+            combined_output += "\n...[output truncated]"
+
+        completed_at = _now()
+
+        # Build output message
+        output_msg = (
+            f"Script: {script.name}\n"
+            f"Interpreter: {script.interpreter}\n"
+            f"Exit code: {proc.returncode}\n"
+            f"Output:\n{combined_output}"
+        )
+
+        # Check exit code
+        if proc.returncode == 0:
+            logger.log(
+                level=20,
+                msg=f"Script step '{step.name}' completed successfully "
+                    f"(exit code: 0)"
+            )
+
+            update_step_result(
+                result_id=result.result_id or 0,
+                status=StepResultStatus.COMPLETED,
+                output=output_msg,
+                completed_at=completed_at,
+            )
+
+            return StepResult(
+                result_id=result.result_id,
+                execution_id=execution.execution_id or 0,
+                step_name=step.name,
+                step_index=step_index,
+                status=StepResultStatus.COMPLETED,
+                output=output_msg,
+                started_at=now,
+                completed_at=completed_at,
+            )
+        else:
+            error_msg = f"Script exited with code {proc.returncode}"
+            logger.log(
+                level=30,
+                msg=f"Script step '{step.name}' failed: {error_msg}"
+            )
+
+            update_step_result(
+                result_id=result.result_id or 0,
+                status=StepResultStatus.FAILED,
+                output=output_msg,
+                error_message=error_msg,
+                completed_at=completed_at,
+            )
+
+            return StepResult(
+                result_id=result.result_id,
+                execution_id=execution.execution_id or 0,
+                step_name=step.name,
+                step_index=step_index,
+                status=StepResultStatus.FAILED,
+                output=output_msg,
+                error_message=error_msg,
+                started_at=now,
+                completed_at=completed_at,
+            )
+
+    except subprocess.TimeoutExpired:
+        # Clean up temp file if it exists
+        try:
+            os.unlink(script_path)  # type: ignore[possibly-undefined]
+        except (OSError, NameError):
+            pass
+
+        completed_at = _now()
+        error_msg = f"Script execution timed out after {timeout}s"
+        logger.log(
+            level=30,
+            msg=f"Script step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    except Exception as e:
+        # Clean up temp file if it exists
+        try:
+            os.unlink(script_path)  # type: ignore[possibly-undefined]
+        except (OSError, NameError):
+            pass
+
+        completed_at = _now()
+        error_msg = f"Script execution failed: {str(e)}"
+        logger.log(
+            level=30,
+            msg=f"Script step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
 
 
 def execute_condition_step_placeholder(
@@ -1538,10 +1907,10 @@ class PlaybookExecutionEngine:
         step: PlaybookStep,
         execution: PlaybookExecution
     ) -> StepResult:
-        """Execute a script step (placeholder)."""
+        """Execute a script step."""
         if not isinstance(step, ScriptStep):
             raise TypeError(f"Expected ScriptStep, got {type(step)}")
-        return execute_script_step_placeholder(step, execution)
+        return execute_script_step(step, execution)
 
     def _execute_condition(
         self,

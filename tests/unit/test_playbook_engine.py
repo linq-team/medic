@@ -1650,36 +1650,6 @@ class TestPlaceholderSteps:
     """Tests for placeholder step executors."""
 
     @patch('Medic.Core.playbook_engine.create_step_result')
-    def test_script_step_placeholder(self, mock_create):
-        """Test script step placeholder returns pending."""
-        from Medic.Core.playbook_engine import (
-            ExecutionStatus,
-            PlaybookExecution,
-            StepResultStatus,
-            execute_script_step_placeholder,
-        )
-        from Medic.Core.playbook_parser import ScriptStep
-
-        mock_create.return_value = MagicMock(result_id=1)
-
-        step = ScriptStep(
-            name="test-script",
-            script_name="restart-service",
-        )
-        execution = PlaybookExecution(
-            execution_id=100,
-            playbook_id=10,
-            service_id=None,
-            status=ExecutionStatus.RUNNING,
-            current_step=0,
-        )
-
-        result = execute_script_step_placeholder(step, execution)
-
-        assert result.status == StepResultStatus.PENDING
-        assert "not yet implemented" in result.output
-
-    @patch('Medic.Core.playbook_engine.create_step_result')
     def test_condition_step_placeholder(self, mock_create):
         """Test condition step placeholder returns pending."""
         from Medic.Core.playbook_engine import (
@@ -1708,3 +1678,870 @@ class TestPlaceholderSteps:
 
         assert result.status == StepResultStatus.PENDING
         assert "not yet implemented" in result.output
+
+
+class TestRegisteredScript:
+    """Tests for RegisteredScript dataclass."""
+
+    def test_registered_script_creation(self):
+        """Test creating a RegisteredScript object."""
+        from Medic.Core.playbook_engine import RegisteredScript
+
+        script = RegisteredScript(
+            script_id=1,
+            name="test-script",
+            content="echo 'Hello World'",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+
+        assert script.script_id == 1
+        assert script.name == "test-script"
+        assert script.content == "echo 'Hello World'"
+        assert script.interpreter == "bash"
+        assert script.timeout_seconds == 30
+
+
+class TestGetRegisteredScript:
+    """Tests for get_registered_script function."""
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_get_registered_script_found(self, mock_db):
+        """Test getting a registered script by name."""
+        from Medic.Core.playbook_engine import get_registered_script
+
+        mock_db.query_db.return_value = json.dumps([{
+            "script_id": 1,
+            "name": "restart-service",
+            "content": "#!/bin/bash\necho 'Restarting'",
+            "interpreter": "bash",
+            "timeout_seconds": 60,
+        }])
+
+        script = get_registered_script("restart-service")
+
+        assert script is not None
+        assert script.script_id == 1
+        assert script.name == "restart-service"
+        assert script.interpreter == "bash"
+        assert script.timeout_seconds == 60
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_get_registered_script_not_found(self, mock_db):
+        """Test get_registered_script returns None when not found."""
+        from Medic.Core.playbook_engine import get_registered_script
+
+        mock_db.query_db.return_value = "[]"
+
+        script = get_registered_script("nonexistent-script")
+
+        assert script is None
+
+    @patch('Medic.Core.playbook_engine.db')
+    def test_get_registered_script_default_timeout(self, mock_db):
+        """Test get_registered_script uses default timeout if not set."""
+        from Medic.Core.playbook_engine import (
+            DEFAULT_SCRIPT_TIMEOUT,
+            get_registered_script,
+        )
+
+        mock_db.query_db.return_value = json.dumps([{
+            "script_id": 1,
+            "name": "test-script",
+            "content": "echo 'test'",
+            "interpreter": "bash",
+        }])
+
+        script = get_registered_script("test-script")
+
+        assert script is not None
+        assert script.timeout_seconds == DEFAULT_SCRIPT_TIMEOUT
+
+
+class TestSubstituteScriptVariables:
+    """Tests for _substitute_script_variables function."""
+
+    def test_substitute_context_variables(self):
+        """Test substituting context variables in script."""
+        from Medic.Core.playbook_engine import _substitute_script_variables
+
+        script = "echo 'Service: ${SERVICE_NAME}'"
+        context = {"SERVICE_NAME": "my-service"}
+        parameters = {}
+
+        result = _substitute_script_variables(script, context, parameters)
+
+        assert result == "echo 'Service: my-service'"
+
+    def test_substitute_parameter_variables(self):
+        """Test substituting parameter variables in script."""
+        from Medic.Core.playbook_engine import _substitute_script_variables
+
+        script = "echo 'Target: ${TARGET}'"
+        context = {}
+        parameters = {"TARGET": "production"}
+
+        result = _substitute_script_variables(script, context, parameters)
+
+        assert result == "echo 'Target: production'"
+
+    def test_parameters_override_context(self):
+        """Test that parameters override context variables."""
+        from Medic.Core.playbook_engine import _substitute_script_variables
+
+        script = "echo '${VALUE}'"
+        context = {"VALUE": "from-context"}
+        parameters = {"VALUE": "from-params"}
+
+        result = _substitute_script_variables(script, context, parameters)
+
+        assert result == "echo 'from-params'"
+
+    def test_multiple_variable_substitution(self):
+        """Test substituting multiple variables."""
+        from Medic.Core.playbook_engine import _substitute_script_variables
+
+        script = "curl -X POST ${URL}/restart -d '{\"service\": \"${SERVICE}\"}'"
+        context = {"SERVICE": "api"}
+        parameters = {"URL": "http://localhost:8080"}
+
+        result = _substitute_script_variables(script, context, parameters)
+
+        assert "http://localhost:8080" in result
+        assert "api" in result
+
+
+class TestExecuteScriptStep:
+    """Tests for execute_script_step function."""
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_success(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test successful script execution."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="test-script",
+            content="echo 'Hello World'",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock successful subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "Hello World\n"
+        mock_proc.stderr = ""
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="test-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert "Exit code: 0" in result.output
+        assert "Hello World" in result.output
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_not_found(
+        self,
+        mock_get_script,
+        mock_create,
+        mock_update
+    ):
+        """Test script step fails when script not found."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = None  # Script not found
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="nonexistent-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "not found in registered scripts" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_nonzero_exit(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step fails on non-zero exit code."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="failing-script",
+            content="exit 1",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock failed subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.stdout = ""
+        mock_proc.stderr = "Error: Something went wrong"
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="failing-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "exited with code 1" in result.error_message
+        assert "Error: Something went wrong" in result.output
+
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_timeout(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess
+    ):
+        """Test script step handles timeout."""
+        import subprocess
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="slow-script",
+            content="sleep 100",
+            interpreter="bash",
+            timeout_seconds=5,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock timeout
+        mock_subprocess.side_effect = subprocess.TimeoutExpired(
+            cmd="bash",
+            timeout=5
+        )
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="slow-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "timed out" in result.error_message.lower()
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_with_python(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step with Python interpreter."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="python-script",
+            content="print('Hello from Python')",
+            interpreter="python",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock successful subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "Hello from Python\n"
+        mock_proc.stderr = ""
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="python-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        # Verify python3 was used
+        call_args = mock_subprocess.call_args
+        assert 'python3' in call_args[0][0]
+
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_unsupported_interpreter(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update
+    ):
+        """Test script step fails with unsupported interpreter."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="ruby-script",
+            content="puts 'Hello'",
+            interpreter="ruby",  # Not supported
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="ruby-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "Unsupported interpreter" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_variable_substitution(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step performs variable substitution."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="restart-script",
+            content="echo 'Restarting ${SERVICE_NAME}'",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {"SERVICE_NAME": "api-server"}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock successful subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "Restarting api-server\n"
+        mock_proc.stderr = ""
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="restart-script",
+            parameters={"SERVICE_NAME": "api-server"},
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_creation_failure(
+        self,
+        mock_get_script,
+        mock_create
+    ):
+        """Test script step handles step result creation failure."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="test-script",
+            content="echo 'test'",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_create.return_value = None  # Simulate creation failure
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="test-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "Failed to create step result" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_truncates_long_output(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step truncates long output."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            MAX_SCRIPT_OUTPUT_SIZE,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="verbose-script",
+            content="for i in {1..10000}; do echo 'Line $i'; done",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock subprocess with large output
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "x" * (MAX_SCRIPT_OUTPUT_SIZE + 1000)
+        mock_proc.stderr = ""
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="verbose-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert "[output truncated]" in result.output
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_captures_stderr(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step captures stderr in output."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="warn-script",
+            content="echo 'output' && echo 'warning' >&2",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock subprocess with stderr
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "output\n"
+        mock_proc.stderr = "warning\n"
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="warn-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.COMPLETED
+        assert "output" in result.output
+        assert "[STDERR]" in result.output
+        assert "warning" in result.output
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_uses_step_timeout(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step uses step-level timeout over script timeout."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="test-script",
+            content="echo 'test'",
+            interpreter="bash",
+            timeout_seconds=60,  # Script default timeout
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "test\n"
+        mock_proc.stderr = ""
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="test-script",
+            timeout_seconds=15,  # Step-level timeout override
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        execute_script_step(step, execution)
+
+        # Verify the subprocess was called with step timeout
+        call_kwargs = mock_subprocess.call_args[1]
+        assert call_kwargs['timeout'] == 15
+
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_generic_exception(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess
+    ):
+        """Test script step handles generic exceptions."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            StepResultStatus,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="test-script",
+            content="echo 'test'",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        # Mock generic exception
+        mock_subprocess.side_effect = Exception("Unexpected error")
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="test-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_script_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert "Unexpected error" in result.error_message
+
+    @patch('Medic.Core.playbook_engine.os.unlink')
+    @patch('Medic.Core.playbook_engine.subprocess.run')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook_engine.get_registered_script')
+    def test_execute_script_step_sets_env_vars(
+        self,
+        mock_get_script,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_subprocess,
+        mock_unlink
+    ):
+        """Test script step sets MEDIC environment variables."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            RegisteredScript,
+            execute_script_step,
+        )
+        from Medic.Core.playbook_parser import ScriptStep
+
+        mock_get_script.return_value = RegisteredScript(
+            script_id=1,
+            name="test-script",
+            content="echo $MEDIC_EXECUTION_ID",
+            interpreter="bash",
+            timeout_seconds=30,
+        )
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "100\n"
+        mock_proc.stderr = ""
+        mock_subprocess.return_value = mock_proc
+
+        step = ScriptStep(
+            name="test-step",
+            script_name="test-script",
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=42,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        execute_script_step(step, execution)
+
+        # Verify environment variables were set
+        call_kwargs = mock_subprocess.call_args[1]
+        env = call_kwargs['env']
+        assert env['MEDIC_EXECUTION_ID'] == '100'
+        assert env['MEDIC_PLAYBOOK_ID'] == '10'
+        assert env['MEDIC_SERVICE_ID'] == '42'
