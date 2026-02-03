@@ -433,6 +433,129 @@ def exposeRoutes(app):
                 "results": ""
             }), 500
 
+    # V2 API Endpoints for Start/Complete/Fail Signals
+    @app.route('/v2/heartbeat/<int:service_id>/start', methods=['POST'])
+    def heartbeat_start(service_id):
+        """Record a STARTED status for a service with optional run_id."""
+        return _record_job_signal(
+            service_id,
+            hbeat.HeartbeatStatus.STARTED.value
+        )
+
+    @app.route('/v2/heartbeat/<int:service_id>/complete', methods=['POST'])
+    def heartbeat_complete(service_id):
+        """Record a COMPLETED status for a service with optional run_id."""
+        return _record_job_signal(
+            service_id,
+            hbeat.HeartbeatStatus.COMPLETED.value
+        )
+
+    @app.route('/v2/heartbeat/<int:service_id>/fail', methods=['POST'])
+    def heartbeat_fail(service_id):
+        """Record a FAILED status for a service with optional run_id."""
+        return _record_job_signal(
+            service_id,
+            hbeat.HeartbeatStatus.FAILED.value
+        )
+
+    def _record_job_signal(service_id, status):
+        """
+        Internal helper to record a job signal (start/complete/fail).
+
+        Args:
+            service_id: The service ID to record the signal for
+            status: The HeartbeatStatus value (STARTED, COMPLETED, FAILED)
+
+        Returns:
+            JSON response tuple (body, status_code)
+        """
+        # Verify service exists and is active
+        service_check = db.query_db(
+            "SELECT service_id, heartbeat_name, active FROM services "
+            "WHERE service_id = %s LIMIT 1",
+            (service_id,),
+            show_columns=True
+        )
+
+        if not service_check or service_check == '[]':
+            logger.log(
+                level=30,
+                msg=f"Service ID {service_id} not found for job signal"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Service ID {service_id} not found.",
+                "results": ""
+            }), 404
+
+        service_data = json.loads(service_check)
+        if not service_data:
+            return json.dumps({
+                "success": False,
+                "message": f"Service ID {service_id} not found.",
+                "results": ""
+            }), 404
+
+        service = service_data[0]
+        heartbeat_name = service['heartbeat_name']
+        active = service['active']
+
+        if int(active) == 0:
+            logger.log(
+                level=30,
+                msg=f"Service {heartbeat_name} (ID: {service_id}) is inactive"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Service {heartbeat_name} is inactive.",
+                "results": ""
+            }), 400
+
+        # Parse optional run_id from request body
+        run_id = None
+        if request.data:
+            try:
+                jData = json.loads(request.data)
+                run_id = jData.get('run_id')
+            except (json.JSONDecodeError, ValueError):
+                pass  # run_id is optional, ignore parse errors
+
+        # Create and save heartbeat
+        my_heartbeat = hbeat.Heartbeat(
+            service_id,
+            heartbeat_name,
+            status,
+            run_id=run_id
+        )
+        res = hbeat.addHeartbeat(my_heartbeat)
+
+        if res:
+            logger.log(
+                level=10,
+                msg=f"Job signal {status} recorded for {heartbeat_name}"
+                    f" (run_id: {run_id})"
+            )
+            return json.dumps({
+                "success": True,
+                "message": f"Job signal {status} recorded successfully.",
+                "results": {
+                    "service_id": service_id,
+                    "heartbeat_name": heartbeat_name,
+                    "status": status,
+                    "run_id": run_id
+                }
+            }), 201
+        else:
+            logger.log(
+                level=40,
+                msg=f"Failed to record job signal {status} for {heartbeat_name}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Failed to record job signal {status}.",
+                "results": ""
+            }), 500
+
 
 def validateRequestData(schema, jData):
     """Validate request data against a schema."""
