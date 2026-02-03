@@ -40,6 +40,18 @@ except ImportError:
     record_duration_alert = None  # type: ignore[misc, assignment]
     update_stale_jobs_count = None  # type: ignore[misc, assignment]
 
+# Import playbook alert integration
+try:
+    from Medic.Core.playbook_alert_integration import (
+        trigger_playbook_for_alert,
+        get_alert_consecutive_failures,
+    )
+    PLAYBOOK_TRIGGERS_AVAILABLE = True
+except ImportError:
+    PLAYBOOK_TRIGGERS_AVAILABLE = False
+    trigger_playbook_for_alert = None  # type: ignore[misc, assignment]
+    get_alert_consecutive_failures = None  # type: ignore[misc, assignment]
+
 # Log Setup
 logging.basicConfig(level=logging.WARNING, format='%(relativeCreated)6d %(threadName)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -228,6 +240,7 @@ def sendAlert(service_id, service_name, heartbeat_name, last_seen, interval, tea
             "INSERT INTO alerts(alert_name, service_id, active, alert_cycle, created_date) VALUES(%s, %s, 1, 1, %s)",
             (alert_message, service_id, current_time)
         )
+        alert_cycle = 1  # New alert starts at cycle 1
 
         if muted == 1:
             logger.log(level=20, msg=str(heartbeat_name) + " is muted. No alert will be sent.")
@@ -252,6 +265,11 @@ def sendAlert(service_id, service_name, heartbeat_name, last_seen, interval, tea
             # Send slack message
             message = ':broken_heart: No heartbeat has been detected for `' + str(heartbeat_name) + '` for service `' + str(service_name) + '` since ' + str(last_seen) + '. Alert is being routed to `' + str(team) + '`'
             slack.send_message(message)
+
+            # Check for playbook triggers
+            _check_playbook_triggers(
+                service_id, service_name, alert_cycle
+            )
     else:
         # Active alert exists
         alert_cycle = int(result[0][5])
@@ -270,6 +288,73 @@ def sendAlert(service_id, service_name, heartbeat_name, last_seen, interval, tea
             if alert_cycle % (interval_seconds / 15) == 0:
                 message = ':broken_heart: No heartbeat has been detected for `' + str(heartbeat_name) + '` for service `' + str(service_name) + '` since ' + str(last_seen) + '. Alert has been routed to `' + str(team) + '`'
                 slack.send_message(message)
+
+            # Check for playbook triggers on subsequent cycles
+            _check_playbook_triggers(
+                service_id, service_name, count
+            )
+
+
+def _check_playbook_triggers(service_id, service_name, alert_cycle):
+    """
+    Check if any playbook should be triggered for an alerting service.
+
+    This function checks the playbook triggers to find a matching playbook
+    and starts execution based on the playbook's approval settings:
+    - approval=none: Starts execution immediately
+    - approval=required: Creates pending_approval execution
+
+    Args:
+        service_id: ID of the alerting service
+        service_name: Name of the alerting service
+        alert_cycle: Current alert cycle count (consecutive failures)
+    """
+    if not PLAYBOOK_TRIGGERS_AVAILABLE:
+        return
+
+    try:
+        # Convert alert_cycle to consecutive failures
+        consecutive_failures = get_alert_consecutive_failures(alert_cycle)
+
+        # Try to trigger a playbook
+        result = trigger_playbook_for_alert(
+            service_id=service_id,
+            service_name=service_name,
+            consecutive_failures=consecutive_failures,
+            alert_context={
+                "ALERT_CYCLE": alert_cycle,
+            }
+        )
+
+        if result.triggered:
+            logger.log(
+                level=20,
+                msg=f"Playbook triggered for {service_name}: "
+                    f"{result.message} (execution_id: "
+                    f"{result.execution.execution_id if result.execution else 'N/A'})"
+            )
+
+            # Send Slack notification about playbook execution
+            if result.status == "running":
+                playbook_msg = (
+                    f":robot_face: Auto-remediation playbook "
+                    f"'{result.playbook.playbook_name}' started for "
+                    f"`{service_name}` (execution: {result.execution.execution_id})"
+                )
+                slack.send_message(playbook_msg)
+            elif result.status == "pending_approval":
+                playbook_msg = (
+                    f":hourglass: Auto-remediation playbook "
+                    f"'{result.playbook.playbook_name}' awaiting approval for "
+                    f"`{service_name}` (execution: {result.execution.execution_id})"
+                )
+                slack.send_message(playbook_msg)
+
+    except Exception as e:
+        logger.log(
+            level=40,
+            msg=f"Error checking playbook triggers for {service_name}: {str(e)}"
+        )
 
 
 def closeAlert(heartbeat_name, service_name, service_id, last_seen, team, muted, current_time):

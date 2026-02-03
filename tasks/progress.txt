@@ -78,6 +78,11 @@
 - Trigger glob patterns: fnmatch library for *, ?, [seq] matching. Case-insensitive. Use matches_glob_pattern(pattern, value) for direct matching.
 - Trigger ordering: get_enabled_triggers() returns by consecutive_failures DESC. Higher thresholds matched first (more specific).
 - Service-based trigger lookup: find_playbook_for_service_alert(service_id) convenience function looks up name and failures from database.
+- Playbook alert integration: Use trigger_playbook_for_alert(service_id, service_name, consecutive_failures) from Medic/Core/playbook_alert_integration.py. Returns PlaybookTriggerResult.
+- Alert cycle to failures: get_alert_consecutive_failures(alert_cycle) converts alert cycle count to consecutive failures (min 1).
+- Playbook trigger result: PlaybookTriggerResult.triggered indicates if playbook was started. Check status for "running", "pending_approval", or "error".
+- Monitor playbook integration: _check_playbook_triggers() in monitor.py called after sendAlert() sends notifications. Wraps with error handling.
+- Playbook Slack notifications: :robot_face: for started playbooks, :hourglass: for pending_approval. Includes playbook name and execution ID.
 
 ---
 
@@ -518,4 +523,20 @@
   - find_playbook_for_service_alert() convenience function looks up service name and failure count
   - get_consecutive_failures_for_service() retrieves from services table (returns 0 if null/not found)
   - matches_glob_pattern() utility function for direct pattern matching
+---
+
+## 2026-02-03 - US-034 - Linear Issue: SRE-23
+- Integrated playbook triggering with alert system in monitor.py
+- Files changed: Medic/Core/playbook_alert_integration.py (new), Medic/Worker/monitor.py (modified), tests/unit/test_playbook_alert_integration.py (new)
+- **Learnings for future iterations:**
+  - PlaybookTriggerResult dataclass returned by trigger_playbook_for_alert() contains triggered, execution, playbook, status, message
+  - trigger_playbook_for_alert() checks for matching playbook, loads it, and starts execution with appropriate approval status
+  - Approval handling: approval=none starts immediately (skip_approval=True), approval=required creates pending_approval
+  - Alert context variables passed to playbook execution: SERVICE_ID, SERVICE_NAME, CONSECUTIVE_FAILURES, TRIGGER_ID, ALERT_CYCLE
+  - get_alert_consecutive_failures() converts alert_cycle to consecutive failures for trigger matching
+  - _check_playbook_triggers() helper in monitor.py wraps the integration with error handling
+  - Slack notifications sent when playbook triggers: :robot_face: for running, :hourglass: for pending_approval
+  - PLAYBOOK_TRIGGERS_AVAILABLE flag allows graceful degradation if integration module not importable
+  - Integration called in sendAlert() after alerts/notifications are sent (both new alerts and subsequent cycles)
+  - Monitor.py requires mocking slack_client and pagerduty_client modules for unit tests
 ---
