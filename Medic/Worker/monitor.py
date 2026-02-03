@@ -8,6 +8,18 @@ import psycopg2
 import slack_client as slack
 import pagerduty_client as pagerduty
 
+# Import maintenance window checker
+try:
+    from Medic.Core.maintenance_windows import (
+        is_service_in_maintenance,
+        get_active_maintenance_window_for_service,
+    )
+    MAINTENANCE_WINDOWS_AVAILABLE = True
+except ImportError:
+    MAINTENANCE_WINDOWS_AVAILABLE = False
+    is_service_in_maintenance = None  # type: ignore[misc, assignment]
+    get_active_maintenance_window_for_service = None  # type: ignore[misc, assignment]
+
 # Log Setup
 logging.basicConfig(level=logging.WARNING, format='%(relativeCreated)6d %(threadName)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -135,7 +147,16 @@ def queryForNoHeartbeat():
             lh_cvtd = (last_hbeat[0][0]).astimezone(tz).strftime(fmt)
 
             if int(last_hbeat_count) < int(threshold):
-                sendAlert(s_id, s_name, name, lh_cvtd, interval, team, priority, muted, now_cdt, runbook)
+                # Check if service is in maintenance window before alerting
+                if MAINTENANCE_WINDOWS_AVAILABLE and is_service_in_maintenance(s_id):
+                    window = get_active_maintenance_window_for_service(s_id)
+                    window_name = window.name if window else "Unknown"
+                    logger.log(
+                        level=20,
+                        msg=f"Alert suppressed for {name}: service is in maintenance window '{window_name}'"
+                    )
+                else:
+                    sendAlert(s_id, s_name, name, lh_cvtd, interval, team, priority, muted, now_cdt, runbook)
             elif int(last_hbeat_count) >= int(threshold) and down == 1:
                 logger.log(level=20, msg="Heartbeat: " + str(name) + " is current.")
                 closeAlert(name, s_name, s_id, lh_cvtd, team, muted, now_cdt)

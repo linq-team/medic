@@ -239,3 +239,269 @@ class TestColorCode:
         assert color_code("p2") == "#e9a820"
         assert color_code("p3") == "#e9a820"
         assert color_code("unknown") == "#F35A00"
+
+
+class TestMaintenanceWindowSuppression:
+    """Tests for maintenance window alert suppression."""
+
+    @patch("Medic.Worker.monitor.get_active_maintenance_window_for_service")
+    @patch("Medic.Worker.monitor.is_service_in_maintenance")
+    @patch("Medic.Worker.monitor.MAINTENANCE_WINDOWS_AVAILABLE", True)
+    @patch("Medic.Worker.monitor.slack")
+    @patch("Medic.Worker.monitor.pagerduty")
+    @patch("Medic.Worker.monitor.insert_db")
+    @patch("Medic.Worker.monitor.query_db")
+    def test_alert_suppressed_during_maintenance(
+        self,
+        mock_query,
+        mock_insert,
+        mock_pd,
+        mock_slack,
+        mock_in_maintenance,
+        mock_get_window,
+        mock_env_vars
+    ):
+        """Test that alerts are suppressed when service is in maintenance."""
+        from Medic.Worker.monitor import queryForNoHeartbeat
+
+        # Mock maintenance window functions
+        mock_in_maintenance.return_value = True
+        mock_window = MagicMock()
+        mock_window.name = "Weekly DB Maintenance"
+        mock_get_window.return_value = mock_window
+
+        # Setup service data - threshold 2, but only 1 heartbeat (should alert)
+        mock_query.side_effect = [
+            # First query: services
+            [{
+                "service_id": 1,
+                "heartbeat_name": "test-heartbeat",
+                "service_name": "test-service",
+                "alert_interval": 5,
+                "threshold": 2,
+                "team": "platform",
+                "priority": "p2",
+                "muted": 0,
+                "down": 0,
+                "runbook": None
+            }],
+            # Second query: heartbeat count
+            [(datetime.now(), 1)],  # Only 1 heartbeat, below threshold
+        ]
+
+        queryForNoHeartbeat()
+
+        # Maintenance window check should have been called
+        mock_in_maintenance.assert_called_once_with(1)
+
+        # Alert should NOT have been sent due to maintenance
+        mock_pd.create_alert.assert_not_called()
+        mock_slack.send_message.assert_not_called()
+
+    @patch("Medic.Worker.monitor.get_active_maintenance_window_for_service")
+    @patch("Medic.Worker.monitor.is_service_in_maintenance")
+    @patch("Medic.Worker.monitor.MAINTENANCE_WINDOWS_AVAILABLE", True)
+    @patch("Medic.Worker.monitor.slack")
+    @patch("Medic.Worker.monitor.pagerduty")
+    @patch("Medic.Worker.monitor.insert_db")
+    @patch("Medic.Worker.monitor.query_db")
+    def test_alert_sent_when_not_in_maintenance(
+        self,
+        mock_query,
+        mock_insert,
+        mock_pd,
+        mock_slack,
+        mock_in_maintenance,
+        mock_get_window,
+        mock_env_vars
+    ):
+        """Test that alerts are sent when service is NOT in maintenance."""
+        from Medic.Worker.monitor import queryForNoHeartbeat
+
+        # Mock maintenance window - not in maintenance
+        mock_in_maintenance.return_value = False
+
+        # Setup service data
+        mock_query.side_effect = [
+            # First query: services
+            [{
+                "service_id": 1,
+                "heartbeat_name": "test-heartbeat",
+                "service_name": "test-service",
+                "alert_interval": 5,
+                "threshold": 2,
+                "team": "platform",
+                "priority": "p2",
+                "muted": 0,
+                "down": 0,
+                "runbook": None
+            }],
+            # Second query: heartbeat count
+            [(datetime.now(), 1)],  # Only 1 heartbeat, below threshold
+            # Third query: check for existing alert
+            [],
+        ]
+        mock_insert.return_value = True
+        mock_pd.create_alert.return_value = "test-dedup-key"
+
+        queryForNoHeartbeat()
+
+        # Maintenance window check should have been called
+        mock_in_maintenance.assert_called_once_with(1)
+
+        # Alert SHOULD have been sent since not in maintenance
+        mock_pd.create_alert.assert_called_once()
+        mock_slack.send_message.assert_called_once()
+
+    @patch("Medic.Worker.monitor.MAINTENANCE_WINDOWS_AVAILABLE", False)
+    @patch("Medic.Worker.monitor.slack")
+    @patch("Medic.Worker.monitor.pagerduty")
+    @patch("Medic.Worker.monitor.insert_db")
+    @patch("Medic.Worker.monitor.query_db")
+    def test_alert_sent_when_maintenance_module_unavailable(
+        self,
+        mock_query,
+        mock_insert,
+        mock_pd,
+        mock_slack,
+        mock_env_vars
+    ):
+        """Test alerts are sent when maintenance module is not available."""
+        from Medic.Worker.monitor import queryForNoHeartbeat
+
+        # Setup service data
+        mock_query.side_effect = [
+            # First query: services
+            [{
+                "service_id": 1,
+                "heartbeat_name": "test-heartbeat",
+                "service_name": "test-service",
+                "alert_interval": 5,
+                "threshold": 2,
+                "team": "platform",
+                "priority": "p2",
+                "muted": 0,
+                "down": 0,
+                "runbook": None
+            }],
+            # Second query: heartbeat count
+            [(datetime.now(), 1)],  # Only 1 heartbeat, below threshold
+            # Third query: check for existing alert
+            [],
+        ]
+        mock_insert.return_value = True
+        mock_pd.create_alert.return_value = "test-dedup-key"
+
+        queryForNoHeartbeat()
+
+        # Alert SHOULD have been sent since maintenance module unavailable
+        mock_pd.create_alert.assert_called_once()
+        mock_slack.send_message.assert_called_once()
+
+    @patch("Medic.Worker.monitor.get_active_maintenance_window_for_service")
+    @patch("Medic.Worker.monitor.is_service_in_maintenance")
+    @patch("Medic.Worker.monitor.MAINTENANCE_WINDOWS_AVAILABLE", True)
+    @patch("Medic.Worker.monitor.slack")
+    @patch("Medic.Worker.monitor.pagerduty")
+    @patch("Medic.Worker.monitor.insert_db")
+    @patch("Medic.Worker.monitor.query_db")
+    def test_alert_suppressed_logs_maintenance_window_name(
+        self,
+        mock_query,
+        mock_insert,
+        mock_pd,
+        mock_slack,
+        mock_in_maintenance,
+        mock_get_window,
+        mock_env_vars,
+        caplog
+    ):
+        """Test that suppressed alert logs the maintenance window name."""
+        import logging
+        from Medic.Worker.monitor import queryForNoHeartbeat
+
+        # Mock maintenance window functions
+        mock_in_maintenance.return_value = True
+        mock_window = MagicMock()
+        mock_window.name = "Database Upgrade Window"
+        mock_get_window.return_value = mock_window
+
+        # Setup service data
+        mock_query.side_effect = [
+            [{
+                "service_id": 1,
+                "heartbeat_name": "test-heartbeat",
+                "service_name": "test-service",
+                "alert_interval": 5,
+                "threshold": 2,
+                "team": "platform",
+                "priority": "p2",
+                "muted": 0,
+                "down": 0,
+                "runbook": None
+            }],
+            [(datetime.now(), 1)],
+        ]
+
+        with caplog.at_level(logging.INFO):
+            queryForNoHeartbeat()
+
+        # Check that log message contains the maintenance window name
+        log_messages = [r.message for r in caplog.records]
+        assert any(
+            "Alert suppressed" in msg and "Database Upgrade Window" in msg
+            for msg in log_messages
+        )
+
+    @patch("Medic.Worker.monitor.get_active_maintenance_window_for_service")
+    @patch("Medic.Worker.monitor.is_service_in_maintenance")
+    @patch("Medic.Worker.monitor.MAINTENANCE_WINDOWS_AVAILABLE", True)
+    @patch("Medic.Worker.monitor.slack")
+    @patch("Medic.Worker.monitor.pagerduty")
+    @patch("Medic.Worker.monitor.insert_db")
+    @patch("Medic.Worker.monitor.query_db")
+    def test_recovery_alerts_still_sent_during_maintenance(
+        self,
+        mock_query,
+        mock_insert,
+        mock_pd,
+        mock_slack,
+        mock_in_maintenance,
+        mock_get_window,
+        mock_env_vars
+    ):
+        """Test that recovery alerts are sent even during maintenance."""
+        from Medic.Worker.monitor import queryForNoHeartbeat
+
+        # Service in maintenance but recovering (was down, now healthy)
+        mock_in_maintenance.return_value = True
+        mock_window = MagicMock()
+        mock_window.name = "Weekly Maintenance"
+        mock_get_window.return_value = mock_window
+
+        # Setup service data - service is down but heartbeat is healthy now
+        mock_query.side_effect = [
+            [{
+                "service_id": 1,
+                "heartbeat_name": "test-heartbeat",
+                "service_name": "test-service",
+                "alert_interval": 5,
+                "threshold": 2,
+                "team": "platform",
+                "priority": "p2",
+                "muted": 0,
+                "down": 1,  # Service was down
+                "runbook": None
+            }],
+            # Heartbeat count now meets threshold
+            [(datetime.now(), 3)],  # 3 heartbeats, above threshold of 2
+            # Query for active alert to close
+            [(1, "test", 1, 1, "pd-key", 5)],
+        ]
+        mock_insert.return_value = True
+
+        queryForNoHeartbeat()
+
+        # Recovery notifications SHOULD be sent (maintenance doesn't suppress)
+        mock_slack.send_message.assert_called_once()
+        mock_pd.close_alert.assert_called_once_with("pd-key")
