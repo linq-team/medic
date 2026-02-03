@@ -89,6 +89,8 @@
 - Playbook metrics: medic_playbook_executions_total{playbook, status} Counter, medic_playbook_execution_duration_seconds{playbook} Histogram, medic_playbook_executions_pending_approval Gauge.
 - Playbook metrics helpers: record_playbook_execution(playbook_name, status), record_playbook_execution_duration(playbook_name, duration_seconds), update_pending_approval_count(count).
 - Playbook metrics integration: Metrics recorded in _complete_execution(), _fail_execution(), cancel_execution(). Pending approval updated when status changes.
+- Audit log: medic.remediation_audit_log table stores action history per execution. Action types: execution_started, step_completed, step_failed, approval_requested, approved, rejected, execution_completed, execution_failed.
+- Audit log details: JSONB details field stores action-specific context (step_name, output, error_message, etc.). Actor field nullable (NULL for automated, user ID for manual).
 
 ---
 
@@ -576,4 +578,18 @@
   - Duration only recorded if execution.started_at is set (skip for executions with no start time)
   - When playbook is None, use "unknown" as playbook_name for metrics
   - When adding metrics integration, remember to mock the metric recording functions in existing tests to prevent DB calls
+---
+
+## 2026-02-03 - US-039 - Linear Issue: SRE-24
+- Created remediation_audit_log database schema migration in migrations/015_create_remediation_audit_log.sql
+- Files changed: migrations/015_create_remediation_audit_log.sql (new)
+- **Learnings for future iterations:**
+  - remediation_audit_log table: log_id, execution_id (FK to playbook_executions with CASCADE delete), action_type, details (JSONB), actor (nullable), timestamp, created_at
+  - Action types enforced via CHECK constraint: execution_started, step_completed, step_failed, approval_requested, approved, rejected, execution_completed, execution_failed
+  - Actor is nullable - NULL for automated actions, user ID for manual actions (approvals/rejections)
+  - Details JSONB stores action-specific context (step name, output, error message, etc.)
+  - GIN index on details enables flexible JSONB queries (e.g., details->>'step_name' = 'restart')
+  - Composite index on (execution_id, timestamp ASC) for efficient execution timeline queries
+  - Partial index on actor WHERE NOT NULL for efficient user action queries
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE
 ---
