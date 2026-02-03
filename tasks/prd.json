@@ -365,8 +365,8 @@
         "Typecheck passes"
       ],
       "priority": 25,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/011_create_playbooks.sql. Tables: medic.playbooks (playbook_id, name, description, yaml_content, version, timestamps) and medic.playbook_triggers (trigger_id, playbook_id, service_pattern, consecutive_failures, enabled, timestamps). Includes FK constraint with CASCADE delete, appropriate indexes for lookups and trigger matching."
     },
     {
       "id": "US-026",
