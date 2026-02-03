@@ -19,6 +19,9 @@
 - Flexible alert routing: Use route_alert(service_id, payload, mode) with NotificationMode.NOTIFY_ALL or NOTIFY_UNTIL_SUCCESS
 - Notification sender: Pass custom sender callback to route_alert() or use default_notification_sender() placeholder
 - Working hours: medic.schedules table stores timezone (IANA format) and hours (JSONB with day/hour ranges). Services link via schedule_id FK.
+- Working hours evaluation: Use is_within_working_hours(schedule, check_time) from Medic/Core/working_hours.py. Uses zoneinfo for DST-aware timezone handling.
+- Service working hours: Use is_service_within_working_hours(service_id) which returns (bool, schedule_name) tuple. Returns (True, None) if no schedule (always in hours).
+- Period detection: Use get_current_period(schedule) or get_service_current_period(service_id) to get "during_hours" or "after_hours" string.
 
 ---
 
@@ -158,4 +161,19 @@
   - Hours field uses JSONB for flexible day/hour ranges: {"monday": [{"start": "09:00", "end": "17:00"}], ...}
   - Services.schedule_id FK uses ON DELETE SET NULL (not CASCADE) - keeps service but clears schedule reference
   - Pattern follows teams migration: ALTER TABLE to add FK column to services
+---
+
+## 2026-02-03 - US-014 - Linear Issue: SRE-12
+- Implemented working hours evaluation in Medic/Core/working_hours.py
+- Files changed: Medic/Core/working_hours.py (new), tests/unit/test_working_hours.py (new)
+- **Learnings for future iterations:**
+  - Use zoneinfo.ZoneInfo for IANA timezone handling (Python 3.9+ standard library)
+  - zoneinfo automatically handles DST transitions - just convert to local time and check
+  - TimeRange.contains() handles midnight-crossing ranges (e.g., 22:00 to 06:00 night shifts)
+  - Hours JSONB format: {"monday": [{"start": "09:00", "end": "17:00"}], ...}
+  - End time is exclusive (09:00-17:00 means 17:00 is outside hours)
+  - Empty timezone string causes ValueError in ZoneInfo - check with is_valid_timezone() first
+  - is_service_within_working_hours() returns (True, None) when no schedule - services without schedules are always "within hours"
+  - get_current_period() returns "during_hours" or "after_hours" for routing decisions
+  - Naive datetimes are assumed to be UTC
 ---
