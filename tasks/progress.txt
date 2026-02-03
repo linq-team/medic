@@ -29,6 +29,7 @@
 - Maintenance window queries: Empty service_ids means ALL services. Query: WHERE service_ids = '{}' OR %s = ANY(service_ids)
 - Heartbeat status: HeartbeatStatus enum in Medic/Helpers/heartbeat.py defines valid values (UP, DOWN, STARTED, COMPLETED, FAILED). Use is_valid() to validate, is_job_status() to check job-related.
 - Job correlation: Heartbeat objects support optional run_id parameter for correlating STARTED/COMPLETED/FAILED events. Use queryHeartbeatsByRunId(run_id) to find correlated events.
+- V2 job signal endpoints: POST /v2/heartbeat/:id/start|complete|fail accepts service_id as path param, optional run_id in JSON body. Uses _record_job_signal() helper.
 
 ---
 
@@ -251,4 +252,17 @@
   - Use partial indexes (WHERE run_id IS NOT NULL) for run_id column since most heartbeats won't have it
   - Query functions updated to include run_id in SELECT - enables job correlation in results
   - Pre-existing mypy type errors in heartbeat.py - query_db returns Union[str, List, None] but functions declare Optional[str]
+---
+
+## 2026-02-03 - US-020 - Linear Issue: SRE-15
+- Implemented V2 API endpoints for start/complete/fail signals
+- Files changed: Medic/Core/routes.py (modified), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - V2 endpoints use /v2/heartbeat/<int:service_id>/start|complete|fail pattern with service_id in URL path
+  - Shared logic extracted to _record_job_signal() helper function within exposeRoutes()
+  - run_id is optional in JSON body - gracefully handles missing or invalid JSON with run_id=None
+  - Response includes results dict with service_id, heartbeat_name, status, and run_id for caller verification
+  - Integration tests use patch("Medic.Core.routes.db.query_db") and patch("Medic.Core.routes.hbeat.addHeartbeat") for mocking
+  - Service validation checks: 1) service exists, 2) service is active (active != 0)
+  - Returns 404 for missing service, 400 for inactive service, 500 for database insert failure
 ---

@@ -294,8 +294,8 @@
         "Typecheck passes"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented in Medic/Core/routes.py with three v2 endpoints (/v2/heartbeat/:id/start, /complete, /fail). Helper function _record_job_signal() handles validation, optional run_id parsing, and response formatting. 10 integration tests in tests/integration/test_api.py."
     },
     {
       "id": "US-021",
