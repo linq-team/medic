@@ -309,8 +309,8 @@
         "Typecheck passes"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration 009 creates medic.job_runs table and adds max_duration_ms to services. Medic/Core/job_runs.py implements duration tracking with record_job_start(), record_job_completion(). Routes.py integrates job_runs tracking in V2 signal endpoints. 25 unit tests in tests/unit/test_job_runs.py."
     },
     {
       "id": "US-022",

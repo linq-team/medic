@@ -30,6 +30,10 @@
 - Heartbeat status: HeartbeatStatus enum in Medic/Helpers/heartbeat.py defines valid values (UP, DOWN, STARTED, COMPLETED, FAILED). Use is_valid() to validate, is_job_status() to check job-related.
 - Job correlation: Heartbeat objects support optional run_id parameter for correlating STARTED/COMPLETED/FAILED events. Use queryHeartbeatsByRunId(run_id) to find correlated events.
 - V2 job signal endpoints: POST /v2/heartbeat/:id/start|complete|fail accepts service_id as path param, optional run_id in JSON body. Uses _record_job_signal() helper.
+- Job runs tracking: medic.job_runs table stores duration statistics. Use record_job_start() and record_job_completion() from Medic/Core/job_runs.py.
+- Duration calculation: Duration in milliseconds calculated as completed_at - started_at. Stored in job_runs.duration_ms column.
+- Job run queries: get_completed_runs_for_service(service_id, limit=100) returns runs ordered by completion time for stats. get_stale_runs() finds jobs that started but never completed.
+- Max duration: services.max_duration_ms column defines threshold for duration alerts (to be used by US-023).
 
 ---
 
@@ -265,4 +269,20 @@
   - Integration tests use patch("Medic.Core.routes.db.query_db") and patch("Medic.Core.routes.hbeat.addHeartbeat") for mocking
   - Service validation checks: 1) service exists, 2) service is active (active != 0)
   - Returns 404 for missing service, 400 for inactive service, 500 for database insert failure
+---
+
+## 2026-02-03 - US-021 - Linear Issue: SRE-16
+- Implemented duration tracking for job runs with medic.job_runs table and max_duration_ms column
+- Files changed: migrations/009_create_job_runs_and_max_duration.sql (new), Medic/Core/job_runs.py (new), Medic/Core/routes.py (modified), tests/unit/test_job_runs.py (new), tests/integration/test_api.py (modified)
+- **Learnings for future iterations:**
+  - JobRun dataclass: run_id_pk, service_id, run_id, started_at, completed_at, duration_ms, status
+  - record_job_start() creates new job_runs entry with STARTED status when run_id provided
+  - record_job_completion() calculates duration_ms from started_at to completed_at (in milliseconds)
+  - If no STARTED run exists when completing, creates a completion-only record with duration=0
+  - Duration calculated as int(delta.total_seconds() * 1000) for millisecond precision
+  - _record_job_signal() in routes.py integrates job_runs tracking after heartbeat is recorded
+  - Integration tests need to mock job_runs module when testing V2 endpoints: patch("Medic.Core.routes.job_runs")
+  - services.max_duration_ms column added for threshold-based alerting (to be implemented in US-023)
+  - Unique constraint on (service_id, run_id) prevents duplicate runs per service
+  - get_stale_runs() useful for finding jobs that started but never completed (hung jobs)
 ---
