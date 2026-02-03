@@ -395,8 +395,8 @@
         "Typecheck passes"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created in migrations/012_create_playbook_executions.sql. Tables: medic.playbook_executions (execution_id, playbook_id, service_id, status, current_step, started_at, completed_at, timestamps) and medic.playbook_step_results (result_id, execution_id, step_name, step_index, status, output, error_message, started_at, completed_at, timestamps). Includes FK constraints with CASCADE delete and appropriate indexes for common queries."
     },
     {
       "id": "US-028",

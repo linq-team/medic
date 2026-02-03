@@ -47,6 +47,8 @@
 - Playbook approval: ApprovalMode.parse() handles "none", "required", "timeout:Xm" formats. Returns (ApprovalMode, Optional[int]).
 - Duration parsing: _parse_duration() handles "30s", "5m", "1h" formats - plain integers default to seconds.
 - Playbook validation: Use validate_playbook_yaml() for error list or is_valid_playbook_yaml() for boolean check.
+- Playbook executions: medic.playbook_executions tracks execution state (pending_approval, running, waiting, completed, failed, cancelled). FK to playbooks with CASCADE, FK to services with SET NULL.
+- Step results: medic.playbook_step_results tracks individual step outcomes. step_index is zero-based. Unique constraint on (execution_id, step_index).
 
 ---
 
@@ -372,4 +374,21 @@
   - All step names must be unique within a playbook - enforced during parsing
   - Extra YAML fields (not name/description/steps/approval/version) preserved in metadata dict
   - URL validation allows ${VAR} syntax for variable substitution
+---
+
+## 2026-02-03 - US-027 - Linear Issue: SRE-23
+- Created playbook executions tracking schema in migrations/012_create_playbook_executions.sql
+- Files changed: migrations/012_create_playbook_executions.sql (new)
+- **Learnings for future iterations:**
+  - playbook_executions table: execution_id, playbook_id, service_id (nullable), status, current_step, started_at, completed_at, timestamps
+  - Execution statuses: pending_approval, running, waiting, completed, failed, cancelled - use CHECK constraint
+  - playbook_step_results table: result_id, execution_id, step_name, step_index, status, output, error_message, started_at, completed_at
+  - Step result statuses: pending, running, completed, failed, skipped
+  - FK to playbooks with CASCADE delete - when playbook deleted, all executions removed
+  - FK to services with SET NULL - when service deleted, executions preserved but service_id nulled
+  - Unique constraint on (execution_id, step_index) prevents duplicate step results
+  - Partial indexes for pending_approval (common query) and active executions (resume after restart)
+  - current_step is zero-based index into playbook steps array
+  - output column stores step execution output (webhook response, script stdout)
+  - error_message column separate from output for clarity on failure details
 ---
