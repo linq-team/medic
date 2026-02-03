@@ -265,8 +265,8 @@
         "Typecheck passes"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Integrated is_service_in_maintenance() check in Medic/Worker/monitor.py queryForNoHeartbeat(). Suppresses new alerts when service is in maintenance window with logging. 5 new unit tests in tests/unit/test_monitor.py. Recovery alerts still sent during maintenance."
     },
     {
       "id": "US-019",

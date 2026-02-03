@@ -224,3 +224,16 @@
   - Feb 1, 2026 is a Sunday (weekday=6), Feb 2, 2026 is Monday (weekday=0) - always verify day calculations
   - parse_maintenance_window() handles both string and datetime objects from database
 ---
+
+## 2026-02-03 - US-018 - Linear Issue: SRE-14
+- Implemented maintenance window alert suppression in Medic/Worker/monitor.py
+- Files changed: Medic/Worker/monitor.py (modified), tests/unit/test_monitor.py (extended)
+- **Learnings for future iterations:**
+  - Monitor module runs in Medic/Worker directory - needs PYTHONPATH=$(pwd)/Medic/Worker for tests
+  - MAINTENANCE_WINDOWS_AVAILABLE flag allows graceful degradation if maintenance module not importable
+  - Maintenance check happens BEFORE sendAlert() - only new alerts are suppressed
+  - Recovery alerts (closeAlert) are NOT suppressed during maintenance - service can still recover
+  - Logger level 20 = INFO for maintenance suppression messages
+  - Pre-existing test failures in test_monitor.py due to slack_client module import - fixed with PYTHONPATH
+  - When patching module-level variables like MAINTENANCE_WINDOWS_AVAILABLE, use @patch decorator on the module path
+---
