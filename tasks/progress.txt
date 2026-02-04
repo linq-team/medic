@@ -2209,3 +2209,19 @@
   - BulkActionsToolbar pattern: opens dialog for ALL actions (not just destructive) to show service list preview
 
 ---
+
+## 2026-02-04 - US-013 - Linear Issue: SRE-113
+- **What was implemented**: Bulk edit modal for team/priority - already implemented as part of US-012
+  - The BulkActionsToolbar created in US-012 includes "Change Priority" and "Change Team" buttons
+  - Modal shows list of selected services before applying changes
+  - Priority uses Select dropdown with P1/P2/P3 options
+  - Team uses text input field
+  - Toast notifications on completion
+  - Tests included in bulk-actions-toolbar.test.tsx
+
+- **Files changed**: None (functionality already delivered in US-012)
+
+- **Learnings for future iterations**:
+  - US-012 and US-013 had overlapping requirements - bulk actions toolbar included team/priority editing
+
+---
