@@ -1,501 +1,682 @@
 {
-  "project": "Medic",
-  "branchName": "ralph/medic-ui",
-  "description": "Medic UI Dashboard - Web-based administrative interface for managing services, heartbeats, alerts, and playbooks",
+  "project": "Medic EKS Production",
+  "branchName": "feature/medic-eks-production",
+  "description": "Deploy Medic to Amazon EKS with production-grade security, observability, and reliability. Addresses critical security vulnerabilities from PR #2 review, implements Helm chart deployed via Terraform helm_release, OpenTelemetry instrumentation for Grafana/Loki/Tempo correlation, KEDA for autoscaling, and Karpenter-aware scheduling.",
+  "linearProject": "Medic v2",
+  "gitWorkflow": {
+    "baseBranch": "main",
+    "pullBeforeStart": true,
+    "commitMessageFormat": "feat: [LINEAR_TICKET_ID] - Description",
+    "coAuthor": "Claude Opus 4.5 <noreply@anthropic.com>"
+  },
   "userStories": [
     {
       "id": "US-001",
-      "title": "Create React project with Vite and TypeScript",
-      "description": "As a developer, I need the React project scaffolded with Vite and TypeScript so we have a foundation to build upon.",
+      "linearTicket": "SRE-28",
+      "title": "Create URL validator module for SSRF prevention",
+      "description": "As a security engineer, I need a URL validation module to prevent Server-Side Request Forgery attacks against internal services.",
       "acceptanceCriteria": [
-        "Create ui/ directory with Vite + React + TypeScript",
-        "Configure tsconfig.json with strict mode",
-        "Add basic App.tsx with 'Medic UI' heading",
-        "npm run dev starts development server",
-        "npm run build produces production files",
-        "Typecheck passes"
+        "Create `Medic/Core/url_validator.py` module",
+        "Implement `validate_url(url: str) -> bool` function",
+        "Implement `is_private_ip(ip: str) -> bool` helper function",
+        "Block private IP ranges: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16",
+        "Block localhost, 0.0.0.0, and cloud metadata endpoint (169.254.169.254)",
+        "Only allow http/https schemes",
+        "Perform DNS resolution to catch DNS rebinding attacks",
+        "Add `MEDIC_ALLOWED_WEBHOOK_HOSTS` env var support for explicit allowlist",
+        "Raise `InvalidURLError` with safe message (no internal details)",
+        "Add 20+ unit tests covering all blocked ranges and edge cases",
+        "Typecheck/lint passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Completed in SRE-59. Updated App.tsx heading to 'Medic UI'."
+      "notes": "Critical security fix - blocks SSRF attacks"
     },
     {
       "id": "US-002",
-      "title": "Configure ESLint, Prettier, and code quality tools",
-      "description": "As a developer, I need code quality tools configured for consistent code style.",
+      "linearTicket": "SRE-29",
+      "title": "Integrate URL validator into webhook execution",
+      "description": "As a security engineer, I need webhook steps and webhook delivery to validate URLs before making requests.",
       "acceptanceCriteria": [
-        "Install and configure ESLint with TypeScript support",
-        "Install and configure Prettier",
-        "Add .eslintrc.js and .prettierrc files",
-        "npm run lint checks code",
-        "npm run format formats code",
-        "Typecheck passes"
+        "Import url_validator in `playbook_engine.py`",
+        "Call `validate_url()` in `execute_webhook_step()` before making request",
+        "Return 400 error with 'Invalid webhook URL' message on validation failure",
+        "Import url_validator in `webhook_delivery.py`",
+        "Call `validate_url()` in `_send_request()` before making request",
+        "Log validation failures at WARNING level",
+        "Add 5+ integration tests verifying blocked URLs are rejected",
+        "Typecheck/lint passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Completed in prior work. Using eslint.config.js (ESLint 9 flat config) instead of legacy .eslintrc.js."
+      "notes": "Depends on US-001 (SRE-28)",
+      "blockedBy": ["SRE-28"]
     },
     {
       "id": "US-003",
-      "title": "Create Docker configuration for UI",
-      "description": "As a developer, I need Docker configuration so the UI can be containerized.",
+      "linearTicket": "SRE-30",
+      "title": "Fix timing attack in API key verification",
+      "description": "As a security engineer, I need API key verification to be constant-time to prevent timing-based key enumeration attacks.",
       "acceptanceCriteria": [
-        "Create ui/Dockerfile with multi-stage build (Node build to nginx serve)",
-        "Update docker-compose.yml to include ui service",
-        "nginx routes /api/* to medic-api, /* to static React files",
-        "Create ui/nginx.conf with proxy configuration",
-        "docker-compose up builds and runs UI service",
-        "Typecheck passes"
+        "Modify `_get_api_key_from_db()` in `auth_middleware.py`",
+        "Store matched key in variable instead of early return",
+        "Continue iterating through ALL keys even after match found",
+        "Return matched key only after complete iteration",
+        "Add code comment explaining timing attack mitigation",
+        "Add unit test verifying all keys are checked when match found early",
+        "Typecheck/lint passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Completed in prior work. docker-compose.yml already includes ui service."
+      "notes": "Critical security fix - prevents timing attacks"
     },
     {
       "id": "US-004",
-      "title": "Install and configure Tailwind CSS",
-      "description": "As a developer, I need Tailwind CSS configured for styling the UI.",
+      "linearTicket": "SRE-31",
+      "title": "Fix script execution environment variable leak",
+      "description": "As a security engineer, I need script execution to use an allowlist of environment variables to prevent secrets from leaking.",
       "acceptanceCriteria": [
-        "Install tailwindcss, postcss, autoprefixer",
-        "Create tailwind.config.js with content paths",
-        "Create postcss.config.js",
-        "Add Tailwind directives to index.css",
-        "Tailwind classes work in components",
-        "Typecheck passes"
+        "Create `ALLOWED_SCRIPT_ENV_VARS` constant in `playbook_engine.py`: ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TZ']",
+        "Modify `execute_script_step()` to filter `os.environ` using allowlist",
+        "Only pass allowlisted vars plus explicit `MEDIC_EXECUTION_ID`, `MEDIC_PLAYBOOK_ID`, `MEDIC_SERVICE_ID`",
+        "Add `MEDIC_ADDITIONAL_SCRIPT_ENV_VARS` env var for extending allowlist",
+        "Add code comment documenting security model",
+        "Add unit test verifying MEDIC_SECRETS_KEY is NOT passed to scripts",
+        "Add unit test verifying DATABASE_URL is NOT passed to scripts",
+        "Typecheck/lint passes"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Completed in SRE-60."
+      "notes": "Critical security fix - prevents secret leakage"
     },
     {
       "id": "US-005",
-      "title": "Configure Linq brand color palette in Tailwind",
-      "description": "As a developer, I need the Linq brand colors configured in Tailwind for consistent styling.",
+      "linearTicket": "SRE-32",
+      "title": "Add rate limiting to all endpoints",
+      "description": "As a security engineer, I need all endpoints rate limited to prevent abuse and DoS attacks.",
       "acceptanceCriteria": [
-        "Add Linq brand colors to tailwind.config.js: black (#141414), cream (#FCF9E9), sage (#B0BFB7), linq-blue (#4F9FDF), navy (#1B3D67), linq-green (#83B149), lime (#E8DF6E)",
-        "Add status colors: healthy (#83B149), warning (#CA8A04/#EAB308), error (#DC2626/#EF4444), critical (#991B1B/#DC2626), muted (#6B7280/#9CA3AF)",
-        "Colors accessible via Tailwind classes (e.g., bg-linq-green, text-navy)",
-        "Typecheck passes"
+        "Remove `/metrics` from `RATE_LIMIT_BYPASS_PREFIXES` in `rate_limit_middleware.py`",
+        "Remove `/docs` from `RATE_LIMIT_BYPASS_PREFIXES`",
+        "Add `RATE_LIMIT_HEALTH_REQUESTS` config (default: 1000 req/min) for health endpoints",
+        "Add `RATE_LIMIT_METRICS_REQUESTS` config (default: 100 req/min) for /metrics",
+        "Add `RATE_LIMIT_DOCS_REQUESTS` config (default: 60 req/min) for /docs",
+        "Implement endpoint-specific rate limits in middleware",
+        "Update unit tests to verify no endpoints bypass rate limiting",
+        "Typecheck/lint passes"
       ],
       "priority": 5,
       "passes": true,
-      "notes": "Completed in SRE-60."
+      "notes": "Security hardening"
     },
     {
       "id": "US-006",
-      "title": "Install Geist font family",
-      "description": "As a developer, I need the Geist font family installed for brand-compliant typography.",
+      "linearTicket": "SRE-33",
+      "title": "Extract shared datetime utilities",
+      "description": "As a developer, I need a single source of truth for datetime helpers to eliminate code duplication.",
       "acceptanceCriteria": [
-        "Install geist font package",
-        "Configure Tailwind to use Geist for sans font family",
-        "Configure Tailwind to use Geist Mono for mono font family",
-        "Typography displays correctly in App.tsx",
-        "Typecheck passes"
+        "Create `Medic/Core/utils/__init__.py` (empty file)",
+        "Create `Medic/Core/utils/datetime_helpers.py`",
+        "Add `TIMEZONE = pytz.timezone('America/Chicago')` constant",
+        "Add `now() -> datetime` function returning timezone-aware datetime",
+        "Add `parse_datetime(dt_str: str) -> Optional[datetime]` function",
+        "Replace `_now()` in `playbook_engine.py` with import from datetime_helpers",
+        "Replace `_now()` in `audit_log.py` with import from datetime_helpers",
+        "Replace `_now()` in `slack_approval.py` with import from datetime_helpers",
+        "Replace `_now()` in `secrets.py` with import from datetime_helpers",
+        "Replace `_now()` in `circuit_breaker.py` with import from datetime_helpers",
+        "Replace `_now()` in `job_runs.py` with import from datetime_helpers",
+        "Delete all duplicate `_now()` implementations",
+        "All existing tests pass",
+        "Typecheck/lint passes"
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed in SRE-60. Geist variable fonts copied to public/fonts/ for Vite compatibility."
+      "notes": "Code quality improvement"
     },
     {
       "id": "US-007",
-      "title": "Install shadcn/ui and base components",
-      "description": "As a developer, I need shadcn/ui installed as the component library foundation.",
+      "linearTicket": "SRE-34",
+      "title": "Create playbook package structure",
+      "description": "As a developer, I need the playbook module restructured into a package for maintainability.",
       "acceptanceCriteria": [
-        "Initialize shadcn/ui with npx shadcn-ui@latest init",
-        "Configure components.json for project paths",
-        "Install Button component via shadcn/ui CLI",
-        "Install Card component via shadcn/ui CLI",
-        "Components render correctly in App.tsx",
-        "Typecheck passes"
+        "Create `Medic/Core/playbook/` directory",
+        "Create `Medic/Core/playbook/__init__.py` with public API exports",
+        "Create `Medic/Core/playbook/models.py` with dataclasses: PlaybookExecution, StepResult, ExecutionStatus, StepResultStatus",
+        "Create `Medic/Core/playbook/db.py` with all database operations (create_execution, update_execution, etc.)",
+        "Move relevant code from `playbook_engine.py` to new modules",
+        "Update imports in `playbook_engine.py` to use new modules",
+        "All existing tests pass",
+        "Typecheck/lint passes"
       ],
       "priority": 7,
       "passes": true,
-      "notes": "Completed in SRE-86. shadcn/ui initialized with Button and Card components. CSS variables configured for Linq brand colors. Path aliases set up for @/* imports."
+      "notes": "Part 1 of playbook_engine.py refactor"
     },
     {
       "id": "US-008",
-      "title": "Create theme provider with dark mode support",
-      "description": "As a user, I want to toggle between light and dark themes.",
+      "linearTicket": "SRE-35",
+      "title": "Extract playbook step executors",
+      "description": "As a developer, I need step executors in separate modules for maintainability.",
       "acceptanceCriteria": [
-        "Create ThemeProvider component using React context",
-        "Support light, dark, and system themes",
-        "Theme toggle persists to localStorage",
-        "Dark mode uses Linq dark colors (cream background in dark mode is #141414)",
-        "Add theme toggle button in App.tsx",
-        "Typecheck passes"
+        "Create `Medic/Core/playbook/executors/__init__.py`",
+        "Create `Medic/Core/playbook/executors/webhook.py` with execute_webhook_step",
+        "Create `Medic/Core/playbook/executors/script.py` with execute_script_step",
+        "Create `Medic/Core/playbook/executors/condition.py` with execute_condition_step",
+        "Create `Medic/Core/playbook/executors/wait.py` with execute_wait_step",
+        "Move relevant code from `playbook_engine.py` to executor modules",
+        "Update imports in `playbook_engine.py` to use new executors",
+        "Keep `playbook_engine.py` as facade re-exporting for backwards compatibility",
+        "All 108 existing playbook_engine tests pass",
+        "Typecheck/lint passes"
       ],
       "priority": 8,
       "passes": true,
-      "notes": "Completed in SRE-60. ThemeProvider with React context, light/dark/system themes, localStorage persistence, and ThemeToggle component with sun/moon icons."
+      "notes": "Part 2 of playbook_engine.py refactor. Depends on US-007.",
+      "blockedBy": ["SRE-34"]
     },
     {
       "id": "US-009",
-      "title": "Install React Router and create basic routes",
-      "description": "As a developer, I need routing configured for multi-page navigation.",
+      "linearTicket": "SRE-36",
+      "title": "Implement RedisRateLimiter class",
+      "description": "As an operator, I need distributed rate limiting via Redis so limits work correctly across multiple API replicas.",
       "acceptanceCriteria": [
-        "Install react-router-dom v6",
-        "Create BrowserRouter wrapper in main.tsx",
-        "Create placeholder pages: Dashboard, Services, Alerts, Playbooks, AuditLogs, Settings",
-        "Configure routes in App.tsx",
-        "Navigation between routes works",
-        "Typecheck passes"
+        "Replace NotImplementedError in `RedisRateLimiter` class in `rate_limiter.py`",
+        "Add `redis` package to requirements.txt",
+        "Implement `check_rate_limit()` using Redis MULTI/EXEC for atomic operations",
+        "Implement sliding window algorithm matching InMemoryRateLimiter behavior",
+        "Add `REDIS_URL` environment variable support for connection string",
+        "Add connection pooling with `REDIS_POOL_SIZE` config (default: 10)",
+        "Implement `is_healthy()` method to check Redis connectivity",
+        "Add 15+ unit tests with Redis mocking (use fakeredis or unittest.mock)",
+        "Typecheck/lint passes"
       ],
       "priority": 9,
       "passes": true,
-      "notes": "Completed in SRE-87. Installed react-router-dom v6, created src/pages/ with placeholder pages, configured BrowserRouter and routes with navigation header."
+      "notes": "Infrastructure for distributed rate limiting"
     },
     {
       "id": "US-010",
-      "title": "Create sidebar navigation component",
-      "description": "As a user, I want a sidebar navigation to move between sections.",
+      "linearTicket": "SRE-37",
+      "title": "Add rate limiter factory with auto-selection",
+      "description": "As an operator, I need the rate limiter to automatically select Redis or in-memory based on configuration.",
       "acceptanceCriteria": [
-        "Create Sidebar component with navigation links",
-        "Links: Dashboard, Services, Alerts, Playbooks, Audit Logs, Settings",
-        "Active link is highlighted",
-        "Use Lucide icons for each nav item",
-        "Sidebar styled with Linq colors",
-        "Typecheck passes"
+        "Create `get_rate_limiter()` factory function in `rate_limiter.py`",
+        "If `REDIS_URL` is set and `MEDIC_RATE_LIMITER_TYPE` is 'auto' or 'redis', return RedisRateLimiter",
+        "If RedisRateLimiter fails to connect, fall back to InMemoryRateLimiter with WARNING log",
+        "If `REDIS_URL` is not set, return InMemoryRateLimiter with INFO log",
+        "Add `MEDIC_RATE_LIMITER_TYPE` env var: 'redis', 'memory', 'auto' (default: 'auto')",
+        "Cache limiter instance as module-level singleton",
+        "Update `rate_limit_middleware.py` to use `get_rate_limiter()` factory",
+        "Add unit tests for factory selection logic",
+        "Typecheck/lint passes"
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Completed in SRE-64. Created Sidebar component with Lucide icons (LayoutDashboard, Server, AlertTriangle, BookOpen, ScrollText, Settings), active link highlighting via useLocation(), and Linq brand color styling."
+      "notes": "Depends on US-009",
+      "blockedBy": ["SRE-36"]
     },
     {
       "id": "US-011",
-      "title": "Create header component with branding",
-      "description": "As a user, I want a header showing the Medic logo and theme toggle.",
+      "linearTicket": "SRE-38",
+      "title": "Create production Dockerfile with multi-arch support",
+      "description": "As a DevOps engineer, I need a production-optimized Docker image supporting both amd64 and arm64 architectures.",
       "acceptanceCriteria": [
-        "Create Header component",
-        "Display Medic logo from docs/assets/medic-icon-all-green.png",
-        "Include theme toggle button (sun/moon icon)",
-        "Header uses Linq brand colors",
-        "Typecheck passes"
+        "Create `Dockerfile` in repository root",
+        "Use multi-stage build: builder stage for dependencies, runtime stage for app",
+        "Base image: `python:3.11-slim-bookworm` (supports both amd64 and arm64)",
+        "Install only production dependencies from requirements.txt (not dev)",
+        "Create non-root user with uid 1000",
+        "Set `PYTHONUNBUFFERED=1` and `PYTHONDONTWRITEBYTECODE=1`",
+        "Expose port 8080",
+        "Add HEALTHCHECK instruction: `curl -f http://localhost:8080/health || exit 1`",
+        "Add labels: maintainer, version, description",
+        "Create `.dockerignore` excluding: .git, tests/, __pycache__, *.pyc, .env, .venv",
+        "Ensure no architecture-specific dependencies (pure Python or cross-platform wheels)",
+        "Verify image builds for amd64: `docker build --platform linux/amd64 .`",
+        "Verify image builds for arm64: `docker build --platform linux/arm64 .`"
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Completed in SRE-64. Created Header component with Medic logo (copied to ui/public/assets/) and ThemeToggle. Updated App.tsx to use Header component."
+      "notes": "Container setup - must support both amd64 (x86) and arm64 (Graviton/M1)"
     },
     {
       "id": "US-012",
-      "title": "Create main layout with sidebar and header",
-      "description": "As a user, I want a consistent layout across all pages.",
+      "linearTicket": "SRE-39",
+      "title": "Create Docker Compose for local development",
+      "description": "As a developer, I need Docker Compose to run Medic with all dependencies locally.",
       "acceptanceCriteria": [
-        "Create Layout component that combines Header, Sidebar, and content area",
-        "Content area renders child routes via Outlet",
-        "Layout is responsive (sidebar collapses on mobile)",
-        "Add hamburger menu for mobile navigation",
-        "Typecheck passes"
+        "Create `docker-compose.yml` in repository root",
+        "Define service: medic-api (build from Dockerfile, port 8080)",
+        "Define service: medic-worker (build from Dockerfile, different command)",
+        "Define service: postgres (image: postgres:15, persistent volume, healthcheck)",
+        "Define service: redis (image: redis:7, persistent volume, healthcheck)",
+        "Configure medic-api depends_on postgres and redis with condition: service_healthy",
+        "Create `.env.example` with all required environment variables (placeholder values)",
+        "Environment variables loaded from .env file",
+        "Verify `docker-compose config` validates successfully"
       ],
       "priority": 12,
       "passes": true,
-      "notes": "Completed in SRE-64. Created Layout component with Header, Sidebar, and Outlet. Responsive design with mobile sidebar using Sheet component. Hamburger menu triggers mobile navigation drawer."
+      "notes": "Local development setup"
     },
     {
       "id": "US-013",
-      "title": "Create API client module with TypeScript types",
-      "description": "As a developer, I need an API client to communicate with the Medic backend.",
+      "linearTicket": "SRE-40",
+      "title": "Create Helm chart structure for Medic",
+      "description": "As a DevOps engineer, I need a Helm chart for deploying Medic to Kubernetes.",
       "acceptanceCriteria": [
-        "Create src/lib/api.ts with fetch-based API client",
-        "Define TypeScript types for Service, Alert, Heartbeat entities",
-        "Support GET, POST, PUT, DELETE methods",
-        "Include Authorization header with API key",
-        "Handle common error responses (401, 403, 404, 500)",
-        "Typecheck passes"
+        "Create `helm/medic/` directory in repository root",
+        "Create `helm/medic/Chart.yaml` with name, version, appVersion, description",
+        "Create `helm/medic/values.yaml` with default configuration values",
+        "Create `helm/medic/templates/_helpers.tpl` with common template helpers",
+        "Create `helm/medic/templates/namespace.yaml` (optional, controlled by value)",
+        "Create `helm/medic/templates/NOTES.txt` with post-install instructions",
+        "Values should include: image.repository, image.tag, replicaCount, resources, env, secrets",
+        "Verify `helm lint helm/medic` passes",
+        "Verify `helm template medic helm/medic` renders valid YAML"
       ],
       "priority": 13,
       "passes": true,
-      "notes": "Completed in SRE-61. Created fetch-based API client with TypeScript types for Service, Alert, Heartbeat, AuditLog, and Playbook entities. Includes ApiError class, createApiClient factory, and methods for all endpoints."
+      "notes": "Helm chart foundation - will be deployed via Terraform helm_release"
     },
     {
       "id": "US-014",
-      "title": "Create auth context and API key storage",
-      "description": "As a user, I need to enter my API key to authenticate.",
+      "linearTicket": "SRE-41",
+      "title": "Create API Deployment Helm template",
+      "description": "As a DevOps engineer, I need a Helm template for the Medic API Deployment.",
       "acceptanceCriteria": [
-        "Create AuthContext with isAuthenticated, apiKey, login, logout",
-        "Store API key in sessionStorage (not localStorage)",
-        "Provide useAuth hook for components",
-        "API client uses apiKey from context",
-        "Typecheck passes"
+        "Create `helm/medic/templates/api-deployment.yaml`",
+        "Deployment name: {{ include \"medic.fullname\" . }}-api",
+        "Replicas from values: {{ .Values.api.replicaCount }}",
+        "Image: {{ .Values.image.repository }}:{{ .Values.image.tag }}",
+        "Resources from values: {{ .Values.api.resources }}",
+        "Liveness probe: /health/live, configurable delays",
+        "Readiness probe: /health/ready, configurable delays",
+        "Security context: runAsNonRoot, runAsUser, readOnlyRootFilesystem",
+        "Pod anti-affinity for spreading across nodes",
+        "Topology spread constraints for Karpenter multi-AZ distribution",
+        "Environment variables from values and secrets",
+        "Add values.yaml defaults for api section",
+        "Verify `helm template` renders valid deployment"
       ],
       "priority": 14,
       "passes": true,
-      "notes": "Completed in SRE-61. Created AuthProvider with isAuthenticated, apiKey, login, logout. Uses sessionStorage for API key persistence. useAuth hook for component access. API client synced via apiClient.setApiKey()."
+      "notes": "Core API deployment template with Karpenter-aware scheduling"
     },
     {
       "id": "US-015",
-      "title": "Create login page for API key entry",
-      "description": "As a user, I want a login page to enter my API key.",
+      "linearTicket": "SRE-42",
+      "title": "Create Worker Deployment Helm template",
+      "description": "As a DevOps engineer, I need a Helm template for the Medic Worker Deployment.",
       "acceptanceCriteria": [
-        "Create Login page with API key input field",
-        "Style with Linq/Medic branding",
-        "Validate API key by making test request to /health",
-        "Show error message for invalid keys",
-        "Redirect to Dashboard on successful login",
-        "Typecheck passes"
+        "Create `helm/medic/templates/worker-deployment.yaml`",
+        "Deployment name: {{ include \"medic.fullname\" . }}-worker",
+        "Replicas: {{ .Values.worker.replicaCount }} (default: 1)",
+        "Container command: ['python', '-m', 'Medic.Worker.monitor']",
+        "Resources from values: {{ .Values.worker.resources }}",
+        "Liveness probe configurable",
+        "Security context matching API deployment",
+        "Environment variables shared with API",
+        "Add values.yaml defaults for worker section",
+        "Verify `helm template` renders valid deployment"
       ],
       "priority": 15,
       "passes": true,
-      "notes": "Completed in SRE-61. Created Login page with API key input, Linq/Medic branding, /health validation, error messages, and redirect to Dashboard. Added shadcn/ui Input component."
+      "notes": "Worker deployment template"
     },
     {
       "id": "US-016",
-      "title": "Add protected route wrapper",
-      "description": "As a developer, I need unauthenticated users redirected to login.",
+      "linearTicket": "SRE-43",
+      "title": "Create Service and Ingress Helm templates",
+      "description": "As a DevOps engineer, I need Helm templates for Service and ALB Ingress.",
       "acceptanceCriteria": [
-        "Create ProtectedRoute component",
-        "Check isAuthenticated from AuthContext",
-        "Redirect to /login if not authenticated",
-        "Wrap all routes except /login in ProtectedRoute",
-        "Typecheck passes"
+        "Create `helm/medic/templates/api-service.yaml` - ClusterIP service",
+        "Service port configurable via values",
+        "Create `helm/medic/templates/ingress.yaml` with conditional creation",
+        "Ingress enabled via {{ .Values.ingress.enabled }}",
+        "ALB annotations configurable via values",
+        "Host configurable: {{ .Values.ingress.host }}",
+        "TLS configurable: {{ .Values.ingress.tls }}",
+        "Certificate ARN configurable for ALB",
+        "Add values.yaml defaults for ingress section",
+        "Verify `helm template` renders valid service and ingress"
       ],
       "priority": 16,
       "passes": true,
-      "notes": "Completed in SRE-61. Created ProtectedRoute component that checks isAuthenticated and redirects to /login. Wraps Layout route in App.tsx."
+      "notes": "External access via ALB"
     },
     {
       "id": "US-017",
-      "title": "Install React Query for server state",
-      "description": "As a developer, I need React Query for efficient data fetching.",
+      "linearTicket": "SRE-44",
+      "title": "Create ConfigMap, Secret, and ServiceAccount Helm templates",
+      "description": "As a DevOps engineer, I need Helm templates for configuration and secrets management.",
       "acceptanceCriteria": [
-        "Install @tanstack/react-query",
-        "Create QueryClient and QueryClientProvider in main.tsx",
-        "Configure default staleTime and cacheTime",
-        "Create useServices query hook example",
-        "Typecheck passes"
+        "Create `helm/medic/templates/configmap.yaml` for non-sensitive config",
+        "ConfigMap values from {{ .Values.config }} map",
+        "Create `helm/medic/templates/secret.yaml` for sensitive values (optional, for non-ESO use)",
+        "Secret creation controlled by {{ .Values.secret.create }}",
+        "Create `helm/medic/templates/external-secret.yaml` for ESO integration",
+        "ExternalSecret creation controlled by {{ .Values.externalSecret.enabled }}",
+        "ExternalSecret secretStoreRef configurable",
+        "Create `helm/medic/templates/serviceaccount.yaml`",
+        "ServiceAccount annotations for IRSA: {{ .Values.serviceAccount.annotations }}",
+        "Add values.yaml defaults for config, secret, externalSecret, serviceAccount sections",
+        "Verify `helm template` renders correctly with different value combinations"
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Completed in SRE-88. Installed @tanstack/react-query, created QueryClient with 30s staleTime and 5m gcTime, added QueryClientProvider in main.tsx, created useServices and useService hooks in src/hooks/."
+      "notes": "Configuration management - supports both direct secrets and ESO"
     },
     {
       "id": "US-018",
-      "title": "Create Dashboard page with summary cards",
-      "description": "As an SRE, I want to see service health summary on the dashboard.",
+      "linearTicket": "SRE-45",
+      "title": "Create KEDA ScaledObject and PDB Helm templates",
+      "description": "As a DevOps engineer, I need Helm templates for KEDA-based autoscaling and availability.",
       "acceptanceCriteria": [
-        "Create Dashboard page component",
-        "Display summary cards: Total Services, Active Services, Down Services, Active Alerts",
-        "Cards use Linq color scheme (green for healthy, red for down)",
-        "Use React Query to fetch data from API",
-        "Show loading skeletons while fetching",
-        "Typecheck passes"
+        "Create `helm/medic/templates/api-scaledobject.yaml` for KEDA",
+        "ScaledObject creation controlled by {{ .Values.api.autoscaling.enabled }}",
+        "ScaledObject targets medic-api deployment",
+        "Min/max replicas configurable via values",
+        "Configure CPU trigger with threshold from values",
+        "Configure Prometheus trigger for custom metrics (e.g., request rate)",
+        "Add cooldownPeriod and pollingInterval configuration",
+        "Create `helm/medic/templates/worker-pdb.yaml` for PodDisruptionBudget",
+        "PDB creation controlled by {{ .Values.worker.pdb.enabled }}",
+        "Add Karpenter-friendly annotations for node scheduling (provisioner hints)",
+        "Add topology spread constraints for multi-AZ distribution",
+        "Add values.yaml defaults for autoscaling (keda) and pdb sections",
+        "Verify `helm template` renders valid ScaledObject and PDB"
       ],
       "priority": 18,
       "passes": true,
-      "notes": "Completed in SRE-66. Created Dashboard with summary cards (Total Services, Active Services, Down Services, Active Alerts), useAlerts hook, Skeleton component, loading states, and error handling."
+      "notes": "Uses KEDA for scaling, Karpenter-aware scheduling"
     },
     {
       "id": "US-019",
-      "title": "Create Services list page with table",
-      "description": "As a developer, I want to view all registered services in a table.",
+      "linearTicket": "SRE-46",
+      "title": "Implement OpenTelemetry instrumentation for tracing",
+      "description": "As an operator, I need distributed tracing with OpenTelemetry for request correlation across services.",
       "acceptanceCriteria": [
-        "Create Services page component",
-        "Display table with columns: Service Name, Heartbeat Name, Status, Down, Muted, Team, Priority",
-        "Fetch services via React Query",
-        "Show loading skeleton while fetching",
-        "Handle empty state with message",
-        "Typecheck passes"
+        "Add `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-instrumentation-flask` to requirements.txt",
+        "Create `Medic/Core/telemetry.py` module for OTEL setup",
+        "Configure TracerProvider with OTLP exporter (endpoint from env var)",
+        "Auto-instrument Flask app with opentelemetry-instrumentation-flask",
+        "Generate trace_id and span_id for each request",
+        "Propagate W3C trace context headers",
+        "Add `OTEL_EXPORTER_OTLP_ENDPOINT` env var (default: http://alloy:4317)",
+        "Add `OTEL_SERVICE_NAME` env var (default: medic)",
+        "Add `OTEL_RESOURCE_ATTRIBUTES` for environment, version labels",
+        "Store current trace_id in Flask g context for log correlation",
+        "Add unit tests for telemetry setup",
+        "Typecheck/lint passes"
       ],
       "priority": 19,
       "passes": true,
-      "notes": "Completed in SRE-67. Created Services page with shadcn/ui Table and Badge components. Includes loading skeleton, empty state, and status indicators."
+      "notes": "OTEL tracing - Alloy collects via OTLP"
     },
     {
       "id": "US-020",
-      "title": "Add pagination to Services table",
-      "description": "As a developer, I want pagination on the services table.",
+      "linearTicket": "SRE-47",
+      "title": "Configure structured JSON logging with OTEL semantics",
+      "description": "As an operator, I need structured JSON logs with OpenTelemetry semantic conventions and trace correlation for Grafana/Loki.",
       "acceptanceCriteria": [
-        "Add pagination controls (Previous, Next, page numbers)",
-        "Default 25 items per page",
-        "Page state persists in URL query params",
-        "Pagination controls styled with Linq colors",
-        "Typecheck passes"
+        "Create `Medic/Core/logging_config.py` module",
+        "Implement JSONFormatter with OTEL semantic conventions",
+        "Include standard fields: timestamp, severity (OTEL level names), body (message)",
+        "Include resource attributes: service.name, service.version, deployment.environment",
+        "Include trace context: trace_id, span_id (from current OTEL context)",
+        "Include request context: http.method, http.route, http.status_code",
+        "Add `MEDIC_LOG_FORMAT` env var: 'json' (default) or 'text'",
+        "Add `MEDIC_LOG_LEVEL` env var: DEBUG, INFO, WARNING, ERROR",
+        "Integrate with telemetry.py to extract trace_id from current span",
+        "Replace logger.log(level=20, msg=...) calls with standard methods",
+        "Logs output to stdout for Alloy collection",
+        "Add unit tests for JSONFormatter",
+        "Typecheck/lint passes"
       ],
       "priority": 20,
       "passes": true,
-      "notes": "Completed in SRE-89. Created TablePagination component with usePagination hook for URL state management. Pagination controls styled with Linq colors (linq-blue for active page)."
+      "notes": "OTEL semantic logging - trace_id enables Grafana log-to-trace correlation",
+      "blockedBy": ["SRE-46"]
     },
     {
       "id": "US-021",
-      "title": "Add sorting to Services table",
-      "description": "As a developer, I want to sort the services table by column.",
+      "linearTicket": "SRE-48",
+      "title": "Add OTEL metrics with exemplars for trace correlation",
+      "description": "As an operator, I need Prometheus metrics with OTEL semantics and trace exemplars for Grafana metrics-to-trace correlation.",
       "acceptanceCriteria": [
-        "Click column header to sort ascending",
-        "Click again to sort descending",
-        "Visual indicator for sort direction",
-        "Sort state persists in URL query params",
-        "Typecheck passes"
+        "Add `opentelemetry-instrumentation-prometheus` or use prometheus_client with exemplars",
+        "Update `Medic/Core/metrics.py` to use OTEL metric naming conventions",
+        "Add `medic_info` gauge with service.name, service.version, deployment.environment labels",
+        "Configure histogram metrics to include trace_id exemplars",
+        "Add exemplar support to request duration histogram",
+        "Add exemplar support to playbook execution duration histogram",
+        "Ensure metrics endpoint (/metrics) exposes exemplars in OpenMetrics format",
+        "Add resource attributes as metric labels where appropriate",
+        "Document available metrics with OTEL semantic names in `docs/metrics.md`",
+        "Typecheck/lint passes"
       ],
       "priority": 21,
       "passes": true,
-      "notes": "Completed in SRE-90. Created useSort hook and SortableTableHead component for URL-based sort state management. Sort icons (ArrowUp/ArrowDown/ArrowUpDown) indicate current sort direction. Default sort is service_name ascending."
+      "notes": "Exemplars enable Grafana to jump from metric spike to example trace",
+      "blockedBy": ["SRE-46"]
     },
     {
       "id": "US-022",
-      "title": "Add filtering to Services table",
-      "description": "As a developer, I want to filter services by status.",
+      "linearTicket": "SRE-49",
+      "title": "Create ServiceMonitor and PodMonitor Helm templates for Alloy",
+      "description": "As an operator, I need ServiceMonitor for Alloy to discover and scrape Medic metrics.",
       "acceptanceCriteria": [
-        "Add filter dropdowns: active/inactive, muted/unmuted, down/up",
-        "Filters update URL query params",
-        "Multiple filters combine with AND logic",
-        "Clear filters button",
-        "Typecheck passes"
+        "Create `helm/medic/templates/servicemonitor.yaml`",
+        "ServiceMonitor creation controlled by {{ .Values.metrics.serviceMonitor.enabled }}",
+        "Target medic-api service on /metrics endpoint",
+        "Scrape interval configurable (default: 30s)",
+        "Enable exemplar scraping with enableFeatures annotation if needed",
+        "Add metric relabeling for OTEL resource attributes",
+        "Add label: environment from {{ .Values.global.environment }}",
+        "Create `helm/medic/templates/podmonitor.yaml` for worker if needed",
+        "Add values.yaml defaults for metrics.serviceMonitor section",
+        "Verify `helm template` renders valid ServiceMonitor"
       ],
       "priority": 22,
       "passes": true,
-      "notes": "Completed in SRE-91. Created useFilter hook and TableFilters component for URL-based filter state management. Filter dropdowns for Status (active/inactive), Muted (muted/not muted), and Health (down/up). Filters combine with sort and pagination, resetting to page 1 when changed."
+      "notes": "Alloy uses ServiceMonitor CRDs for metric discovery"
     },
     {
       "id": "US-023",
-      "title": "Add search to Services table",
-      "description": "As a developer, I want to search services by name.",
+      "linearTicket": "SRE-50",
+      "title": "Create Grafana dashboard ConfigMap with trace/log links",
+      "description": "As an operator, I need a Grafana dashboard with drill-down links to traces and logs.",
       "acceptanceCriteria": [
-        "Add search input above table",
-        "Search by service name or heartbeat name",
-        "Debounce search input by 300ms",
-        "Search term persists in URL query params",
-        "Typecheck passes"
+        "Create `helm/medic/templates/grafana-dashboard.yaml` as ConfigMap",
+        "Dashboard creation controlled by {{ .Values.grafana.dashboard.enabled }}",
+        "ConfigMap has grafana_dashboard: '1' label for sidecar discovery",
+        "Dashboard panels: request rate, error rate, latency p50/p95/p99 with exemplar display",
+        "Dashboard panels: auth failures, rate limit hits, playbook executions",
+        "Add data links from metrics panels to Tempo traces (using exemplar trace_id)",
+        "Add data links from metrics panels to Loki logs (using time range and labels)",
+        "Dashboard variables: environment, service, time range",
+        "Configure Tempo and Loki datasource references",
+        "Store dashboard JSON in `helm/medic/dashboards/medic-overview.json`",
+        "Add values.yaml defaults for grafana section",
+        "Verify dashboard JSON is valid"
       ],
       "priority": 23,
       "passes": true,
-      "notes": "Completed in SRE-92. Created useSearch hook with debounced URL state management and SearchInput component. Search integrates with existing filter/sort/pagination pipeline."
+      "notes": "Full observability correlation: metrics -> traces -> logs"
     },
     {
       "id": "US-024",
-      "title": "Create Service detail page",
-      "description": "As a developer, I want to view details of a specific service.",
+      "linearTicket": "SRE-51",
+      "title": "Create GitHub Actions workflow for build and test",
+      "description": "As a DevOps engineer, I need automated builds and tests on push.",
       "acceptanceCriteria": [
-        "Create ServiceDetail page at /services/:id route",
-        "Display all service fields: heartbeat_name, service_name, active, alert_interval, threshold, team, priority, muted, down, runbook",
-        "Fetch service data via React Query",
-        "Back button returns to Services list",
-        "Typecheck passes"
+        "Create `.github/workflows/build.yml`",
+        "Trigger on: push to main, pull_request to main, workflow_dispatch",
+        "Job: lint - runs ruff check and mypy",
+        "Job: test - runs pytest with coverage, uploads coverage artifact",
+        "Job: build - builds Docker image, tags with git SHA",
+        "Job: helm-lint - runs helm lint on chart",
+        "Cache pip dependencies using actions/cache",
+        "Cache Docker layers using docker/build-push-action cache",
+        "Jobs run in parallel where possible",
+        "Verify workflow YAML is valid"
       ],
       "priority": 24,
       "passes": true,
-      "notes": "Completed in SRE-68. Created ServiceDetail page with all service fields, loading/error/not-found states, and Back button. Uses heartbeat_name for API lookup."
+      "notes": "CI pipeline"
     },
     {
       "id": "US-025",
-      "title": "Create Alerts list page",
-      "description": "As an SRE, I want to view all alerts in a table.",
+      "linearTicket": "SRE-52",
+      "title": "Create GitHub Actions workflow for multi-arch ECR push",
+      "description": "As a DevOps engineer, I need Docker images built for both amd64 and arm64 and pushed to ECR.",
       "acceptanceCriteria": [
-        "Create Alerts page component",
-        "Display table with columns: Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration",
-        "Color-coded priority badges",
-        "Fetch alerts via React Query",
-        "Handle empty state",
-        "Typecheck passes"
+        "Extend `.github/workflows/build.yml` with push-ecr job",
+        "Job runs only on push to main (not PRs): if: github.ref == 'refs/heads/main'",
+        "Configure AWS credentials via OIDC using aws-actions/configure-aws-credentials",
+        "Login to ECR using aws-actions/amazon-ecr-login",
+        "Use docker/setup-qemu-action for cross-platform emulation",
+        "Use docker/setup-buildx-action for multi-arch builds",
+        "Build and push multi-arch manifest with: platforms: linux/amd64,linux/arm64",
+        "Use docker/build-push-action with buildx",
+        "Push image with tags: ${{ github.sha }}, latest (as manifest lists)",
+        "Enable provenance and SBOM attestations",
+        "Document required secrets: AWS_ROLE_ARN, AWS_REGION, ECR_REPOSITORY"
       ],
       "priority": 25,
       "passes": true,
-      "notes": "Completed in SRE-72. Created Alerts page with table displaying Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration columns. Color-coded priority badges, loading/error/empty states."
+      "notes": "Multi-arch build supports both x86 EC2/EKS and Graviton instances"
     },
     {
       "id": "US-026",
-      "title": "Add filtering and sorting to Alerts table",
-      "description": "As an SRE, I want to filter and sort alerts.",
+      "linearTicket": "SRE-53",
+      "title": "Create GitHub Actions workflow for Terraform plan/apply",
+      "description": "As a DevOps engineer, I need automated Terraform workflows for infrastructure and Helm deployment.",
       "acceptanceCriteria": [
-        "Filter by: active/resolved, priority (P1/P2/P3)",
-        "Sort by any column (default: created date descending)",
-        "Filters and sort persist in URL",
-        "Typecheck passes"
+        "Create `.github/workflows/terraform.yml`",
+        "Trigger on: push to main (paths: terraform/**), pull_request (paths: terraform/**), workflow_dispatch",
+        "Input: environment (dev/prod), action (plan/apply)",
+        "Configure AWS credentials via OIDC",
+        "Job: terraform-plan - runs terraform init, validate, plan",
+        "Upload plan artifact for review",
+        "Job: terraform-apply - runs terraform apply (requires approval for prod)",
+        "Terraform applies both AWS infra AND Helm chart via helm_release resource",
+        "Production environment requires manual approval",
+        "Comment plan output on PRs using github-script",
+        "Document required GitHub environments and secrets"
       ],
       "priority": 26,
       "passes": true,
-      "notes": "Completed in SRE-93. Added TableFilters with Status (active/resolved) and Priority (P1/P2/P3) filters. All columns sortable with default sort by created_date descending."
+      "notes": "Terraform deploys infra (RDS, Redis, Secrets) AND Helm chart via helm_release"
     },
     {
       "id": "US-027",
-      "title": "Create Alert detail page",
-      "description": "As an SRE, I want to view details of a specific alert.",
+      "linearTicket": "SRE-54",
+      "title": "Create Terraform module for RDS PostgreSQL",
+      "description": "As a DevOps engineer, I need Terraform to provision RDS PostgreSQL.",
       "acceptanceCriteria": [
-        "Create AlertDetail page at /alerts/:id route",
-        "Display all alert fields with human-readable timestamps",
-        "Link to associated service detail page",
-        "Link to runbook if configured",
-        "Typecheck passes"
+        "Create `terraform/` directory structure",
+        "Create `terraform/modules/rds/main.tf` with aws_db_instance, aws_db_subnet_group, aws_security_group",
+        "Create `terraform/modules/rds/variables.tf` with: instance_class, multi_az, vpc_id, subnet_ids, eks_security_group_id",
+        "Create `terraform/modules/rds/outputs.tf` exposing: endpoint, port, database_name, connection_string",
+        "PostgreSQL 15, storage 20GB gp3 with autoscaling to 100GB",
+        "Security group allows inbound 5432 from EKS node security group only",
+        "Automated backups: 7 days retention",
+        "Create `terraform/.gitignore` for *.tfstate, .terraform/, *.tfvars",
+        "Verify `terraform validate` passes in modules/rds"
       ],
       "priority": 27,
       "passes": true,
-      "notes": "Completed in SRE-73. Created AlertDetail page with all alert fields, human-readable timestamps (absolute + relative), link to service detail page, runbook link, loading/error/not-found states."
+      "notes": "RDS outputs will be passed to Helm via helm_release"
     },
     {
       "id": "US-028",
-      "title": "Create Playbooks list page",
-      "description": "As an SRE, I want to view all playbooks.",
+      "linearTicket": "SRE-55",
+      "title": "Create Terraform module for ElastiCache Redis",
+      "description": "As a DevOps engineer, I need Terraform to provision ElastiCache Redis.",
       "acceptanceCriteria": [
-        "Create Playbooks page component",
-        "Display table with: name, description, trigger type, last run, status",
-        "Filter by: active/inactive, trigger type",
-        "Search by playbook name",
-        "Typecheck passes"
+        "Create `terraform/modules/elasticache/main.tf` with aws_elasticache_cluster, aws_elasticache_subnet_group, aws_security_group",
+        "Create `terraform/modules/elasticache/variables.tf` with: node_type, vpc_id, subnet_ids, eks_security_group_id",
+        "Create `terraform/modules/elasticache/outputs.tf` exposing: endpoint, port, connection_string",
+        "Redis 7.x, single node (cluster_mode disabled)",
+        "Security group allows inbound 6379 from EKS node security group only",
+        "No snapshots (ephemeral rate limit data)",
+        "Verify `terraform validate` passes in modules/elasticache"
       ],
       "priority": 28,
       "passes": true,
-      "notes": "Completed in SRE-74. Created Playbooks page with table displaying name, description, trigger type, last run, and status columns. Filter by active/inactive and trigger type. Search by playbook name with debounce. Added getPlaybooks API method and usePlaybooks hook."
+      "notes": "Redis outputs will be passed to Helm via helm_release"
     },
     {
       "id": "US-029",
-      "title": "Create Audit Logs page",
-      "description": "As an SRE, I want to view audit logs.",
+      "linearTicket": "SRE-56",
+      "title": "Create Terraform module for Secrets Manager and IAM",
+      "description": "As a DevOps engineer, I need Terraform to manage Secrets Manager and IAM for ESO.",
       "acceptanceCriteria": [
-        "Create AuditLogs page component",
-        "Display table with: Timestamp, Action Type, Actor, Service/Execution ID, Summary",
-        "Filter by: action type, actor, date range",
-        "Pagination with 25 items per page",
-        "Typecheck passes"
+        "Create `terraform/modules/secrets/main.tf` with aws_secretsmanager_secret",
+        "Create `terraform/modules/secrets/variables.tf` with: environment, eks_oidc_provider_arn, eks_namespace",
+        "Create `terraform/modules/secrets/outputs.tf` exposing: secret_arn, iam_role_arn",
+        "Create secret: medic/${var.environment}/secrets",
+        "Create IAM role with trust policy for EKS OIDC (for IRSA)",
+        "Create IAM policy allowing secretsmanager:GetSecretValue, secretsmanager:DescribeSecret",
+        "Attach policy to role",
+        "Output IAM role ARN for ServiceAccount annotation",
+        "Verify `terraform validate` passes in modules/secrets"
       ],
       "priority": 29,
       "passes": true,
-      "notes": "Completed in SRE-78. Created AuditLogs page with table displaying all audit log entries. Server-side pagination with 25 items per page. Filter by action type (dropdown), actor (text input with debounce), and date range (date pickers). Added useAuditLogs React Query hook."
+      "notes": "IAM role ARN passed to Helm for ServiceAccount IRSA annotation"
     },
     {
       "id": "US-030",
-      "title": "Create Settings page",
-      "description": "As a user, I want to configure UI preferences.",
+      "linearTicket": "SRE-57",
+      "title": "Create Terraform root module with helm_release for Medic",
+      "description": "As a DevOps engineer, I need a root Terraform module that provisions AWS resources and deploys Helm chart.",
       "acceptanceCriteria": [
-        "Create Settings page component",
-        "Theme toggle (light/dark mode)",
-        "Auto-refresh interval configuration (15s, 30s, 60s, disabled)",
-        "Settings persisted in localStorage",
-        "Reset to defaults button",
-        "Typecheck passes"
+        "Create `terraform/environments/dev/main.tf` calling rds, elasticache, secrets modules",
+        "Add helm provider configuration with EKS cluster authentication",
+        "Add helm_release resource for medic chart",
+        "Pass RDS endpoint to Helm values: set { name = 'config.DATABASE_URL', value = module.rds.connection_string }",
+        "Pass Redis endpoint to Helm values",
+        "Pass IAM role ARN for ServiceAccount annotation",
+        "Pass environment-specific values (image tag, replicas, host)",
+        "Create `terraform/environments/dev/variables.tf` with all required inputs",
+        "Create `terraform/environments/dev/outputs.tf` with endpoints and URLs",
+        "Create `terraform/environments/dev/backend.tf` for S3 state backend",
+        "Create `terraform/environments/dev/terraform.tfvars.example`",
+        "Data sources for existing VPC and EKS cluster",
+        "Create `terraform/environments/prod/` with same structure (placeholder)",
+        "Create `terraform/README.md` with usage instructions",
+        "Verify `terraform init && terraform validate` passes"
       ],
       "priority": 30,
       "passes": true,
-      "notes": "Completed in SRE-81. Created Settings page with theme toggle (light/dark/system), auto-refresh interval configuration (15s/30s/60s/disabled), SettingsProvider for state management with localStorage persistence, and Reset to defaults button."
+      "notes": "Single terraform apply provisions infra AND deploys app via Helm",
+      "blockedBy": ["SRE-54", "SRE-55", "SRE-56"]
     },
     {
       "id": "US-031",
-      "title": "Add unit tests for core components",
-      "description": "As a developer, I need unit tests for key components.",
+      "linearTicket": "SRE-58",
+      "title": "Create database migration Helm hook job",
+      "description": "As a DevOps engineer, I need database migrations to run automatically before Helm deployments.",
       "acceptanceCriteria": [
-        "Install vitest and @testing-library/react",
-        "Add vitest config to vite.config.ts",
-        "Write tests for ThemeProvider",
-        "Write tests for AuthContext",
-        "Write tests for API client",
-        "npm run test passes",
-        "Typecheck passes"
+        "Create `helm/medic/templates/migration-job.yaml` as Kubernetes Job",
+        "Use Helm hook: helm.sh/hook: pre-upgrade,pre-install",
+        "Use Helm hook weight: helm.sh/hook-weight: '-5' (run before app)",
+        "Use Helm hook delete policy: helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded",
+        "Job runs migrations using same image as app",
+        "Container command: ['python', '-m', 'scripts.run_migrations']",
+        "Job uses same secrets and config as API deployment",
+        "backoffLimit: 3",
+        "Create `scripts/run_migrations.py` that applies migrations from migrations/ directory",
+        "Job creation controlled by {{ .Values.migrations.enabled }}",
+        "Add values.yaml defaults for migrations section",
+        "Document migration workflow in README"
       ],
       "priority": 31,
       "passes": true,
-      "notes": "Completed in SRE-94. Installed vitest, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event. Configured vitest with jsdom environment and test setup file. 57 tests passing: ThemeProvider (12 tests), AuthContext (12 tests), API client (33 tests)."
-    },
-    {
-      "id": "US-032",
-      "title": "Create README with setup instructions",
-      "description": "As a developer, I need documentation to get started.",
-      "acceptanceCriteria": [
-        "Create ui/README.md with project overview",
-        "Document local development setup",
-        "Document available npm scripts",
-        "Document environment variables",
-        "Typecheck passes"
-      ],
-      "priority": 32,
-      "passes": true,
-      "notes": "Completed in SRE-85. Created comprehensive README with project overview, tech stack, prerequisites, local dev and Docker setup, all npm scripts, environment variables, API proxy config, authentication docs, project structure, styling guide (Linq brand colors and status colors), testing docs, production build instructions, Docker deployment, and troubleshooting."
+      "notes": "Migrations run as Helm pre-upgrade hook"
     }
   ]
 }

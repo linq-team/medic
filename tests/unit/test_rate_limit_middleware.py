@@ -6,47 +6,131 @@ from unittest.mock import patch
 from flask import Flask, g
 
 
-class TestShouldBypassRateLimit:
-    """Tests for _should_bypass_rate_limit function."""
+class TestEndpointSpecificRateLimits:
+    """Tests for endpoint-specific rate limit configurations."""
 
-    def test_health_endpoint_bypass(self):
-        """Test that /health endpoints bypass rate limiting."""
-        from Medic.Core.rate_limit_middleware import _should_bypass_rate_limit
+    def test_health_endpoint_rate_limit_config(self):
+        """Test that health endpoints use RATE_LIMIT_HEALTH_REQUESTS."""
+        from Medic.Core.rate_limit_middleware import (
+            _get_endpoint_rate_limit_config,
+            RATE_LIMIT_HEALTH_REQUESTS,
+            ENDPOINT_TYPE_HEALTH,
+        )
 
-        assert _should_bypass_rate_limit("/health") is True
-        assert _should_bypass_rate_limit("/health/live") is True
-        assert _should_bypass_rate_limit("/health/ready") is True
+        config = _get_endpoint_rate_limit_config(ENDPOINT_TYPE_HEALTH)
+        assert config.management_limit == RATE_LIMIT_HEALTH_REQUESTS
+        assert config.heartbeat_limit == RATE_LIMIT_HEALTH_REQUESTS
 
-    def test_healthcheck_endpoint_bypass(self):
-        """Test that /v1/healthcheck endpoints bypass rate limiting."""
-        from Medic.Core.rate_limit_middleware import _should_bypass_rate_limit
+    def test_metrics_endpoint_rate_limit_config(self):
+        """Test that metrics endpoints use RATE_LIMIT_METRICS_REQUESTS."""
+        from Medic.Core.rate_limit_middleware import (
+            _get_endpoint_rate_limit_config,
+            RATE_LIMIT_METRICS_REQUESTS,
+            ENDPOINT_TYPE_METRICS,
+        )
 
-        assert _should_bypass_rate_limit("/v1/healthcheck/network") is True
+        config = _get_endpoint_rate_limit_config(ENDPOINT_TYPE_METRICS)
+        assert config.management_limit == RATE_LIMIT_METRICS_REQUESTS
+        assert config.heartbeat_limit == RATE_LIMIT_METRICS_REQUESTS
 
-    def test_metrics_endpoint_bypass(self):
-        """Test that /metrics endpoint bypasses rate limiting."""
-        from Medic.Core.rate_limit_middleware import _should_bypass_rate_limit
+    def test_docs_endpoint_rate_limit_config(self):
+        """Test that docs endpoints use RATE_LIMIT_DOCS_REQUESTS."""
+        from Medic.Core.rate_limit_middleware import (
+            _get_endpoint_rate_limit_config,
+            RATE_LIMIT_DOCS_REQUESTS,
+            ENDPOINT_TYPE_DOCS,
+        )
 
-        assert _should_bypass_rate_limit("/metrics") is True
+        config = _get_endpoint_rate_limit_config(ENDPOINT_TYPE_DOCS)
+        assert config.management_limit == RATE_LIMIT_DOCS_REQUESTS
+        assert config.heartbeat_limit == RATE_LIMIT_DOCS_REQUESTS
 
-    def test_docs_endpoint_bypass(self):
-        """Test that /docs endpoint bypasses rate limiting."""
-        from Medic.Core.rate_limit_middleware import _should_bypass_rate_limit
+    def test_management_endpoint_uses_default_config(self):
+        """Test that management endpoints use default config."""
+        from Medic.Core.rate_limit_middleware import _get_endpoint_rate_limit_config
+        from Medic.Core.rate_limiter import RateLimitConfig
 
-        assert _should_bypass_rate_limit("/docs") is True
-        assert _should_bypass_rate_limit("/docs/swagger.json") is True
+        config = _get_endpoint_rate_limit_config("management")
+        default_config = RateLimitConfig()
+        assert config.management_limit == default_config.management_limit
 
-    def test_api_endpoints_require_rate_limit(self):
-        """Test that API endpoints require rate limiting."""
-        from Medic.Core.rate_limit_middleware import _should_bypass_rate_limit
+    def test_heartbeat_endpoint_uses_default_config(self):
+        """Test that heartbeat endpoints use default config."""
+        from Medic.Core.rate_limit_middleware import _get_endpoint_rate_limit_config
+        from Medic.Core.rate_limiter import RateLimitConfig
 
-        assert _should_bypass_rate_limit("/heartbeat") is False
-        assert _should_bypass_rate_limit("/service") is False
-        assert _should_bypass_rate_limit("/alerts") is False
+        config = _get_endpoint_rate_limit_config("heartbeat")
+        default_config = RateLimitConfig()
+        assert config.heartbeat_limit == default_config.heartbeat_limit
+
+
+class TestNoEndpointsBypassRateLimiting:
+    """Tests verifying that NO endpoints bypass rate limiting."""
+
+    def test_health_endpoints_are_rate_limited(self):
+        """Test that /health endpoints are rate limited."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        # Health endpoints return a specific type (not bypassed)
+        assert _determine_endpoint_type("/health") == "health"
+        assert _determine_endpoint_type("/health/live") == "health"
+        assert _determine_endpoint_type("/health/ready") == "health"
+
+    def test_healthcheck_endpoints_are_rate_limited(self):
+        """Test that /v1/healthcheck endpoints are rate limited."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/v1/healthcheck/network") == "health"
+
+    def test_metrics_endpoint_is_rate_limited(self):
+        """Test that /metrics endpoint is rate limited."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/metrics") == "metrics"
+
+    def test_docs_endpoint_is_rate_limited(self):
+        """Test that /docs endpoint is rate limited."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/docs") == "docs"
+        assert _determine_endpoint_type("/docs/swagger.json") == "docs"
+
+    def test_api_endpoints_are_rate_limited(self):
+        """Test that regular API endpoints are rate limited."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/heartbeat") == "heartbeat"
+        assert _determine_endpoint_type("/service") == "management"
+        assert _determine_endpoint_type("/alerts") == "management"
 
 
 class TestDetermineEndpointType:
     """Tests for _determine_endpoint_type function."""
+
+    def test_health_endpoints(self):
+        """Test that health endpoints return 'health' type."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/health") == "health"
+        assert _determine_endpoint_type("/health/live") == "health"
+        assert _determine_endpoint_type("/health/ready") == "health"
+        assert _determine_endpoint_type("/v1/healthcheck") == "health"
+        assert _determine_endpoint_type("/v1/healthcheck/network") == "health"
+
+    def test_metrics_endpoints(self):
+        """Test that metrics endpoints return 'metrics' type."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/metrics") == "metrics"
+        assert _determine_endpoint_type("/metrics/custom") == "metrics"
+
+    def test_docs_endpoints(self):
+        """Test that docs endpoints return 'docs' type."""
+        from Medic.Core.rate_limit_middleware import _determine_endpoint_type
+
+        assert _determine_endpoint_type("/docs") == "docs"
+        assert _determine_endpoint_type("/docs/swagger.json") == "docs"
+        assert _determine_endpoint_type("/docs/openapi.yaml") == "docs"
 
     def test_heartbeat_endpoints(self):
         """Test that heartbeat endpoints return 'heartbeat' type."""
@@ -58,7 +142,7 @@ class TestDetermineEndpointType:
         assert _determine_endpoint_type("/v2/heartbeat/test/start") == "heartbeat"
 
     def test_management_endpoints(self):
-        """Test that non-heartbeat endpoints return 'management' type."""
+        """Test that non-special endpoints return 'management' type."""
         from Medic.Core.rate_limit_middleware import _determine_endpoint_type
 
         assert _determine_endpoint_type("/service") == "management"
@@ -250,9 +334,17 @@ class TestRateLimitDecorator:
             assert "Retry-After" in response.headers
             assert response.headers["Retry-After"] == "30"
 
-    def test_bypasses_health_endpoints(self, app):
-        """Test that health endpoints bypass rate limiting."""
+    def test_health_endpoints_are_rate_limited(self, app):
+        """Test that health endpoints ARE rate limited (not bypassed)."""
         from Medic.Core.rate_limit_middleware import rate_limit
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=1000,
+            remaining=999,
+            reset_at=time.time() + 60,
+        )
 
         @app.route("/health/live")
         @rate_limit()
@@ -262,11 +354,73 @@ class TestRateLimitDecorator:
         with patch(
             "Medic.Core.rate_limit_middleware.check_rate_limit"
         ) as mock_check:
-            # Should not be called for health endpoints
+            mock_check.return_value = result
+            # Rate limit check SHOULD be called for health endpoints
             with app.test_client() as client:
                 response = client.get("/health/live")
                 assert response.status_code == 200
-                mock_check.assert_not_called()
+                mock_check.assert_called_once()
+                # Verify endpoint type is "health"
+                call_args = mock_check.call_args
+                assert call_args[0][1] == "health"
+
+    def test_metrics_endpoints_are_rate_limited(self, app):
+        """Test that metrics endpoints ARE rate limited (not bypassed)."""
+        from Medic.Core.rate_limit_middleware import rate_limit
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=100,
+            remaining=99,
+            reset_at=time.time() + 60,
+        )
+
+        @app.route("/metrics")
+        @rate_limit()
+        def metrics_route():
+            return "# metrics\n", 200
+
+        with patch(
+            "Medic.Core.rate_limit_middleware.check_rate_limit"
+        ) as mock_check:
+            mock_check.return_value = result
+            with app.test_client() as client:
+                response = client.get("/metrics")
+                assert response.status_code == 200
+                mock_check.assert_called_once()
+                # Verify endpoint type is "metrics"
+                call_args = mock_check.call_args
+                assert call_args[0][1] == "metrics"
+
+    def test_docs_endpoints_are_rate_limited(self, app):
+        """Test that docs endpoints ARE rate limited (not bypassed)."""
+        from Medic.Core.rate_limit_middleware import rate_limit
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=60,
+            remaining=59,
+            reset_at=time.time() + 60,
+        )
+
+        @app.route("/docs")
+        @rate_limit()
+        def docs_route():
+            return json.dumps({"docs": "here"}), 200
+
+        with patch(
+            "Medic.Core.rate_limit_middleware.check_rate_limit"
+        ) as mock_check:
+            mock_check.return_value = result
+            with app.test_client() as client:
+                response = client.get("/docs")
+                assert response.status_code == 200
+                mock_check.assert_called_once()
+                # Verify endpoint type is "docs"
+                call_args = mock_check.call_args
+                assert call_args[0][1] == "docs"
 
     def test_uses_api_key_id_for_bucket(self, app):
         """Test that API key ID is used for rate limit bucket."""
@@ -514,17 +668,34 @@ class TestVerifyRateLimit:
                     body, status, headers = response
                     assert status == 429
 
-    def test_bypasses_health_endpoints(self, app):
-        """Test that health endpoints bypass rate limiting."""
+    def test_health_endpoints_are_rate_limited(self, app):
+        """Test that health endpoints ARE rate limited (not bypassed)."""
         from Medic.Core.rate_limit_middleware import verify_rate_limit
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=1000,
+            remaining=999,
+            reset_at=time.time() + 60,
+        )
 
         with app.test_request_context("/health/live"):
             with patch(
                 "Medic.Core.rate_limit_middleware.check_rate_limit"
             ) as mock_check:
-                response = verify_rate_limit()
-                assert response is None
-                mock_check.assert_not_called()
+                mock_check.return_value = result
+                with patch(
+                    "Medic.Core.rate_limit_middleware._get_api_key_id"
+                ) as mock_get_key:
+                    mock_get_key.return_value = "test-key"
+                    response = verify_rate_limit()
+                    assert response is None  # Allowed
+                    # Rate limit check SHOULD be called
+                    mock_check.assert_called_once()
+                    call_args = mock_check.call_args
+                    # Verify endpoint type is "health"
+                    assert call_args[0][1] == "health"
 
     def test_stores_result_in_g(self, app):
         """Test that result is stored in Flask g for header retrieval."""
@@ -621,9 +792,13 @@ class TestIntegrationWithRateLimiter:
     def test_rate_limit_enforced(self, app, fresh_rate_limiter):
         """Test that rate limit is actually enforced."""
         from Medic.Core.rate_limit_middleware import rate_limit
+        from Medic.Core.rate_limiter import RateLimitConfig
+
+        # Use explicit config to test with specific limits
+        custom_config = RateLimitConfig(management_limit=5, heartbeat_limit=10)
 
         @app.route("/test")
-        @rate_limit()
+        @rate_limit(config=custom_config)
         def test_route():
             return json.dumps({"success": True}), 200
 
@@ -646,9 +821,13 @@ class TestIntegrationWithRateLimiter:
     def test_different_keys_have_separate_limits(self, app, fresh_rate_limiter):
         """Test that different API keys have separate rate limits."""
         from Medic.Core.rate_limit_middleware import rate_limit
+        from Medic.Core.rate_limiter import RateLimitConfig
+
+        # Use explicit config to test with specific limits
+        custom_config = RateLimitConfig(management_limit=5, heartbeat_limit=10)
 
         @app.route("/test")
-        @rate_limit()
+        @rate_limit(config=custom_config)
         def test_route():
             return json.dumps({"success": True}), 200
 
@@ -673,3 +852,152 @@ class TestIntegrationWithRateLimiter:
                 mock_get_key.return_value = "key2"
                 response = client.get("/test")
                 assert response.status_code == 200
+
+
+class TestEnvironmentVariableConfiguration:
+    """Tests for environment variable rate limit configuration."""
+
+    def test_health_rate_limit_env_var_default(self):
+        """Test default value for RATE_LIMIT_HEALTH_REQUESTS."""
+        import Medic.Core.rate_limit_middleware as middleware
+
+        # Default should be 1000
+        assert middleware.RATE_LIMIT_HEALTH_REQUESTS == 1000
+
+    def test_metrics_rate_limit_env_var_default(self):
+        """Test default value for RATE_LIMIT_METRICS_REQUESTS."""
+        import Medic.Core.rate_limit_middleware as middleware
+
+        # Default should be 100
+        assert middleware.RATE_LIMIT_METRICS_REQUESTS == 100
+
+    def test_docs_rate_limit_env_var_default(self):
+        """Test default value for RATE_LIMIT_DOCS_REQUESTS."""
+        import Medic.Core.rate_limit_middleware as middleware
+
+        # Default should be 60
+        assert middleware.RATE_LIMIT_DOCS_REQUESTS == 60
+
+
+class TestAllEndpointsRateLimited:
+    """Tests verifying ALL endpoints have rate limiting applied."""
+
+    @pytest.fixture
+    def app(self):
+        """Create a test Flask app."""
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+        return app
+
+    def test_no_bypass_prefixes_constant_exists(self):
+        """Test that RATE_LIMIT_BYPASS_PREFIXES no longer exists."""
+        import Medic.Core.rate_limit_middleware as middleware
+
+        # The bypass constant should no longer exist
+        assert not hasattr(middleware, "RATE_LIMIT_BYPASS_PREFIXES")
+
+    def test_no_bypass_function_exists(self):
+        """Test that _should_bypass_rate_limit no longer exists."""
+        import Medic.Core.rate_limit_middleware as middleware
+
+        # The bypass function should no longer exist
+        assert not hasattr(middleware, "_should_bypass_rate_limit")
+
+    def test_health_endpoint_uses_endpoint_specific_config(self, app):
+        """Test that health endpoints use endpoint-specific rate limit config."""
+        from Medic.Core.rate_limit_middleware import (
+            rate_limit,
+            RATE_LIMIT_HEALTH_REQUESTS,
+        )
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=RATE_LIMIT_HEALTH_REQUESTS,
+            remaining=RATE_LIMIT_HEALTH_REQUESTS - 1,
+            reset_at=time.time() + 60,
+        )
+
+        @app.route("/health/live")
+        @rate_limit()
+        def health_route():
+            return json.dumps({"status": "ok"}), 200
+
+        with patch(
+            "Medic.Core.rate_limit_middleware.check_rate_limit"
+        ) as mock_check:
+            mock_check.return_value = result
+            with app.test_client() as client:
+                response = client.get("/health/live")
+                assert response.status_code == 200
+                mock_check.assert_called_once()
+                # Verify endpoint-specific config was passed
+                call_args = mock_check.call_args
+                config_arg = call_args[0][2]
+                assert config_arg.management_limit == RATE_LIMIT_HEALTH_REQUESTS
+
+    def test_metrics_endpoint_uses_endpoint_specific_config(self, app):
+        """Test that metrics endpoints use endpoint-specific rate limit config."""
+        from Medic.Core.rate_limit_middleware import (
+            rate_limit,
+            RATE_LIMIT_METRICS_REQUESTS,
+        )
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=RATE_LIMIT_METRICS_REQUESTS,
+            remaining=RATE_LIMIT_METRICS_REQUESTS - 1,
+            reset_at=time.time() + 60,
+        )
+
+        @app.route("/metrics")
+        @rate_limit()
+        def metrics_route():
+            return "# metrics\n", 200
+
+        with patch(
+            "Medic.Core.rate_limit_middleware.check_rate_limit"
+        ) as mock_check:
+            mock_check.return_value = result
+            with app.test_client() as client:
+                response = client.get("/metrics")
+                assert response.status_code == 200
+                mock_check.assert_called_once()
+                # Verify endpoint-specific config was passed
+                call_args = mock_check.call_args
+                config_arg = call_args[0][2]
+                assert config_arg.management_limit == RATE_LIMIT_METRICS_REQUESTS
+
+    def test_docs_endpoint_uses_endpoint_specific_config(self, app):
+        """Test that docs endpoints use endpoint-specific rate limit config."""
+        from Medic.Core.rate_limit_middleware import (
+            rate_limit,
+            RATE_LIMIT_DOCS_REQUESTS,
+        )
+        from Medic.Core.rate_limiter import RateLimitResult
+
+        result = RateLimitResult(
+            allowed=True,
+            limit=RATE_LIMIT_DOCS_REQUESTS,
+            remaining=RATE_LIMIT_DOCS_REQUESTS - 1,
+            reset_at=time.time() + 60,
+        )
+
+        @app.route("/docs")
+        @rate_limit()
+        def docs_route():
+            return json.dumps({"docs": "here"}), 200
+
+        with patch(
+            "Medic.Core.rate_limit_middleware.check_rate_limit"
+        ) as mock_check:
+            mock_check.return_value = result
+            with app.test_client() as client:
+                response = client.get("/docs")
+                assert response.status_code == 200
+                mock_check.assert_called_once()
+                # Verify endpoint-specific config was passed
+                call_args = mock_check.call_args
+                config_arg = call_args[0][2]
+                assert config_arg.management_limit == RATE_LIMIT_DOCS_REQUESTS

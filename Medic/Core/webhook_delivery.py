@@ -14,6 +14,7 @@ import requests
 
 import Medic.Helpers.logSettings as logLevel
 from Medic.Core.database import insert_db, query_db
+from Medic.Core.url_validator import InvalidURLError, validate_url
 
 # Log Setup
 logger = logging.getLogger(__name__)
@@ -129,6 +130,16 @@ class WebhookDeliveryService:
         Returns:
             DeliveryResult with status and response details
         """
+        # Validate URL for SSRF prevention
+        try:
+            validate_url(url)
+        except InvalidURLError:
+            logger.warning(f"Webhook URL validation failed: {url}")
+            return DeliveryResult(
+                success=False,
+                error_message="Invalid webhook URL",
+            )
+
         # Prepare headers - always include Content-Type
         request_headers = {"Content-Type": "application/json"}
         request_headers.update(headers)

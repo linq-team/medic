@@ -962,3 +962,139 @@ class TestConstants:
         from Medic.Core.webhook_delivery import MAX_RESPONSE_BODY_SIZE
 
         assert MAX_RESPONSE_BODY_SIZE == 4096
+
+
+class TestWebhookDeliveryServiceSSRFPrevention:
+    """Tests for SSRF prevention in WebhookDeliveryService."""
+
+    @patch('Medic.Core.webhook_delivery.validate_url')
+    def test_send_request_validates_url(self, mock_validate_url):
+        """Test that _send_request validates URL before making request."""
+        from Medic.Core.webhook_delivery import WebhookDeliveryService
+
+        mock_validate_url.return_value = True
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '{"ok": true}'
+
+        mock_client = MagicMock(return_value=mock_response)
+        service = WebhookDeliveryService(http_client=mock_client)
+
+        service._send_request(
+            url="https://example.com/webhook",
+            payload={"event": "test"},
+            headers={},
+        )
+
+        # Verify validate_url was called
+        mock_validate_url.assert_called_once_with("https://example.com/webhook")
+
+    @patch('Medic.Core.webhook_delivery.validate_url')
+    def test_send_request_rejects_private_ip(self, mock_validate_url):
+        """Test that _send_request rejects private IPs."""
+        from Medic.Core.webhook_delivery import WebhookDeliveryService
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        mock_client = MagicMock()
+        service = WebhookDeliveryService(http_client=mock_client)
+
+        result = service._send_request(
+            url="http://10.0.0.5/internal",
+            payload={"event": "test"},
+            headers={},
+        )
+
+        assert result.success is False
+        assert result.error_message == "Invalid webhook URL"
+        # HTTP client should NOT be called
+        mock_client.assert_not_called()
+
+    @patch('Medic.Core.webhook_delivery.validate_url')
+    def test_send_request_rejects_localhost(self, mock_validate_url):
+        """Test that _send_request rejects localhost URLs."""
+        from Medic.Core.webhook_delivery import WebhookDeliveryService
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        mock_client = MagicMock()
+        service = WebhookDeliveryService(http_client=mock_client)
+
+        result = service._send_request(
+            url="http://127.0.0.1:8080/api",
+            payload={"event": "test"},
+            headers={},
+        )
+
+        assert result.success is False
+        assert result.error_message == "Invalid webhook URL"
+        mock_client.assert_not_called()
+
+    @patch('Medic.Core.webhook_delivery.validate_url')
+    def test_send_request_rejects_metadata_endpoint(self, mock_validate_url):
+        """Test that _send_request rejects cloud metadata endpoints."""
+        from Medic.Core.webhook_delivery import WebhookDeliveryService
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        mock_client = MagicMock()
+        service = WebhookDeliveryService(http_client=mock_client)
+
+        result = service._send_request(
+            url="http://169.254.169.254/latest/meta-data/",
+            payload={"event": "test"},
+            headers={},
+        )
+
+        assert result.success is False
+        assert result.error_message == "Invalid webhook URL"
+        mock_client.assert_not_called()
+
+    @patch('Medic.Core.webhook_delivery.validate_url')
+    def test_send_request_rejects_file_scheme(self, mock_validate_url):
+        """Test that _send_request rejects file:// URLs."""
+        from Medic.Core.webhook_delivery import WebhookDeliveryService
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        mock_client = MagicMock()
+        service = WebhookDeliveryService(http_client=mock_client)
+
+        result = service._send_request(
+            url="file:///etc/passwd",
+            payload={"event": "test"},
+            headers={},
+        )
+
+        assert result.success is False
+        assert result.error_message == "Invalid webhook URL"
+        mock_client.assert_not_called()
+
+    @patch('Medic.Core.webhook_delivery.validate_url')
+    def test_send_request_allows_valid_https_url(self, mock_validate_url):
+        """Test that _send_request allows valid HTTPS URLs."""
+        from Medic.Core.webhook_delivery import WebhookDeliveryService
+
+        mock_validate_url.return_value = True
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '{"received": true}'
+
+        mock_client = MagicMock(return_value=mock_response)
+        service = WebhookDeliveryService(http_client=mock_client)
+
+        result = service._send_request(
+            url="https://api.slack.com/webhooks/123",
+            payload={"text": "Hello"},
+            headers={},
+        )
+
+        assert result.success is True
+        assert result.status_code == 200
+        mock_client.assert_called_once()

@@ -1,0 +1,98 @@
+# =============================================================================
+# Docker Build Ignore File
+# Exclude files not needed in the Docker image to reduce build context size
+# =============================================================================
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+tests/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+nosetests.xml
+pytest.ini
+
+# Development dependencies
+requirements-dev.txt
+
+# Documentation (not needed in runtime)
+docs/
+*.md
+!README.md
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.editorconfig
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+
+# Docker files (don't need to copy docker config into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Local development
+docker-volumes/
+*.log
+logs/
+
+# Tasks and PRD (development artifacts)
+tasks/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# TypeScript client (if not needed in backend)
+Medic/clients/typescript/node_modules/
+node_modules/
+
+# CI/CD (will be created later)
+.github/
+
+# Terraform (infrastructure, not app code)
+terraform/
+
+# Helm charts (deployed separately)
+helm/
+
+# Other development files
+infraspec.yaml
+dashboards/
+cli/

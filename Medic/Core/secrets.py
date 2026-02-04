@@ -28,10 +28,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import pytz
-
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
+from Medic.Core.utils.datetime_helpers import now as get_now
 
 # Log Setup
 logger = logging.getLogger(__name__)
@@ -105,11 +104,6 @@ class Secret:
             ),
             "created_by": self.created_by,
         }
-
-
-def _now() -> datetime:
-    """Get current time in Chicago timezone."""
-    return datetime.now(pytz.timezone('America/Chicago'))
 
 
 def _get_encryption_key() -> bytes:
@@ -287,7 +281,7 @@ def create_secret(
     # Encrypt the value
     ciphertext, nonce, tag = encrypt_secret(value)
 
-    now = _now()
+    now = get_now()
 
     result = db.query_db(
         """
@@ -346,7 +340,7 @@ def update_secret(
     # Encrypt the new value
     ciphertext, nonce, tag = encrypt_secret(value)
 
-    now = _now()
+    now = get_now()
 
     # Build update query
     if description is not None:
@@ -551,7 +545,7 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
         elif isinstance(created_at_raw, datetime):
             created_at = created_at_raw
         else:
-            created_at = _now()
+            created_at = get_now()
 
         if isinstance(updated_at_raw, str):
             updated_at = datetime.fromisoformat(
@@ -560,7 +554,7 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
         elif isinstance(updated_at_raw, datetime):
             updated_at = updated_at_raw
         else:
-            updated_at = _now()
+            updated_at = get_now()
 
         return Secret(
             secret_id=data['secret_id'],

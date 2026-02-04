@@ -198,7 +198,7 @@ class TestPlaybookExecution:
 class TestCreateExecution:
     """Tests for create_execution function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_execution_success(self, mock_db):
         """Test creating an execution record successfully."""
         from Medic.Core.playbook_engine import (
@@ -220,7 +220,7 @@ class TestCreateExecution:
         assert execution.service_id == 100
         assert execution.status == ExecutionStatus.RUNNING
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_execution_failure(self, mock_db):
         """Test create_execution returns None on failure."""
         from Medic.Core.playbook_engine import create_execution
@@ -231,7 +231,7 @@ class TestCreateExecution:
 
         assert execution is None
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_execution_with_context(self, mock_db):
         """Test create_execution stores context."""
         from Medic.Core.playbook_engine import create_execution
@@ -251,7 +251,7 @@ class TestCreateExecution:
 class TestGetExecution:
     """Tests for get_execution function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_execution_found(self, mock_db):
         """Test getting an existing execution."""
         from Medic.Core.playbook_engine import ExecutionStatus, get_execution
@@ -276,7 +276,7 @@ class TestGetExecution:
         assert execution.status == ExecutionStatus.RUNNING
         assert execution.current_step == 2
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_execution_not_found(self, mock_db):
         """Test get_execution returns None for missing execution."""
         from Medic.Core.playbook_engine import get_execution
@@ -291,7 +291,7 @@ class TestGetExecution:
 class TestGetActiveExecutions:
     """Tests for get_active_executions function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_active_executions_with_results(self, mock_db):
         """Test getting active executions."""
         from Medic.Core.playbook_engine import get_active_executions
@@ -327,7 +327,7 @@ class TestGetActiveExecutions:
         assert executions[0].execution_id == 1
         assert executions[1].execution_id == 2
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_active_executions_empty(self, mock_db):
         """Test get_active_executions returns empty list when none."""
         from Medic.Core.playbook_engine import get_active_executions
@@ -342,7 +342,7 @@ class TestGetActiveExecutions:
 class TestUpdateExecutionStatus:
     """Tests for update_execution_status function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_execution_status_success(self, mock_db):
         """Test updating execution status successfully."""
         from Medic.Core.playbook_engine import (
@@ -360,7 +360,7 @@ class TestUpdateExecutionStatus:
         assert result is True
         mock_db.insert_db.assert_called_once()
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_execution_status_with_step(self, mock_db):
         """Test updating execution with current_step."""
         from Medic.Core.playbook_engine import (
@@ -385,7 +385,7 @@ class TestUpdateExecutionStatus:
 class TestStepResultOperations:
     """Tests for step result database operations."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_step_result_success(self, mock_db):
         """Test creating a step result successfully."""
         from Medic.Core.playbook_engine import (
@@ -407,7 +407,7 @@ class TestStepResultOperations:
         assert result.step_name == "test-step"
         assert result.status == StepResultStatus.PENDING
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_step_result_success(self, mock_db):
         """Test updating a step result."""
         from Medic.Core.playbook_engine import (
@@ -425,7 +425,7 @@ class TestStepResultOperations:
 
         assert result is True
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_step_result_truncates_long_output(self, mock_db):
         """Test that long output is truncated."""
         from Medic.Core.playbook_engine import (
@@ -456,7 +456,7 @@ class TestStepResultOperations:
 class TestGetStepResultsForExecution:
     """Tests for get_step_results_for_execution function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_step_results_with_results(self, mock_db):
         """Test getting step results for execution."""
         from Medic.Core.playbook_engine import get_step_results_for_execution
@@ -496,7 +496,7 @@ class TestGetStepResultsForExecution:
 class TestGetPlaybookById:
     """Tests for get_playbook_by_id function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_playbook_by_id_found(self, mock_db):
         """Test getting a playbook by ID."""
         from Medic.Core.playbook_engine import get_playbook_by_id
@@ -523,7 +523,7 @@ steps:
         assert playbook.name == "test-playbook"
         assert len(playbook.steps) == 1
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_playbook_by_id_not_found(self, mock_db):
         """Test get_playbook_by_id returns None when not found."""
         from Medic.Core.playbook_engine import get_playbook_by_id
@@ -538,9 +538,9 @@ steps:
 class TestExecuteWaitStep:
     """Tests for execute_wait_step function."""
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.wait.time.sleep')
+    @patch('Medic.Core.playbook.executors.wait.update_step_result')
+    @patch('Medic.Core.playbook.executors.wait.create_step_result')
     def test_execute_wait_step_success(
         self,
         mock_create,
@@ -575,7 +575,7 @@ class TestExecuteWaitStep:
         assert "5 seconds" in result.output
         mock_sleep.assert_called_once_with(5)
 
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.wait.create_step_result')
     def test_execute_wait_step_creation_failure(self, mock_create):
         """Test execute_wait_step handles creation failure."""
         from Medic.Core.playbook_engine import (
@@ -683,9 +683,9 @@ class TestPlaybookExecutionEngine:
     @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
     @patch('Medic.Core.playbook_engine.record_playbook_execution')
     @patch('Medic.Core.playbook_engine.update_execution_status')
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.wait.time.sleep')
+    @patch('Medic.Core.playbook.executors.wait.update_step_result')
+    @patch('Medic.Core.playbook.executors.wait.create_step_result')
     @patch('Medic.Core.playbook_engine.get_playbook_by_id')
     @patch('Medic.Core.playbook_engine.create_execution')
     def test_start_execution_runs_immediately_when_no_approval(
@@ -962,13 +962,13 @@ class TestConvenienceFunctions:
 
 
 class TestParseDateTime:
-    """Tests for _parse_datetime helper function."""
+    """Tests for parse_datetime helper function."""
 
     def test_parse_datetime_iso_format(self):
         """Test parsing ISO format with timezone."""
-        from Medic.Core.playbook_engine import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("2026-02-03T10:00:00-06:00")
+        result = parse_datetime("2026-02-03T10:00:00-06:00")
         assert result is not None
         assert result.year == 2026
         assert result.month == 2
@@ -976,17 +976,17 @@ class TestParseDateTime:
 
     def test_parse_datetime_no_timezone(self):
         """Test parsing format without timezone."""
-        from Medic.Core.playbook_engine import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("2026-02-03 10:00:00")
+        result = parse_datetime("2026-02-03 10:00:00")
         assert result is not None
         assert result.year == 2026
 
     def test_parse_datetime_invalid(self):
         """Test parsing invalid format returns None."""
-        from Medic.Core.playbook_engine import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("invalid-date")
+        result = parse_datetime("invalid-date")
         assert result is None
 
 
@@ -998,9 +998,9 @@ class TestExecutionWithMultipleSteps:
     @patch('Medic.Core.playbook_engine.record_playbook_execution_duration')
     @patch('Medic.Core.playbook_engine.record_playbook_execution')
     @patch('Medic.Core.playbook_engine.update_execution_status')
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.wait.time.sleep')
+    @patch('Medic.Core.playbook.executors.wait.update_step_result')
+    @patch('Medic.Core.playbook.executors.wait.create_step_result')
     @patch('Medic.Core.playbook_engine.get_playbook_by_id')
     @patch('Medic.Core.playbook_engine.create_execution')
     def test_multiple_wait_steps_execute_in_order(
@@ -1166,14 +1166,14 @@ class TestSubstituteVariables:
 class TestBuildWebhookContext:
     """Tests for _build_webhook_context function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.webhook.db')
     def test_build_context_includes_execution_info(self, mock_db):
         """Test context includes execution information."""
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
             PlaybookExecution,
-            _build_webhook_context,
         )
+        from Medic.Core.playbook.executors.webhook import _build_webhook_context
 
         mock_db.query_db.return_value = "[]"  # No service found
 
@@ -1194,8 +1194,8 @@ class TestBuildWebhookContext:
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
             PlaybookExecution,
-            _build_webhook_context,
         )
+        from Medic.Core.playbook.executors.webhook import _build_webhook_context
         from Medic.Core.playbook_parser import ApprovalMode, Playbook, WaitStep
 
         playbook = Playbook(
@@ -1221,8 +1221,8 @@ class TestBuildWebhookContext:
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
             PlaybookExecution,
-            _build_webhook_context,
         )
+        from Medic.Core.playbook.executors.webhook import _build_webhook_context
 
         execution = PlaybookExecution(
             execution_id=100,
@@ -1241,14 +1241,14 @@ class TestBuildWebhookContext:
         assert context['RUN_ID'] == "run-456"
         assert context['CUSTOM_VAR'] == "custom-value"
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.webhook.db')
     def test_build_context_fetches_service_name(self, mock_db):
         """Test context fetches service name from database."""
         from Medic.Core.playbook_engine import (
             ExecutionStatus,
             PlaybookExecution,
-            _build_webhook_context,
         )
+        from Medic.Core.playbook.executors.webhook import _build_webhook_context
 
         mock_db.query_db.return_value = json.dumps([{"name": "worker-service"}])
 
@@ -1266,9 +1266,9 @@ class TestBuildWebhookContext:
 class TestExecuteWebhookStep:
     """Tests for execute_webhook_step function."""
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_success(
         self,
         mock_build_context,
@@ -1316,9 +1316,9 @@ class TestExecuteWebhookStep:
         assert result.status == StepResultStatus.COMPLETED
         assert "Status: 200" in result.output
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_failure_status_code(
         self,
         mock_build_context,
@@ -1364,9 +1364,9 @@ class TestExecuteWebhookStep:
         assert result.status == StepResultStatus.FAILED
         assert "Unexpected status code 500" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_variable_substitution(
         self,
         mock_build_context,
@@ -1422,9 +1422,9 @@ class TestExecuteWebhookStep:
         assert captured_kwargs['headers']['X-Alert-Id'] == "alert-123"
         assert captured_kwargs['json']['service'] == "my-service"
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_timeout(
         self,
         mock_build_context,
@@ -1466,9 +1466,9 @@ class TestExecuteWebhookStep:
         assert result.status == StepResultStatus.FAILED
         assert "timed out" in result.error_message.lower()
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_connection_error(
         self,
         mock_build_context,
@@ -1509,9 +1509,9 @@ class TestExecuteWebhookStep:
         assert result.status == StepResultStatus.FAILED
         assert "connection error" in result.error_message.lower()
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_custom_success_codes(
         self,
         mock_build_context,
@@ -1556,9 +1556,9 @@ class TestExecuteWebhookStep:
 
         assert result.status == StepResultStatus.COMPLETED
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_truncates_long_response(
         self,
         mock_build_context,
@@ -1604,8 +1604,8 @@ class TestExecuteWebhookStep:
         assert result.status == StepResultStatus.COMPLETED
         assert "[truncated]" in result.output
 
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_creation_failure(
         self,
         mock_build_context,
@@ -1640,9 +1640,9 @@ class TestExecuteWebhookStep:
         assert result.status == StepResultStatus.FAILED
         assert "Failed to create step result" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
     def test_execute_webhook_step_get_method(
         self,
         mock_build_context,
@@ -1715,7 +1715,7 @@ class TestRegisteredScript:
 class TestGetRegisteredScript:
     """Tests for get_registered_script function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.script.db')
     def test_get_registered_script_found(self, mock_db):
         """Test getting a registered script by name."""
         from Medic.Core.playbook_engine import get_registered_script
@@ -1736,7 +1736,7 @@ class TestGetRegisteredScript:
         assert script.interpreter == "bash"
         assert script.timeout_seconds == 60
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.script.db')
     def test_get_registered_script_not_found(self, mock_db):
         """Test get_registered_script returns None when not found."""
         from Medic.Core.playbook_engine import get_registered_script
@@ -1747,7 +1747,7 @@ class TestGetRegisteredScript:
 
         assert script is None
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.script.db')
     def test_get_registered_script_default_timeout(self, mock_db):
         """Test get_registered_script uses default timeout if not set."""
         from Medic.Core.playbook_engine import (
@@ -1773,7 +1773,7 @@ class TestSubstituteScriptVariables:
 
     def test_substitute_context_variables(self):
         """Test substituting context variables in script."""
-        from Medic.Core.playbook_engine import _substitute_script_variables
+        from Medic.Core.playbook.executors.script import _substitute_script_variables
 
         script = "echo 'Service: ${SERVICE_NAME}'"
         context = {"SERVICE_NAME": "my-service"}
@@ -1785,7 +1785,7 @@ class TestSubstituteScriptVariables:
 
     def test_substitute_parameter_variables(self):
         """Test substituting parameter variables in script."""
-        from Medic.Core.playbook_engine import _substitute_script_variables
+        from Medic.Core.playbook.executors.script import _substitute_script_variables
 
         script = "echo 'Target: ${TARGET}'"
         context = {}
@@ -1797,7 +1797,7 @@ class TestSubstituteScriptVariables:
 
     def test_parameters_override_context(self):
         """Test that parameters override context variables."""
-        from Medic.Core.playbook_engine import _substitute_script_variables
+        from Medic.Core.playbook.executors.script import _substitute_script_variables
 
         script = "echo '${VALUE}'"
         context = {"VALUE": "from-context"}
@@ -1809,7 +1809,7 @@ class TestSubstituteScriptVariables:
 
     def test_multiple_variable_substitution(self):
         """Test substituting multiple variables."""
-        from Medic.Core.playbook_engine import _substitute_script_variables
+        from Medic.Core.playbook.executors.script import _substitute_script_variables
 
         script = "curl -X POST ${URL}/restart -d '{\"service\": \"${SERVICE}\"}'"
         context = {"SERVICE": "api"}
@@ -1824,12 +1824,12 @@ class TestSubstituteScriptVariables:
 class TestExecuteScriptStep:
     """Tests for execute_script_step function."""
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_success(
         self,
         mock_get_script,
@@ -1885,9 +1885,9 @@ class TestExecuteScriptStep:
         assert "Exit code: 0" in result.output
         assert "Hello World" in result.output
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_not_found(
         self,
         mock_get_script,
@@ -1924,12 +1924,12 @@ class TestExecuteScriptStep:
         assert result.status == StepResultStatus.FAILED
         assert "not found in registered scripts" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_nonzero_exit(
         self,
         mock_get_script,
@@ -1985,11 +1985,11 @@ class TestExecuteScriptStep:
         assert "exited with code 1" in result.error_message
         assert "Error: Something went wrong" in result.output
 
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_timeout(
         self,
         mock_get_script,
@@ -2043,12 +2043,12 @@ class TestExecuteScriptStep:
         assert result.status == StepResultStatus.FAILED
         assert "timed out" in result.error_message.lower()
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_with_python(
         self,
         mock_get_script,
@@ -2105,10 +2105,10 @@ class TestExecuteScriptStep:
         call_args = mock_subprocess.call_args
         assert 'python3' in call_args[0][0]
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_unsupported_interpreter(
         self,
         mock_get_script,
@@ -2154,12 +2154,12 @@ class TestExecuteScriptStep:
         assert result.status == StepResultStatus.FAILED
         assert "Unsupported interpreter" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_variable_substitution(
         self,
         mock_get_script,
@@ -2214,8 +2214,8 @@ class TestExecuteScriptStep:
 
         assert result.status == StepResultStatus.COMPLETED
 
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_creation_failure(
         self,
         mock_get_script,
@@ -2257,12 +2257,12 @@ class TestExecuteScriptStep:
         assert result.status == StepResultStatus.FAILED
         assert "Failed to create step result" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_truncates_long_output(
         self,
         mock_get_script,
@@ -2318,12 +2318,12 @@ class TestExecuteScriptStep:
         assert result.status == StepResultStatus.COMPLETED
         assert "[output truncated]" in result.output
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_captures_stderr(
         self,
         mock_get_script,
@@ -2380,12 +2380,12 @@ class TestExecuteScriptStep:
         assert "[STDERR]" in result.output
         assert "warning" in result.output
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_uses_step_timeout(
         self,
         mock_get_script,
@@ -2440,11 +2440,11 @@ class TestExecuteScriptStep:
         call_kwargs = mock_subprocess.call_args[1]
         assert call_kwargs['timeout'] == 15
 
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_generic_exception(
         self,
         mock_get_script,
@@ -2494,12 +2494,12 @@ class TestExecuteScriptStep:
         assert result.status == StepResultStatus.FAILED
         assert "Unexpected error" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.os.unlink')
-    @patch('Medic.Core.playbook_engine.subprocess.run')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
-    @patch('Medic.Core.playbook_engine._build_webhook_context')
-    @patch('Medic.Core.playbook_engine.get_registered_script')
+    @patch('Medic.Core.playbook.executors.script.os.unlink')
+    @patch('Medic.Core.playbook.executors.script.subprocess.run')
+    @patch('Medic.Core.playbook.executors.script.update_step_result')
+    @patch('Medic.Core.playbook.executors.script.create_step_result')
+    @patch('Medic.Core.playbook.executors.script._build_webhook_context')
+    @patch('Medic.Core.playbook.executors.script.get_registered_script')
     def test_execute_script_step_sets_env_vars(
         self,
         mock_get_script,
@@ -2557,10 +2557,259 @@ class TestExecuteScriptStep:
         assert env['MEDIC_SERVICE_ID'] == '42'
 
 
+class TestGetScriptEnvSecurity:
+    """Tests for _get_script_env function - environment variable security.
+
+    SECURITY: These tests verify that sensitive environment variables
+    (DATABASE_URL, MEDIC_SECRETS_KEY, AWS credentials, etc.) are NOT
+    passed to script execution environments.
+    """
+
+    def test_secrets_key_not_passed_to_scripts(self):
+        """Test MEDIC_SECRETS_KEY is NOT passed to script environment."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'MEDIC_SECRETS_KEY': 'super-secret-encryption-key',
+            'PATH': '/usr/bin',
+            'HOME': '/home/user',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # SECURITY: MEDIC_SECRETS_KEY must NOT be in the environment
+            assert 'MEDIC_SECRETS_KEY' not in env
+            # Allowlisted variables should be present
+            assert env['PATH'] == '/usr/bin'
+            assert env['HOME'] == '/home/user'
+
+    def test_database_url_not_passed_to_scripts(self):
+        """Test DATABASE_URL is NOT passed to script environment."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'DATABASE_URL': 'postgresql://user:password@db.example.com/medic',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # SECURITY: DATABASE_URL must NOT be in the environment
+            assert 'DATABASE_URL' not in env
+            # Allowlisted variables should be present
+            assert env['PATH'] == '/usr/bin'
+
+    def test_aws_credentials_not_passed_to_scripts(self):
+        """Test AWS credentials are NOT passed to script environment."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'AWS_ACCESS_KEY_ID': 'AKIAIOSFODNN7EXAMPLE',
+            'AWS_SECRET_ACCESS_KEY': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            'AWS_SESSION_TOKEN': 'AQoDYXdzEJr...',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # SECURITY: AWS credentials must NOT be in the environment
+            assert 'AWS_ACCESS_KEY_ID' not in env
+            assert 'AWS_SECRET_ACCESS_KEY' not in env
+            assert 'AWS_SESSION_TOKEN' not in env
+
+    def test_only_allowlisted_vars_passed(self):
+        """Test only ALLOWED_SCRIPT_ENV_VARS are passed to scripts."""
+        from Medic.Core.playbook_engine import (
+            ALLOWED_SCRIPT_ENV_VARS,
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'PATH': '/usr/bin:/usr/local/bin',
+            'HOME': '/home/testuser',
+            'USER': 'testuser',
+            'LANG': 'en_US.UTF-8',
+            'LC_ALL': 'en_US.UTF-8',
+            'TZ': 'America/Chicago',
+            # Non-allowlisted vars
+            'SECRET_API_KEY': 'secret123',
+            'PRIVATE_TOKEN': 'token456',
+            'DB_PASSWORD': 'password789',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # All allowlisted vars should be present
+            for var in ALLOWED_SCRIPT_ENV_VARS:
+                if var in ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TZ']:
+                    assert var in env
+
+            # Non-allowlisted vars must NOT be present
+            assert 'SECRET_API_KEY' not in env
+            assert 'PRIVATE_TOKEN' not in env
+            assert 'DB_PASSWORD' not in env
+
+            # MEDIC context vars should always be present
+            assert env['MEDIC_EXECUTION_ID'] == '100'
+            assert env['MEDIC_PLAYBOOK_ID'] == '10'
+            assert env['MEDIC_SERVICE_ID'] == '42'
+
+    def test_medic_context_vars_always_present(self):
+        """Test MEDIC context variables are always added."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {}, clear=True):
+            execution = PlaybookExecution(
+                execution_id=200,
+                playbook_id=20,
+                service_id=5,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # MEDIC context vars should always be present
+            assert env['MEDIC_EXECUTION_ID'] == '200'
+            assert env['MEDIC_PLAYBOOK_ID'] == '20'
+            assert env['MEDIC_SERVICE_ID'] == '5'
+
+    def test_additional_env_vars_extends_allowlist(self):
+        """Test MEDIC_ADDITIONAL_SCRIPT_ENV_VARS extends allowlist."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'MEDIC_ADDITIONAL_SCRIPT_ENV_VARS': 'CUSTOM_VAR,ANOTHER_VAR',
+            'CUSTOM_VAR': 'custom_value',
+            'ANOTHER_VAR': 'another_value',
+            'STILL_NOT_ALLOWED': 'blocked',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # Additional vars from env should be allowed
+            assert env['CUSTOM_VAR'] == 'custom_value'
+            assert env['ANOTHER_VAR'] == 'another_value'
+            # Vars not in additional list still blocked
+            assert 'STILL_NOT_ALLOWED' not in env
+
+    def test_empty_additional_env_vars_handled(self):
+        """Test empty MEDIC_ADDITIONAL_SCRIPT_ENV_VARS is handled."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'MEDIC_ADDITIONAL_SCRIPT_ENV_VARS': '',
+            'SECRET_KEY': 'should_be_blocked',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # Empty additional vars should not break anything
+            assert 'SECRET_KEY' not in env
+            assert env['PATH'] == '/usr/bin'
+
+    def test_additional_env_vars_with_whitespace(self):
+        """Test MEDIC_ADDITIONAL_SCRIPT_ENV_VARS handles whitespace."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+        )
+        from Medic.Core.playbook.executors.script import _get_script_env
+
+        with patch.dict('os.environ', {
+            'MEDIC_ADDITIONAL_SCRIPT_ENV_VARS': ' CUSTOM_VAR , ANOTHER_VAR ',
+            'CUSTOM_VAR': 'value1',
+            'ANOTHER_VAR': 'value2',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # Whitespace around var names should be trimmed
+            assert env['CUSTOM_VAR'] == 'value1'
+            assert env['ANOTHER_VAR'] == 'value2'
+
+
 class TestCheckHeartbeatReceived:
     """Tests for check_heartbeat_received function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_success(self, mock_db):
         """Test heartbeat received check when heartbeat exists."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2577,7 +2826,7 @@ class TestCheckHeartbeatReceived:
         assert met is True
         assert "Heartbeat received" in message
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_not_found(self, mock_db):
         """Test heartbeat received check when no heartbeat found."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2594,7 +2843,7 @@ class TestCheckHeartbeatReceived:
         assert met is False
         assert "Waiting for heartbeat" in message
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_min_count(self, mock_db):
         """Test heartbeat check with min_count parameter."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2611,7 +2860,7 @@ class TestCheckHeartbeatReceived:
         assert met is False
         assert "2/3" in message
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_min_count_met(self, mock_db):
         """Test heartbeat check when min_count is met."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2628,7 +2877,7 @@ class TestCheckHeartbeatReceived:
         assert met is True
         assert "3 heartbeat(s)" in message
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_with_status_filter(self, mock_db):
         """Test heartbeat check with status filter."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2649,7 +2898,7 @@ class TestCheckHeartbeatReceived:
         assert "status = %s" in query
         assert "UP" in params
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_db_failure(self, mock_db):
         """Test heartbeat check handles DB failure."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2666,7 +2915,7 @@ class TestCheckHeartbeatReceived:
         assert met is False
         assert "Failed to query" in message
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.executors.condition.db')
     def test_check_heartbeat_received_json_error(self, mock_db):
         """Test heartbeat check handles JSON parse error."""
         from Medic.Core.playbook_engine import check_heartbeat_received
@@ -2687,10 +2936,10 @@ class TestCheckHeartbeatReceived:
 class TestExecuteConditionStep:
     """Tests for execute_condition_step function."""
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_success_immediately(
         self,
         mock_create,
@@ -2729,10 +2978,10 @@ class TestExecuteConditionStep:
         assert result.status == StepResultStatus.COMPLETED
         assert "Condition 'heartbeat_received' met" in result.output
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_timeout_fail(
         self,
         mock_create,
@@ -2776,10 +3025,10 @@ class TestExecuteConditionStep:
         assert result.status == StepResultStatus.FAILED
         assert "timed out" in result.output
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_timeout_continue(
         self,
         mock_create,
@@ -2823,10 +3072,10 @@ class TestExecuteConditionStep:
         assert result.status == StepResultStatus.COMPLETED  # Continues!
         assert "on_failure=continue" in result.output
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_timeout_escalate(
         self,
         mock_create,
@@ -2871,8 +3120,8 @@ class TestExecuteConditionStep:
         assert "[ESCALATE]" in result.output
         assert "escalating" in result.error_message.lower()
 
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_no_service_id(
         self,
         mock_create,
@@ -2908,10 +3157,10 @@ class TestExecuteConditionStep:
         assert result.status == StepResultStatus.FAILED
         assert "No service_id" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_service_id_from_parameters(
         self,
         mock_create,
@@ -2954,7 +3203,7 @@ class TestExecuteConditionStep:
         call_args = mock_check_heartbeat.call_args
         assert call_args[1]["service_id"] == 99
 
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_creation_failure(self, mock_create):
         """Test condition step handles step result creation failure."""
         from Medic.Core.playbook_engine import (
@@ -2985,10 +3234,10 @@ class TestExecuteConditionStep:
         assert result.status == StepResultStatus.FAILED
         assert "Failed to create step result" in result.error_message
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_polls_until_success(
         self,
         mock_create,
@@ -3033,10 +3282,10 @@ class TestExecuteConditionStep:
         assert mock_check_heartbeat.call_count == 3
         assert mock_sleep.call_count == 2  # Slept twice
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_uses_custom_timeout(
         self,
         mock_create,
@@ -3077,10 +3326,10 @@ class TestExecuteConditionStep:
         # Step should complete without timeout
         assert result.status == StepResultStatus.COMPLETED
 
-    @patch('Medic.Core.playbook_engine.time.sleep')
-    @patch('Medic.Core.playbook_engine.check_heartbeat_received')
-    @patch('Medic.Core.playbook_engine.update_step_result')
-    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook.executors.condition.time.sleep')
+    @patch('Medic.Core.playbook.executors.condition.check_heartbeat_received')
+    @patch('Medic.Core.playbook.executors.condition.update_step_result')
+    @patch('Medic.Core.playbook.executors.condition.create_step_result')
     def test_execute_condition_step_passes_parameters(
         self,
         mock_create,
@@ -3603,3 +3852,234 @@ class TestPlaybookExecutionMetrics:
         assert result is not None
         # Pending approval metric should NOT be called for running status
         mock_update_pending.assert_not_called()
+
+
+class TestExecuteWebhookStepSSRFPrevention:
+    """Tests for SSRF prevention in execute_webhook_step."""
+
+    @patch('Medic.Core.playbook.executors.webhook.validate_url')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
+    def test_webhook_validates_url_before_request(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step validates URL before making request."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.return_value = True
+
+        # Mock HTTP client
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = 'OK'
+
+        def mock_request(**kwargs):
+            return mock_response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        execute_webhook_step(step, execution, http_client=mock_request)
+
+        # Verify validate_url was called with the URL
+        mock_validate_url.assert_called_once_with("https://example.com/api")
+
+    @patch('Medic.Core.playbook.executors.webhook.validate_url')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
+    def test_webhook_rejects_private_ip_127(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects localhost URLs (127.x.x.x)."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="http://127.0.0.1:8080/internal",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"
+
+    @patch('Medic.Core.playbook.executors.webhook.validate_url')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
+    def test_webhook_rejects_private_ip_10(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects private IPs (10.x.x.x)."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="http://10.0.0.5/internal-service",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"
+
+    @patch('Medic.Core.playbook.executors.webhook.validate_url')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
+    def test_webhook_rejects_metadata_endpoint(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects cloud metadata endpoints."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="http://169.254.169.254/latest/meta-data/",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"
+
+    @patch('Medic.Core.playbook.executors.webhook.validate_url')
+    @patch('Medic.Core.playbook.executors.webhook.update_step_result')
+    @patch('Medic.Core.playbook.executors.webhook.create_step_result')
+    @patch('Medic.Core.playbook.executors.webhook._build_webhook_context')
+    def test_webhook_rejects_file_scheme(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects file:// URLs."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="file:///etc/passwd",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"

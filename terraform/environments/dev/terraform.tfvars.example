@@ -1,0 +1,107 @@
+# =============================================================================
+# Medic Dev Environment - Example Variable Values
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in the values.
+# Do NOT commit terraform.tfvars (it's in .gitignore)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# AWS Configuration
+# -----------------------------------------------------------------------------
+aws_region  = "us-east-1"
+environment = "dev"
+
+# -----------------------------------------------------------------------------
+# Network Configuration (required)
+# -----------------------------------------------------------------------------
+vpc_id                     = "vpc-xxxxxxxxxxxxxxxxx"
+eks_cluster_name           = "medic-dev-cluster"
+eks_node_security_group_id = "sg-xxxxxxxxxxxxxxxxx"
+
+# -----------------------------------------------------------------------------
+# RDS Configuration
+# -----------------------------------------------------------------------------
+rds_instance_class           = "db.t3.micro"
+rds_engine_version           = "15"
+rds_database_name            = "medic"
+rds_master_username          = "medic_admin"
+rds_master_password          = "CHANGE_ME_SECURE_PASSWORD"  # Use secrets management!
+rds_allocated_storage        = 20
+rds_max_allocated_storage    = 100
+rds_multi_az                 = false
+rds_backup_retention_period  = 7
+rds_performance_insights_enabled = false
+
+# -----------------------------------------------------------------------------
+# ElastiCache Configuration
+# -----------------------------------------------------------------------------
+elasticache_node_type      = "cache.t3.micro"
+elasticache_engine_version = "7.1"
+
+# -----------------------------------------------------------------------------
+# Kubernetes Configuration
+# -----------------------------------------------------------------------------
+kubernetes_namespace = "medic"
+create_namespace     = true
+service_account_name = "medic"
+
+# -----------------------------------------------------------------------------
+# Helm Chart Configuration
+# -----------------------------------------------------------------------------
+helm_chart_path    = "../../../helm/medic"
+# helm_chart_version = "1.0.0"  # Uncomment for remote chart
+
+# -----------------------------------------------------------------------------
+# Application Configuration (required)
+# -----------------------------------------------------------------------------
+image_repository   = "123456789012.dkr.ecr.us-east-1.amazonaws.com/medic"
+image_tag          = "latest"
+image_pull_policy  = "IfNotPresent"
+api_replica_count  = 2
+worker_replica_count = 1
+
+# Uncomment to customize resources:
+# api_resources = {
+#   requests = {
+#     cpu    = "100m"
+#     memory = "256Mi"
+#   }
+#   limits = {
+#     cpu    = "500m"
+#     memory = "512Mi"
+#   }
+# }
+
+# -----------------------------------------------------------------------------
+# Ingress Configuration
+# -----------------------------------------------------------------------------
+ingress_enabled         = true
+ingress_host            = "medic-dev.example.com"
+ingress_tls_enabled     = true
+ingress_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# -----------------------------------------------------------------------------
+# Observability Configuration
+# -----------------------------------------------------------------------------
+log_level                 = "INFO"
+otel_endpoint             = "http://alloy:4317"
+service_monitor_enabled   = true
+grafana_dashboard_enabled = true
+
+# -----------------------------------------------------------------------------
+# External Secrets Configuration
+# -----------------------------------------------------------------------------
+external_secret_store_ref = "aws-secrets-manager"
+
+# -----------------------------------------------------------------------------
+# Migration Configuration
+# -----------------------------------------------------------------------------
+migrations_enabled = true
+
+# -----------------------------------------------------------------------------
+# Tags
+# -----------------------------------------------------------------------------
+tags = {
+  Team   = "platform"
+  CostCenter = "engineering"
+}

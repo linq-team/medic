@@ -1,4 +1,77 @@
 ## Codebase Patterns
+
+### Backend / Infrastructure
+- Script env security: Only pass allowlisted vars (PATH, HOME, USER, LANG, LC_ALL, TZ) via _get_script_env()
+- Use `Medic.Helpers.logSettings.logSetup()` for logging configuration
+- Follow existing module docstring pattern with description, features, and usage example
+- Use `@dataclass` for configuration and status objects
+- Test pattern: class-based tests with `@patch` decorators for mocking
+- Use `pytest.mark.parametrize` for testing multiple inputs
+- Import database module as `import Medic.Core.database as db`
+- Module constants should be type-annotated: `CONSTANT: Type = value`
+- Rate limiting: All endpoints must be rate limited - no bypass prefixes allowed
+- Use `_get_endpoint_rate_limit_config()` to get endpoint-specific rate limits
+- Environment variable config: Use `int(os.environ.get("VAR_NAME", "default"))` pattern
+- **Datetime utilities: Import `from Medic.Core.utils.datetime_helpers import now as get_now, parse_datetime`**
+- **When local var shadows import name, alias the import (e.g., `now as get_now`) to avoid `now = now()` conflicts**
+- **Playbook package: Import models and db ops from `Medic.Core.playbook` (not playbook_engine)**
+- **Test patches: Use `Medic.Core.playbook.db.db` for db operations moved to playbook package, `Medic.Core.playbook_engine.db` for functions remaining in engine**
+- **Executor patches: When testing executor functions directly, patch at `Medic.Core.playbook.executors.<executor_name>.<function>` (e.g., `Medic.Core.playbook.executors.webhook.create_step_result`)**
+- **Redis rate limiter: Use `REDIS_URL` env var for connection, `REDIS_POOL_SIZE` for pool (default 10), use `is_healthy()` to check connectivity**
+- **Redis testing: Use `fakeredis` package for testing Redis-dependent code**
+- **Rate limiter factory: Use `MEDIC_RATE_LIMITER_TYPE` env var (redis/memory/auto) for selection, `get_rate_limiter()` returns cached singleton**
+- **Dockerfile: Multi-stage build (builder -> runtime), python:3.11-slim-bookworm base, port 8080, gunicorn WSGI server**
+- **Docker user: Non-root user `medic` with uid 1000 for Kubernetes compatibility**
+- **Docker Compose: Use `condition: service_healthy` for depends_on with healthchecks**
+- **Helm chart: Use `helm lint` and `helm template` to validate charts before committing**
+- **Helm helpers: Define reusable helpers in `_helpers.tpl` (medic.fullname, medic.labels, etc.)**
+- **Helm values: Structure values.yaml with logical groupings (api, worker, ingress, config, secret)**
+- **API Deployment: Use checksum annotations on configmap/secret for automatic pod restart on config changes**
+- **Volume mounts: Add emptyDir for /tmp when using readOnlyRootFilesystem**
+- **Worker deployment: Use exec-based liveness probe (not HTTP) for non-service deployments**
+- **Service template: Use targetPort: http to reference named port from deployment**
+- **Ingress template: Use conditional TLS annotations (certificate-arn, listen-ports, ssl-redirect) when TLS enabled**
+- **Ingress TLS: Support both AWS ACM (certificateArn) and Kubernetes TLS secrets (secretName)**
+- **ExternalSecret template: Use `external-secrets.io/v1beta1` API, target same secret name as direct secret**
+- **ServiceAccount IRSA: Annotations go under `serviceAccount.annotations` with `eks.amazonaws.com/role-arn` key**
+- **KEDA ScaledObject: Use `keda.sh/v1alpha1` API, reference deployment by name in scaleTargetRef**
+- **KEDA HPA behavior: Scale up fast (stabilizationWindowSeconds: 15), scale down slow (stabilizationWindowSeconds: 300)**
+- **KEDA CPU trigger: Use `type: cpu` with `metricType: Utilization` for percentage-based scaling**
+- **PodDisruptionBudget: Use `policy/v1` API, selector must match deployment's selector labels**
+- **Karpenter annotations: Add `karpenter.sh/do-not-disrupt: "false"` to allow node consolidation**
+- **OpenTelemetry: Use `opentelemetry.exporter.otlp.proto.grpc.trace_exporter` for OTLP gRPC exporter**
+- **Telemetry init: Call `init_telemetry(app)` after Flask app creation but before route registration**
+- **Trace context: Use `get_current_trace_id()` from Flask g context for log correlation**
+- **Structured logging: Use `Medic.Core.logging_config.configure_logging()` for OTEL-compatible JSON logs**
+- **Log format env var: Use `MEDIC_LOG_FORMAT` ('json' default, 'text' for debug)**
+- **Log level env var: Use `MEDIC_LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR)**
+- **JSONFormatter: Includes TraceId, SpanId, Resource attributes, and request context**
+- **Metrics exemplars: Use `record_*_with_exemplar()` functions to include trace_id in histogram observations**
+- **OpenMetrics format: Use `get_metrics(openmetrics=True)` for exemplar support (default)**
+- **Metrics info gauge: `medic_build_info` gauge with service_name, service_version, deployment_environment labels**
+- **OTEL metric naming: Use `medic_http_server_*` for HTTP, `medic_db_client_*` for DB (follows OTEL semantic conventions)**
+- **ServiceMonitor: Use `monitoring.coreos.com/v1` API, target service with matchLabels and port name**
+- **PodMonitor: Use `monitoring.coreos.com/v1` API, target pods with matchLabels and podMetricsEndpoints**
+- **Metric relabelings: Always add environment label from global.environment for OTEL resource attribution**
+- **Grafana dashboard: Use ConfigMap with `grafana_dashboard: "1"` label for sidecar discovery**
+- **Dashboard exemplars: Enable `exemplar: true` in query targets for trace correlation**
+- **Dashboard variables: Use `datasource` type for Prometheus/Tempo/Loki selections**
+- **Helm template escaping: Use `{{` + "`{{ variable }}`" + `}}` syntax to escape Grafana template variables**
+- **GitHub Actions: Use `actions/cache@v4` for pip caching, `docker/build-push-action@v6` with `cache-from: type=gha` for Docker layers**
+- **GitHub Actions ruff: Use `--output-format=github` for inline PR annotations**
+- **GitHub Actions Helm: Use `azure/setup-helm@v4` for Helm installation**
+- **GitHub Actions Terraform: Use `hashicorp/setup-terraform@v3` with `terraform_wrapper: false` for cleaner output**
+- **Terraform modules: Validate with `terraform init -backend=false && terraform validate`**
+- **Terraform RDS: Use `source_security_group_id` for EKS access, mark connection strings as `sensitive = true`**
+- **Terraform ElastiCache: Use `num_cache_nodes = 1` for single-node, access endpoint via `cache_nodes[0].address`**
+- **Terraform IRSA: Use `sts:AssumeRoleWithWebIdentity` with OIDC Federated principal and service account conditions**
+- **Terraform helm_release: Use `yamlencode()` for complex values, `set_sensitive {}` for credentials**
+- **Terraform EKS auth: Use `data.aws_eks_cluster_auth` for token, `data.aws_eks_cluster` for endpoint/CA**
+- **Helm hooks: Use `helm.sh/hook: pre-install,pre-upgrade` for migrations, negative weight runs first**
+- **Helm Job cleanup: Use `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded`**
+- **Migration script: Track applied migrations in `schema_migrations` table, support `DATABASE_URL` env var**
+
+### UI (React Dashboard)
 - UI project located in ui/ directory
 - Use Vite + React + TypeScript
 - Tailwind CSS for styling with Linq brand colors
@@ -13,32 +86,26 @@
 - Status colors: healthy (#83B149), warning (#CA8A04 light / #EAB308 dark), error (#DC2626 light / #EF4444 dark)
 - API authentication via API key in Authorization header (Bearer token)
 - Store API key in sessionStorage, not localStorage
-
 - ESLint 9 uses flat config (eslint.config.js) instead of legacy .eslintrc.js
 - For custom fonts in Vite, copy font files to public/fonts/ and reference via /fonts/ path in CSS
 - shadcn/ui components installed to src/components/ui/ with path alias @/* -> ./src/*
 - cn() utility in src/lib/utils.ts for conditional class merging
 - Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
-
 - Provider components (e.g., ThemeProvider) export both component and hook - add ESLint override in eslint.config.js
 - Static assets (images, logos) go in ui/public/ and are served at root path (e.g., /assets/logo.png)
-
 - Layout component pattern: use Outlet for nested route rendering in React Router v6
 - Mobile navigation: use shadcn/ui Sheet component with side="left" for drawer pattern
 - Responsive breakpoints: md: (768px) is standard breakpoint to hide/show sidebar
 - tsconfig.app.json has erasableSyntaxOnly: true - don't use public constructor parameters in classes
 - API client factory pattern: createApiClient() returns object with methods, allows setApiKey() for runtime config
-
 - AuthProvider pattern: use useMemo for context value to avoid unnecessary re-renders
 - AuthContext syncs API key to apiClient.setApiKey() on login/logout for consistent API calls
-
 - Login page pattern: place standalone auth pages (Login) outside Layout Route in App.tsx
 - TypeScript verbatimModuleSyntax: use `type` keyword for type imports (e.g., `import { useState, type FormEvent }`)
 - shadcn/ui Input component uses CSS variable classes (border-input, ring, etc.) from index.css
 - ProtectedRoute pattern: wrap layout/routes with component that checks isAuthenticated and redirects to /login
 - React Query hooks pattern: create query key factories (e.g., servicesKeys) for consistent cache key management
 - React Query hooks pattern: export filters interface and separate hooks for list/detail queries
-
 - Dashboard summary cards pattern: use Card with CardHeader, CardTitle, CardContent for consistent styling
 - Skeleton component for loading states: use animate-pulse with bg-primary/10
 - Status color classes: text-status-healthy, text-status-error for conditional coloring
@@ -70,7 +137,6 @@
 - Detail page pattern: Card components for grouping related information (Service Info, Monitoring Config, Timestamps)
 - Detail row pattern: dt/dd pattern with label and value for consistent styling
 - Services link by heartbeat_name (encodeURIComponent) since API uses heartbeat_name for lookup
-
 - Alerts table pattern: similar to Services table but with Alert-specific columns (Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration)
 - Alert status badge: variant="destructive" for active alerts with animate-pulse, variant="secondary" for resolved
 - formatDuration() helper: converts seconds to human-readable (e.g., "1h 30m", "5m 20s", "45s")
@@ -79,11 +145,1213 @@
 - useAlerts hook already exists in src/hooks/use-alerts.ts - no need to create new hooks
 - Alert detail page pattern: fetch all alerts via useAlerts() and filter by alert_id since no single-alert API endpoint exists
 - formatRelativeTime() helper: calculate diff from now and show "X hours ago", "X minutes ago", etc.
-
 - Server-side pagination pattern: pass limit/offset to API, calculate totalPages from response's total_count
 - Audit logs use PaginatedResponse<T> wrapper with entries, total_count, limit, offset, has_more
 - Date input filter: use Input type="date" with pl-8 padding for Calendar icon
 - Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
+
+---
+
+## 2026-02-04 - US-023 - Linear Issue: SRE-50
+- **What was implemented**: Grafana dashboard ConfigMap with trace and log correlation links
+  - Created `helm/medic/dashboards/medic-overview.json` with comprehensive dashboard:
+    - Service Overview row: Request Rate, Error Rate (5xx), p99 Latency, Active Alerts stats
+    - Request Metrics row: Request Rate by Endpoint, Request Rate by Status Code
+    - Latency row: Latency Percentiles (p50/p95/p99), p99 by Endpoint (both with exemplar support)
+    - Auth & Rate Limiting row: Auth Failures by Reason, Rate Limit Hits (429s)
+    - Playbook Executions row: Executions by Status, Execution Duration p95 (with exemplars)
+    - Webhooks & External Services row: PagerDuty Success Rate, Slack Success Rate, Circuit Breakers Open
+    - Health & Infrastructure row: Component Health, Database Query Duration p95 (with exemplars)
+  - Created `helm/medic/templates/grafana-dashboard.yaml` as ConfigMap:
+    - Conditional creation via `.Values.grafana.dashboard.enabled`
+    - `grafana_dashboard: "1"` label for Grafana sidecar auto-discovery
+    - Supports additional labels and annotations via values
+    - Dashboard JSON embedded inline with proper Helm template escaping
+  - Dashboard features:
+    - Exemplar display enabled for latency and duration histograms
+    - Data links from metrics to Tempo traces using `${__data.fields.trace_id}`
+    - Data links from metrics to Loki logs using time range and service labels
+    - Dashboard variables: datasource (Prometheus), tempo_datasource, loki_datasource, environment, service
+    - Variables populated from `medic_build_info` metric labels
+    - Auto-refresh every 30s
+  - Updated `helm/medic/values.yaml` with expanded grafana section:
+    - Added `annotations: {}` for ConfigMap annotations
+    - Added `datasources` section with prometheus, tempo, loki defaults
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds
+  - Verified dashboard JSON is valid (python json.load)
+
+- **Files changed**:
+  - `helm/medic/dashboards/medic-overview.json` (new, comprehensive dashboard JSON)
+  - `helm/medic/templates/grafana-dashboard.yaml` (new, ConfigMap template)
+  - `helm/medic/values.yaml` (expanded grafana section)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Grafana sidecar discovers dashboards via `grafana_dashboard: "1"` label on ConfigMaps
+  - Dashboard JSON in Helm templates needs Grafana template variables escaped as `{{` + "`{{ var }}`" + `}}`
+  - Exemplar display requires `exemplar: true` in Prometheus query targets
+  - Data links use Grafana variables like `${__data.fields.trace_id}` for exemplar correlation
+  - Use `datasource` variable type for user-selectable data sources
+  - Dashboard UID should be unique and descriptive (e.g., `medic-overview`)
+  - Store source dashboard JSON in separate file for easier editing/validation
+
+---
+
+## 2026-02-04 - US-022 - Linear Issue: SRE-49
+- **What was implemented**: ServiceMonitor and PodMonitor Helm templates for Alloy metric discovery
+  - Created `helm/medic/templates/servicemonitor.yaml` for API metrics scraping:
+    - Uses `monitoring.coreos.com/v1` API version
+    - Conditional creation via `.Values.metrics.serviceMonitor.enabled`
+    - Targets medic-api service on /metrics endpoint
+    - Configurable scrape interval (default: 30s) and timeout (default: 10s)
+    - Enables exemplar scraping via `enableFeatures: [exemplar-storage]` when configured
+    - Supports metric relabeling and target relabeling via values
+    - Auto-adds environment label from `.Values.global.environment`
+    - Selector matches API deployment via `medic.api.selectorLabels`
+  - Created `helm/medic/templates/podmonitor.yaml` for worker metrics (if exposed):
+    - Uses `monitoring.coreos.com/v1` API version
+    - Conditional creation via `.Values.metrics.podMonitor.enabled`
+    - Targets worker pods via `medic.worker.selectorLabels`
+    - Same configurable options as ServiceMonitor
+    - Auto-adds environment label for OTEL resource attribution
+  - Updated `helm/medic/values.yaml` with expanded metrics configuration:
+    - Added `enableExemplars: true` (default) for trace correlation in Grafana
+    - Added `honorLabels: false` (default) setting
+    - Added `metricRelabelings: []` for post-scrape relabeling
+    - Added `relabelings: []` for target discovery relabeling
+    - Added full `podMonitor` section mirroring serviceMonitor structure
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds for all resources
+
+- **Files changed**:
+  - `helm/medic/templates/servicemonitor.yaml` (new)
+  - `helm/medic/templates/podmonitor.yaml` (new)
+  - `helm/medic/values.yaml` (expanded metrics section)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - ServiceMonitor API is `monitoring.coreos.com/v1` (stable, not v1beta1)
+  - Use `port: http` to reference named port from Service, not port number
+  - Exemplar scraping requires `enableFeatures: [exemplar-storage]` in endpoints spec
+  - Always add environment label via relabelings for consistent OTEL resource attribution
+  - PodMonitor uses `podMetricsEndpoints` not `endpoints` (different from ServiceMonitor)
+  - Selector matchLabels must match the pod/service labels exactly
+  - Environment label added via relabelings: `sourceLabels: [], targetLabel: environment, replacement: <value>`
+
+---
+
+## 2026-02-04 - US-021 - Linear Issue: SRE-48
+- **What was implemented**: OTEL metrics with exemplars for trace correlation
+  - Updated `Medic/Core/metrics.py` with OTEL semantic naming conventions:
+    - `medic_http_server_request_total` (was `medic_http_requests_total`)
+    - `medic_http_server_request_duration_seconds` (was `medic_http_request_duration_seconds`)
+    - `medic_db_client_operation_duration_seconds` (was `medic_db_query_duration_seconds`)
+  - Added `medic_build_info` gauge with OTEL resource attribute labels:
+    - `service_name` from `OTEL_SERVICE_NAME`
+    - `service_version` from `MEDIC_VERSION`
+    - `deployment_environment` from `MEDIC_ENVIRONMENT`
+  - Added exemplar support to histograms:
+    - `record_request_duration_with_exemplar()` - includes trace_id in request duration
+    - `record_playbook_execution_duration_with_exemplar()` - includes trace_id in playbook duration
+    - `record_db_query_duration_with_exemplar()` - includes trace_id in DB query duration
+  - Updated `track_request_metrics` and `track_db_query` decorators to auto-extract trace_id from Flask g
+  - Changed `get_metrics()` to use OpenMetrics format by default (supports exemplars)
+  - Added `service_name` label to relevant metrics for resource attribution
+  - Maintained backwards compatibility with old metric name aliases
+  - Created comprehensive `docs/METRICS.md` documentation
+  - Added 39 unit tests covering all new functionality
+  - Typecheck (mypy) and lint (flake8) pass
+
+- **Files changed**:
+  - `Medic/Core/metrics.py` (major update with OTEL naming and exemplars)
+  - `docs/METRICS.md` (new comprehensive documentation)
+  - `tests/unit/test_metrics.py` (new, 39 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - prometheus_client `Info` metric with name 'x' creates timeseries 'x_info', avoid naming conflicts
+  - Use `MEDIC_BUILD_INFO` gauge (not `MEDIC_INFO`) to avoid collision with `APP_INFO`
+  - OpenMetrics `generate_latest()` requires `registry` parameter, Prometheus format doesn't
+  - Exemplars are passed as `{"trace_id": "..."}` dict to histogram `.observe(value, exemplar=...)`
+  - Counter internal `_name` doesn't include `_total` suffix (added at export time)
+  - Flask g context can be accessed with `getattr(g, "trace_id", None)` to safely get optional values
+  - Use `has_request_context()` before accessing Flask g in decorators that may run outside requests
+
+---
+
+## 2026-02-04 - US-020 - Linear Issue: SRE-47
+- **What was implemented**: Structured JSON logging with OpenTelemetry semantic conventions
+  - Created `Medic/Core/logging_config.py` module with:
+    - `JSONFormatter`: Formats logs as JSON with OTEL semantic conventions
+    - `TextFormatter`: Human-readable format with optional trace context
+    - `configure_logging()`: Configure logging system with JSON or text format
+    - `get_logger()`: Get a configured logger instance
+    - `get_trace_context()`: Extract trace_id/span_id from Flask g context
+    - `get_request_context()`: Extract HTTP request fields
+  - OTEL semantic conventions implemented:
+    - Timestamp in ISO 8601 format with UTC timezone
+    - SeverityText (DEBUG, INFO, WARN, ERROR, FATAL)
+    - SeverityNumber (5, 9, 13, 17, 21 per OTEL spec)
+    - Body (log message)
+    - Resource attributes (service.name, service.version, deployment.environment)
+    - TraceId and SpanId for log-to-trace correlation in Grafana
+    - InstrumentationScope (logger name)
+    - Attributes (http.method, http.route, code.filepath, code.lineno, etc.)
+  - Environment variables supported:
+    - `MEDIC_LOG_FORMAT`: 'json' (default) or 'text'
+    - `MEDIC_LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
+    - `OTEL_SERVICE_NAME`: Service name for logs (default: medic)
+    - `MEDIC_ENVIRONMENT`: Deployment environment (default: development)
+    - `MEDIC_VERSION`: Application version (default: unknown)
+  - Logs output to stdout for container collection by Alloy
+  - Exception info includes type, message, and stacktrace
+  - Extra fields from log calls are added to Attributes
+  - 41 unit tests covering all functionality
+  - Typecheck (mypy) and lint (flake8) pass
+
+- **Files changed**:
+  - `Medic/Core/logging_config.py` (new)
+  - `tests/unit/test_logging_config.py` (new, 41 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - OTEL log data model uses specific field names: Timestamp, SeverityText, SeverityNumber, Body, Resource, Attributes
+  - OTEL severity numbers follow spec: DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21
+  - Use `has_request_context()` to check if in Flask request before accessing g or request
+  - Use `getattr(g, "trace_id", None)` to safely access g attributes
+  - JSONFormatter should use `record.getMessage()` to get formatted message with args
+  - Include code location attributes (filepath, lineno, function) for debugging
+  - Text formatter can prepend trace_id to message for grep-friendly debugging
+  - Module-level `_configured` flag prevents double configuration
+
+---
+
+## 2026-02-04 - US-019 - Linear Issue: SRE-46
+- **What was implemented**: OpenTelemetry instrumentation for distributed tracing
+  - Added OpenTelemetry packages to `Medic/requirements.txt`:
+    - `opentelemetry-api>=1.24.0`
+    - `opentelemetry-sdk>=1.24.0`
+    - `opentelemetry-instrumentation-flask>=0.45b0`
+    - `opentelemetry-exporter-otlp-proto-grpc>=1.24.0`
+  - Created `Medic/Core/telemetry.py` module with:
+    - `get_otel_config()`: Read configuration from environment variables
+    - `create_resource()`: Create OTEL Resource with service metadata
+    - `create_tracer_provider()`: Configure TracerProvider with OTLP exporter
+    - `setup_propagators()`: Configure W3C trace context propagation
+    - `store_trace_context()`: Store trace_id/span_id in Flask g context
+    - `get_current_trace_id()`: Get trace_id from Flask g for log correlation
+    - `get_current_span_id()`: Get span_id from Flask g
+    - `init_telemetry()`: Initialize OTEL for Flask application
+    - `shutdown_telemetry()`: Gracefully shutdown telemetry
+    - `get_tracer()`: Get tracer instance for custom spans
+  - Environment variables supported:
+    - `OTEL_EXPORTER_OTLP_ENDPOINT` (default: http://alloy:4317)
+    - `OTEL_SERVICE_NAME` (default: medic)
+    - `OTEL_RESOURCE_ATTRIBUTES` (comma-separated key=value pairs)
+    - `MEDIC_ENVIRONMENT` (default: development)
+    - `MEDIC_VERSION` (default: unknown)
+    - `OTEL_ENABLED` (default: true)
+  - Integrated telemetry into `medic.py` create_app()
+  - Flask auto-instrumentation for request tracing
+  - W3C trace context header propagation enabled
+  - Added 28 unit tests covering all telemetry functions
+  - Typecheck (mypy) and lint (flake8) pass
+
+- **Files changed**:
+  - `Medic/requirements.txt` (added OTEL packages)
+  - `Medic/Core/telemetry.py` (new)
+  - `medic.py` (added telemetry initialization)
+  - `tests/unit/test_telemetry.py` (new, 28 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - OpenTelemetry exporter import path is `opentelemetry.exporter.otlp.proto.grpc.trace_exporter` (not `proto_grpc`)
+  - Use `insecure=True` for OTLP exporter when communicating within cluster
+  - Trace IDs are 128-bit, format with `format(trace_id, "032x")` for 32-char hex string
+  - Span IDs are 64-bit, format with `format(span_id, "016x")` for 16-char hex string
+  - Initialize telemetry BEFORE registering routes so Flask instrumentation covers all endpoints
+  - Use `before_request` hook to store trace context in Flask g for log correlation
+  - Module-level `_initialized` flag prevents double initialization
+
+---
+
+## 2026-02-04 - US-018 - Linear Issue: SRE-45
+- **What was implemented**: KEDA ScaledObject and PodDisruptionBudget Helm templates for autoscaling and availability
+  - Created `helm/medic/templates/api-scaledobject.yaml` for KEDA autoscaling:
+    - Uses `keda.sh/v1alpha1` API version
+    - Conditional creation via `.Values.api.autoscaling.enabled`
+    - Targets medic-api deployment via scaleTargetRef
+    - Configurable min/max replicas, cooldownPeriod (300s), pollingInterval (30s)
+    - CPU trigger with configurable threshold (default: 70%)
+    - Optional Prometheus trigger for custom metrics (e.g., request rate)
+    - HPA behavior: scale up fast (15s stabilization), scale down slow (300s)
+    - Karpenter-friendly annotation `karpenter.sh/do-not-disrupt: "false"`
+  - Created `helm/medic/templates/worker-pdb.yaml` for PodDisruptionBudget:
+    - Uses `policy/v1` API version
+    - Conditional creation via `.Values.worker.pdb.enabled`
+    - Configurable minAvailable (default: 1)
+    - Selector matches worker deployment labels
+    - Karpenter-friendly annotation for node consolidation
+  - Added topology spread constraints to worker-deployment.yaml:
+    - Previously only API deployment had topologySpreadConstraints
+    - Now worker also distributes across availability zones
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds
+
+- **Files changed**:
+  - `helm/medic/templates/api-scaledobject.yaml` (new)
+  - `helm/medic/templates/worker-pdb.yaml` (new)
+  - `helm/medic/templates/worker-deployment.yaml` (added topologySpreadConstraints)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - KEDA ScaledObject replaces HPA - use `keda.sh/v1alpha1` API
+  - ScaledObject's scaleTargetRef needs apiVersion, kind, and name fields
+  - CPU trigger uses `metricType: Utilization` for percentage-based scaling
+  - Prometheus trigger requires serverAddress, metricName, threshold, and query
+  - HPA behavior block in `advanced.horizontalPodAutoscalerConfig` controls scaling speed
+  - PodDisruptionBudget uses `policy/v1` (not `policy/v1beta1`)
+  - PDB selector must exactly match deployment's selector labels
+  - Karpenter annotation `karpenter.sh/do-not-disrupt: "false"` enables node consolidation
+  - When autoscaling enabled, omit `replicas` from Deployment to avoid KEDA conflicts
+
+---
+
+## 2026-02-04 - US-017 - Linear Issue: SRE-44
+- **What was implemented**: ConfigMap, Secret, and ServiceAccount Helm templates for configuration management
+  - ConfigMap (`configmap.yaml`) was already created in US-014:
+    - Iterates over `.Values.config` map to create key-value pairs
+    - Used for non-sensitive configuration (PORT, LOG_LEVEL, rate limits)
+  - Secret (`secret.yaml`) was already created in US-014:
+    - Conditional creation via `.Values.secret.create`
+    - Values base64-encoded automatically via `b64enc`
+    - Used for sensitive values when not using ESO
+  - Created `helm/medic/templates/external-secret.yaml` for ESO integration:
+    - Uses `external-secrets.io/v1beta1` API version
+    - Controlled by `.Values.externalSecret.enabled`
+    - References ClusterSecretStore configured in values
+    - Creates secret with same name as direct secret (`medic-secret`)
+    - Supports configurable refresh interval (default: 1h)
+    - Deletion policy set to Retain for safety
+  - Created `helm/medic/templates/serviceaccount.yaml`:
+    - Conditional creation via `.Values.serviceAccount.create`
+    - Supports custom annotations for IRSA (`eks.amazonaws.com/role-arn`)
+    - automountServiceAccountToken enabled
+    - Referenced by both API and Worker deployments
+  - Values.yaml already had all required defaults from US-013
+  - Verified `helm lint` passes
+  - Verified `helm template` renders correctly for all combinations
+  - Verified `kubectl apply --dry-run=client` validates all resources
+
+- **Files changed**:
+  - `helm/medic/templates/external-secret.yaml` (new)
+  - `helm/medic/templates/serviceaccount.yaml` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - ExternalSecret `target.name` should match the name used by direct secrets for consistent envFrom references
+  - Use `deletionPolicy: Retain` for ExternalSecrets to prevent accidental secret deletion
+  - ServiceAccount annotations are the standard way to enable IRSA on EKS
+  - Test all value combinations (ESO on/off, secret.create on/off, custom SA name) with `helm template`
+
+---
+
+## 2026-02-04 - US-016 - Linear Issue: SRE-43
+- **What was implemented**: Service and Ingress Helm templates for external access
+  - Created `helm/medic/templates/api-service.yaml` - ClusterIP service:
+    - Service name: `{{ include "medic.fullname" . }}-api`
+    - Service type: `{{ .Values.service.type }}` (default: ClusterIP)
+    - Port configurable via `{{ .Values.service.port }}` (default: 8080)
+    - Named port `http` for reference by ingress
+    - Selector uses `medic.api.selectorLabels` helper
+  - Created `helm/medic/templates/ingress.yaml` with conditional creation:
+    - Controlled by `{{ .Values.ingress.enabled }}`
+    - Uses `networking.k8s.io/v1` API version
+    - Supports `ingressClassName` for ALB controller
+    - ALB annotations configurable via `{{ .Values.ingress.annotations }}`
+    - Host configurable via `{{ .Values.ingress.host }}`
+    - TLS support with two options:
+      - AWS ACM: `certificateArn` adds ALB certificate annotations
+      - K8s secret: `secretName` for standard TLS secrets
+    - Automatic SSL redirect when TLS enabled with ACM certificate
+  - Updated `values.yaml` with TLS secretName field
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds
+
+- **Files changed**:
+  - `helm/medic/templates/api-service.yaml` (new)
+  - `helm/medic/templates/ingress.yaml` (new)
+  - `helm/medic/values.yaml` (added tls.secretName)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `targetPort: http` (named port) instead of hardcoding port number for flexibility
+  - Ingress annotations for ALB TLS include certificate-arn, listen-ports, and ssl-redirect
+  - Support both ACM certificates (AWS-managed) and K8s TLS secrets (for other ingress controllers)
+  - Conditional annotation blocks can be nested inside `{{- with }}` blocks
+  - Ingress paths should use `pathType: Prefix` for catch-all routing
+
+---
+
+## 2026-02-04 - US-015 - Linear Issue: SRE-42
+- **What was implemented**: Worker Deployment Helm template for Kubernetes deployment
+  - Created `helm/medic/templates/worker-deployment.yaml` with full Deployment spec:
+    - Deployment name: `{{ include "medic.fullname" . }}-worker`
+    - Replicas: `{{ .Values.worker.replicaCount }}` (default: 1)
+    - Container command: `['python', '-m', 'Medic.Worker.monitor']`
+    - Resources from `{{ .Values.worker.resources }}`
+    - Liveness probe: exec-based (python health check) with configurable delays
+    - Security context matching API deployment (runAsNonRoot, readOnlyRootFilesystem)
+    - Environment variables shared with API via envFrom
+    - Checksum annotations for config/secret to trigger pod restart on changes
+    - Volume mount for /tmp (emptyDir) to support readOnlyRootFilesystem
+    - Shared affinity, tolerations, and nodeSelector with API
+  - Worker values.yaml defaults already existed in values.yaml (lines 75-102)
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid deployment YAML
+  - Verified with `kubectl apply --dry-run=client` for Kubernetes validation
+
+- **Files changed**:
+  - `helm/medic/templates/worker-deployment.yaml` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Worker uses exec-based liveness probe (not HTTP) since it doesn't expose ports
+  - Worker does not need readinessProbe since it has no service/ingress
+  - Worker does not have ports section since it's not a service
+  - Worker shares same securityContext, envFrom, and volumes as API for consistency
+  - No autoscaling support for worker (single replica is typical for monitor workers)
+
+---
+
+## 2026-02-04 - US-014 - Linear Issue: SRE-41
+- **What was implemented**: API Deployment Helm template for Kubernetes deployment
+  - Created `helm/medic/templates/api-deployment.yaml` with full Deployment spec:
+    - Deployment name: `{{ include "medic.fullname" . }}-api`
+    - Replicas from values with KEDA autoscaling support (omits replicas when autoscaling enabled)
+    - Image from `{{ .Values.image.repository }}:{{ .Values.image.tag }}`
+    - Resources from `{{ .Values.api.resources }}`
+    - Configurable liveness probe: /health/live with initialDelaySeconds, periodSeconds, timeoutSeconds, failureThreshold
+    - Configurable readiness probe: /health/ready with same configurable delays
+    - Pod security context: runAsNonRoot, runAsUser 1000, fsGroup 1000
+    - Container security context: allowPrivilegeEscalation false, readOnlyRootFilesystem true, drop ALL capabilities
+    - Pod anti-affinity for spreading across nodes (preferredDuringSchedulingIgnoredDuringExecution)
+    - Topology spread constraints for Karpenter multi-AZ distribution (topology.kubernetes.io/zone)
+    - Environment variables via envFrom from ConfigMap and optional Secret
+    - Checksum annotations for config/secret to trigger pod restart on changes
+    - Volume mount for /tmp (emptyDir) to support readOnlyRootFilesystem
+  - Created `helm/medic/templates/configmap.yaml` for non-sensitive configuration
+  - Created `helm/medic/templates/secret.yaml` for sensitive values (conditional)
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid deployment YAML
+
+- **Files changed**:
+  - `helm/medic/templates/api-deployment.yaml` (new)
+  - `helm/medic/templates/configmap.yaml` (new)
+  - `helm/medic/templates/secret.yaml` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use checksum annotations (`checksum/config`, `checksum/secret`) to trigger pod restarts on ConfigMap/Secret changes
+  - When using readOnlyRootFilesystem, mount emptyDir at /tmp for apps that need temp file access
+  - Omit `replicas` field when KEDA autoscaling is enabled to avoid conflicts
+  - Use `include` instead of `template` for helpers that return values (include allows piping)
+  - Pod template labels must match selector labels exactly for Deployment to work
+  - topologySpreadConstraints with `whenUnsatisfiable: ScheduleAnyway` provides soft multi-AZ distribution
+
+---
+
+## 2026-02-04 - US-013 - Linear Issue: SRE-40
+- **What was implemented**: Helm chart structure for Medic deployment to Kubernetes
+  - Created `helm/medic/Chart.yaml` with chart metadata (name, version, appVersion)
+  - Created `helm/medic/values.yaml` with comprehensive default values:
+    - Image configuration (repository, tag, pullPolicy)
+    - API deployment (replicaCount, resources, probes, KEDA autoscaling)
+    - Worker deployment (replicaCount, resources, probes, PDB)
+    - Service configuration (ClusterIP, port 8080)
+    - Ingress configuration (ALB support, TLS, host)
+    - ConfigMap for non-sensitive config (PORT, LOG_LEVEL, rate limiting)
+    - Secret management (direct secrets or ExternalSecret/ESO)
+    - ServiceAccount with IRSA annotations support
+    - Security contexts (runAsNonRoot, readOnlyRootFilesystem)
+    - Affinity and topology spread for multi-AZ distribution
+    - ServiceMonitor for Prometheus/Alloy metrics
+    - Grafana dashboard support
+    - Database migrations hook support
+  - Created `helm/medic/templates/_helpers.tpl` with reusable template helpers:
+    - medic.name, medic.fullname, medic.chart
+    - medic.labels, medic.selectorLabels
+    - medic.api.selectorLabels, medic.worker.selectorLabels
+    - medic.serviceAccountName, medic.namespace
+    - medic.configmapName, medic.secretName
+    - medic.image, medic.envFrom
+    - medic.podSecurityContext, medic.securityContext
+  - Created `helm/medic/templates/namespace.yaml` (conditional, controlled by value)
+  - Created `helm/medic/templates/NOTES.txt` with post-install instructions
+  - Verified `helm lint` passes (only INFO about optional icon)
+  - Verified `helm template` renders valid YAML
+
+- **Files changed**:
+  - `helm/medic/Chart.yaml` (new)
+  - `helm/medic/values.yaml` (new)
+  - `helm/medic/templates/_helpers.tpl` (new)
+  - `helm/medic/templates/namespace.yaml` (new)
+  - `helm/medic/templates/NOTES.txt` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `helm lint` before committing to catch YAML syntax errors
+  - Use `helm template` to verify rendered output without deploying
+  - Organize values.yaml with clear sections and comments for maintainability
+  - Template helpers (`_helpers.tpl`) reduce duplication across templates
+  - Use conditional rendering ({{- if .Values.x }}) for optional resources
+  - IRSA annotations go on ServiceAccount for AWS IAM integration
+  - topologySpreadConstraints enable Karpenter-aware scheduling
+  - External Secrets Operator (ESO) integration via externalSecret values
+
+---
+
+## 2026-02-04 - US-012 - Linear Issue: SRE-39
+- **What was implemented**: Docker Compose for local development with all dependencies
+  - Updated `docker-compose.yml` with production-ready service structure
+  - Service: postgres (postgres:15) with persistent volume and healthcheck
+  - Service: redis (redis:7) with persistent volume, healthcheck, and AOF persistence
+  - Service: medic-api (builds from Dockerfile, exposes port 8080, healthcheck)
+  - Service: medic-worker (builds from Dockerfile, runs Medic.Worker.monitor)
+  - All app services depend on postgres and redis with `condition: service_healthy`
+  - Environment variables use ${VAR:-default} syntax for flexibility
+  - Updated `.env.example` with all required environment variables including:
+    - Database config (DB_HOST, DB_PORT, DB_NAME, PG_USER, PG_PASS)
+    - Application config (PORT, DEBUG, MEDIC_BASE_URL, MEDIC_TIMEZONE, LOG_LEVEL)
+    - Worker settings (WORKER_INTERVAL_SECONDS, ALERT_AUTO_UNMUTE_HOURS)
+    - Redis config (REDIS_URL, MEDIC_RATE_LIMITER_TYPE, REDIS_POOL_SIZE)
+    - Slack/PagerDuty integration (optional)
+    - Security config (MEDIC_SECRETS_KEY, MEDIC_WEBHOOK_SECRET, MEDIC_ALLOWED_WEBHOOK_HOSTS)
+    - Rate limiting config (RATE_LIMIT_*_REQUESTS)
+  - Verified `docker-compose config` validates successfully
+
+- **Files changed**:
+  - `docker-compose.yml` (complete rewrite with 4 services, healthchecks, volumes)
+  - `.env.example` (updated with all environment variables)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `condition: service_healthy` in depends_on for reliable startup order
+  - Don't use `env_file: .env` if the file might not exist (causes validation failure)
+  - Use ${VAR:-default} syntax for environment variables with sensible defaults
+  - Redis `--appendonly yes` enables persistence via AOF (append-only file)
+  - Service names (postgres, redis) become DNS names for inter-container communication
+  - Worker command: `["python", "-m", "Medic.Worker.monitor"]` for module execution
+
+---
+
+## 2026-02-04 - US-011 - Linear Issue: SRE-38
+- **What was implemented**: Production Dockerfile with multi-arch support (amd64 and arm64)
+  - Multi-stage build: builder stage for installing dependencies, runtime stage for minimal app image
+  - Base image: `python:3.11-slim-bookworm` (supports both amd64 and arm64 architectures)
+  - Only production dependencies from requirements.txt installed (not dev dependencies)
+  - Non-root user `medic` with uid 1000 created for Kubernetes security policies
+  - Environment variables: `PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`
+  - Exposed port 8080 (production standard)
+  - HEALTHCHECK instruction: `curl -f http://localhost:8080/health || exit 1`
+  - Labels: maintainer, version, description
+  - Gunicorn WSGI server with 2 workers and 4 threads for production performance
+  - Created `.dockerignore` excluding: .git, tests/, __pycache__, *.pyc, .env, .venv, tasks/, docs/
+
+- **Files changed**:
+  - `Dockerfile` (rewrote with multi-stage build and production optimizations)
+  - `.dockerignore` (new file for Docker build context optimization)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `python:3.11-slim-bookworm` for multi-arch support (not alpine - has musl issues)
+  - Install `libpq5` in runtime stage (not `libpq-dev`) for psycopg2 runtime
+  - Copy Python packages from builder with `COPY --from=builder /root/.local /home/medic/.local`
+  - Set uid 1000 explicitly for Kubernetes SecurityContext compatibility
+  - Use gunicorn instead of Flask dev server for production
+  - All Python dependencies (flask, psycopg2-binary, cryptography, etc.) have pre-built wheels for both amd64 and arm64
+
+---
+
+## 2026-02-04 - US-010 - Linear Issue: SRE-37
+- **What was implemented**: Rate limiter factory with automatic Redis/InMemory selection
+  - Enhanced `get_rate_limiter()` to auto-select between Redis and InMemory based on config
+  - Added `_create_rate_limiter()` internal factory with selection logic
+  - Added `MEDIC_RATE_LIMITER_TYPE` env var support: 'redis', 'memory', 'auto' (default: 'auto')
+  - Auto mode: Tries Redis if `REDIS_URL` set, falls back to InMemory on failure
+  - Redis mode: Forces Redis (raises ValueError if `REDIS_URL` not set)
+  - Memory mode: Forces InMemory (ignores Redis even if configured)
+  - Logs INFO when selecting limiter, WARNING on Redis fallback
+  - Type is case-insensitive (MEMORY, Memory, memory all work)
+  - Unknown types fall back to InMemory with WARNING log
+  - Limiter instance cached as module-level singleton
+  - Middleware already uses `check_rate_limit()` which calls factory - no changes needed
+
+- **Files changed**:
+  - `Medic/Core/rate_limiter.py` (enhanced get_rate_limiter, added _create_rate_limiter)
+  - `tests/unit/test_rate_limiter.py` (added 14 TestRateLimiterFactory tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `_create_rate_limiter()` for the actual creation logic, `get_rate_limiter()` for singleton
+  - Test Redis fallback by mocking `_create_redis_client()` and `ping()` methods
+  - Mock at `Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client` for client creation
+  - Use `set_rate_limiter(None)` in test setup/teardown to reset singleton state
+  - Type constants (RATE_LIMITER_TYPE_*) make code more maintainable than string literals
+
+---
+
+## 2026-02-04 - US-009 - Linear Issue: SRE-36
+- **What was implemented**: Redis-backed distributed rate limiting for multi-replica deployments
+  - Replaced `NotImplementedError` with full `RedisRateLimiter` implementation
+  - Used Redis sorted sets (ZSET) for sliding window algorithm
+  - Each request stored with timestamp as score for efficient window-based counting
+  - Used Redis pipeline with MULTI/EXEC for atomic operations
+  - Added `_create_redis_client()` for automatic client creation from `REDIS_URL`
+  - Added `REDIS_POOL_SIZE` configuration (default: 10)
+  - Added `is_healthy()` method to check Redis connectivity
+  - Added key expiry (window_seconds + 1) for automatic cleanup
+  - Added 20 unit tests using `fakeredis` for Redis mocking
+
+- **Files changed**:
+  - `Medic/Core/rate_limiter.py` (implemented RedisRateLimiter class)
+  - `Medic/requirements.txt` (added redis>=5.0.0)
+  - `requirements-dev.txt` (added fakeredis>=2.21.0, types-redis>=4.6.0)
+  - `tests/unit/test_rate_limiter.py` (added 20 RedisRateLimiter tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Redis sorted sets (ZSET) are ideal for sliding window rate limiting
+  - Use `zadd()` with timestamp as score, `zremrangebyscore()` to remove old entries
+  - Use `zcard()` to count current entries, `zrange()` with `withscores=True` for oldest entry
+  - Always set key expiry with `expire()` for automatic cleanup
+  - Use `redis.ConnectionPool.from_url()` for connection pooling
+  - `fakeredis` package provides in-memory Redis for testing without real Redis server
+  - Test `is_healthy()` by mocking `ping()` to raise exceptions
+
+---
+
+## 2026-02-04 - US-008 - Linear Issue: SRE-35
+- **What was implemented**: Extracted playbook step executors to separate modules
+  - Created `Medic/Core/playbook/executors/` package directory
+  - Created `Medic/Core/playbook/executors/__init__.py` with exports for all executors
+  - Created `Medic/Core/playbook/executors/webhook.py` with:
+    - `execute_webhook_step()`: HTTP request execution with variable/secret substitution
+    - `substitute_variables()`: ${VAR_NAME} syntax substitution
+    - `substitute_all()`: Combined variable and secret substitution
+    - `_build_webhook_context()`: Build execution context for substitutions
+  - Created `Medic/Core/playbook/executors/script.py` with:
+    - `execute_script_step()`: Pre-registered script execution with resource limits
+    - `get_registered_script()`: Fetch script from database
+    - `RegisteredScript`: Dataclass for script metadata
+    - `_get_script_env()`: Build secure environment (allowlist-based)
+    - `_substitute_script_variables()`: Script content substitution
+  - Created `Medic/Core/playbook/executors/condition.py` with:
+    - `execute_condition_step()`: Condition polling with timeout
+    - `check_heartbeat_received()`: Heartbeat condition checker
+  - Created `Medic/Core/playbook/executors/wait.py` with:
+    - `execute_wait_step()`: Simple duration-based wait
+  - Updated `playbook_engine.py` to import from executors and re-export for backwards compatibility
+  - Updated 50+ test patches to use correct module paths
+
+- **Files changed**:
+  - `Medic/Core/playbook/executors/__init__.py` (new)
+  - `Medic/Core/playbook/executors/webhook.py` (new)
+  - `Medic/Core/playbook/executors/script.py` (new)
+  - `Medic/Core/playbook/executors/condition.py` (new)
+  - `Medic/Core/playbook/executors/wait.py` (new)
+  - `Medic/Core/playbook_engine.py` (refactored imports, removed executor code)
+  - `tests/unit/test_playbook_engine.py` (updated 50+ mock patches)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - When extracting functions to new modules, ALL patches must be updated to new locations
+  - Patches must target where functions are IMPORTED/USED, not where they're defined
+  - For executor functions, patch at `Medic.Core.playbook.executors.<executor>.<function>`
+  - Re-exports with `# noqa: F401` on import line maintains backwards compatibility
+  - Testing scripts that use db.query_db requires patching `Medic.Core.playbook.executors.<module>.db`
+  - Executor tests that directly call the function need patches at the executor module level
+  - Engine tests that use execute_step() may need patches at wait module for WaitStep tests
+
+---
+
+## 2026-02-04 - US-007 - Linear Issue: SRE-34
+- **What was implemented**: Created playbook package structure for maintainability
+  - Created `Medic/Core/playbook/` package directory
+  - Created `Medic/Core/playbook/models.py` with dataclasses:
+    - `ExecutionStatus`: Enum for playbook execution states
+    - `StepResultStatus`: Enum for step result states
+    - `StepResult`: Dataclass for step execution results
+    - `PlaybookExecution`: Dataclass for playbook execution instances
+    - `StepExecutor`: Type alias for step executor functions
+  - Created `Medic/Core/playbook/db.py` with all database operations:
+    - Execution: create_execution, get_execution, get_active_executions, etc.
+    - Step results: create_step_result, update_step_result, etc.
+    - Playbook loading: get_playbook_by_id
+  - Created `Medic/Core/playbook/__init__.py` with public API exports
+  - Updated `playbook_engine.py` to import from new package
+  - Updated test patches to use correct module paths
+
+- **Files changed**:
+  - `Medic/Core/playbook/__init__.py` (new)
+  - `Medic/Core/playbook/models.py` (new)
+  - `Medic/Core/playbook/db.py` (new)
+  - `Medic/Core/playbook_engine.py` (refactored imports, removed duplicated code)
+  - `tests/unit/test_playbook_engine.py` (updated mock patches)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - When moving database functions to a new module, tests need patches updated to new location
+  - Functions in playbook.db module need `@patch('Medic.Core.playbook.db.db')` for db mocking
+  - Functions remaining in playbook_engine need `@patch('Medic.Core.playbook_engine.db')` for db mocking
+  - TYPE_CHECKING imports help avoid circular imports for type hints
+  - Package __init__.py can re-export all public API for convenience imports
+  - Keep backwards compatibility by importing and re-exporting from old module location
+
+---
+
+## 2026-02-04 - US-006 - Linear Issue: SRE-33
+- **What was implemented**: Extracted shared datetime utilities to single module
+  - Created `Medic/Core/utils/__init__.py` (empty package init)
+  - Created `Medic/Core/utils/datetime_helpers.py` with:
+    - `TIMEZONE: pytz.BaseTzInfo = pytz.timezone('America/Chicago')` constant
+    - `now() -> datetime` function for timezone-aware current time
+    - `parse_datetime(dt_str: str) -> Optional[datetime]` for multi-format parsing
+  - Replaced 6 duplicate `_now()` implementations with centralized `get_now()`
+  - Replaced 4 duplicate `_parse_datetime()` implementations with centralized `parse_datetime()`
+  - Removed unused `pytz` imports from modules using datetime_helpers
+
+- **Files changed**:
+  - `Medic/Core/utils/__init__.py` (new)
+  - `Medic/Core/utils/datetime_helpers.py` (new)
+  - `Medic/Core/playbook_engine.py` (import datetime_helpers, remove _now/_parse_datetime)
+  - `Medic/Core/audit_log.py` (import datetime_helpers, remove _now/_parse_datetime)
+  - `Medic/Core/slack_approval.py` (import datetime_helpers, remove _now/_parse_datetime)
+  - `Medic/Core/secrets.py` (import datetime_helpers, remove _now)
+  - `Medic/Core/circuit_breaker.py` (import datetime_helpers, remove _now)
+  - `Medic/Core/job_runs.py` (import datetime_helpers, remove _parse_datetime)
+  - `tests/unit/test_circuit_breaker.py` (update mocks for get_now)
+  - `tests/unit/test_job_runs.py` (update imports for parse_datetime)
+  - `tests/unit/test_playbook_engine.py` (update imports for parse_datetime)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - When importing a function that will be used as `var = func()`, alias the import to avoid shadowing
+  - Example: `from module import now as get_now` prevents `now = now()` from failing
+  - Mock paths must match the aliased import name (e.g., `@patch('module.get_now')` not `@patch('module.now')`)
+  - pytz.BaseTzInfo is the correct type hint for timezone objects
+  - Empty `__init__.py` creates a Python package; no content needed for basic package structure
+  - Centralized utilities reduce code duplication but require updating all tests that mock the old functions
+
+---
+
+## 2026-02-04 - US-005 - Linear Issue: SRE-32
+- **What was implemented**: Added rate limiting to ALL endpoints (no bypasses)
+  - Removed `/metrics` and `/docs` from `RATE_LIMIT_BYPASS_PREFIXES`
+  - Replaced bypass mechanism with endpoint-specific rate limits
+  - Added `RATE_LIMIT_HEALTH_REQUESTS` config (default: 1000 req/min) for /health
+  - Added `RATE_LIMIT_METRICS_REQUESTS` config (default: 100 req/min) for /metrics
+  - Added `RATE_LIMIT_DOCS_REQUESTS` config (default: 60 req/min) for /docs
+  - Created `_get_endpoint_rate_limit_config()` to return appropriate config
+  - Updated `_determine_endpoint_type()` to detect health, metrics, docs types
+  - Removed `_should_bypass_rate_limit()` function entirely
+  - All 47 unit tests pass verifying no endpoints bypass rate limiting
+
+- **Files changed**:
+  - `Medic/Core/rate_limit_middleware.py` (refactored rate limit bypass to endpoint-specific limits)
+  - `tests/unit/test_rate_limit_middleware.py` (updated and added 47 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Security best practice: Never bypass rate limiting - use endpoint-specific limits instead
+  - When changing bypass behavior, integration tests need custom configs explicitly passed
+  - Endpoint type constants (`ENDPOINT_TYPE_*`) help maintain consistency across functions
+  - Rate limit middleware applies endpoint-specific config when no custom config provided
+  - Tests for "no bypass" should verify the check function IS called (not assert_not_called)
+
+---
+
+## 2026-02-03 22:00 - US-001 - Linear Issue: SRE-28
+- **What was implemented**: URL validator module for SSRF prevention
+  - Created `Medic/Core/url_validator.py` with:
+    - `InvalidURLError` exception class
+    - `validate_url(url: str, skip_dns_check: bool = False) -> bool` function
+    - `is_private_ip(ip: str) -> bool` helper function
+    - `is_safe_url(url: str) -> bool` convenience wrapper
+    - `get_allowed_hosts() -> Optional[Set[str]]` for env var support
+    - `resolve_hostname(hostname: str) -> List[str]` for DNS rebinding prevention
+  - Blocks private IP ranges: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 0.0.0.0/8
+  - Blocks IPv6 private ranges: ::1/128, fc00::/7, fe80::/10, ::/128
+  - Blocks localhost, 0.0.0.0, cloud metadata (169.254.169.254)
+  - Only allows http/https schemes
+  - Performs DNS resolution to catch DNS rebinding attacks
+  - Supports `MEDIC_ALLOWED_WEBHOOK_HOSTS` env var for explicit allowlist
+  - Error messages are generic to prevent information leakage
+
+- **Files changed**:
+  - `Medic/Core/url_validator.py` (new)
+  - `tests/unit/test_url_validator.py` (new, 128 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - The codebase uses `logger.log(level=30, msg="...")` pattern instead of `logger.warning()`
+  - Type annotations are important - mypy is strict about List types needing explicit annotation
+  - IPv6 networks need separate handling from IPv4 networks in type annotations
+  - Tests should use `skip_dns_check=True` when testing URL validation without network calls
+  - `socket.getaddrinfo` returns tuples where index [4][0] is the IP address
+  - Use `patch.dict('os.environ', {...})` for testing environment variables
+
+---
+
+## 2026-02-04 00:30 - US-003 - Linear Issue: SRE-30
+- **What was implemented**: Fixed timing attack vulnerability in API key verification
+  - Modified `_get_api_key_from_db()` in `auth_middleware.py` to prevent timing attacks
+  - Instead of returning immediately when a match is found, the function now:
+    - Stores matched key in a variable
+    - Continues iterating through ALL keys
+    - Returns matched key only after complete iteration
+  - Added detailed code comment explaining the timing attack mitigation
+  - Added 4 unit tests verifying all keys are checked regardless of match position
+
+- **Files changed**:
+  - `Medic/Core/auth_middleware.py` (modified _get_api_key_from_db function)
+  - `tests/unit/test_auth_middleware.py` (new TestGetApiKeyFromDbTimingAttack class with 4 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Timing attacks can be used to enumerate API keys by measuring response times
+  - Always iterate through all items in security-sensitive comparisons to maintain constant time
+  - Use `mock.side_effect = [True, False, False, ...]` to simulate different match positions in tests
+  - Verify timing attack mitigation by asserting `mock.call_count == total_items`
+  - Pre-existing lint errors (E501 line-too-long) are in the codebase - flake8 config may need updating
+
+---
+
+## 2026-02-03 23:15 - US-002 - Linear Issue: SRE-29
+- **What was implemented**: Integrated URL validator into webhook execution
+  - Added `from Medic.Core.url_validator import InvalidURLError, validate_url` to `playbook_engine.py`
+  - Call `validate_url(url)` in `execute_webhook_step()` after variable substitution, before HTTP request
+  - On `InvalidURLError`, return `StepResult` with `FAILED` status and "Invalid webhook URL" message
+  - Added `from Medic.Core.url_validator import InvalidURLError, validate_url` to `webhook_delivery.py`
+  - Call `validate_url(url)` in `_send_request()` before HTTP request
+  - Log validation failures at WARNING level using `logger.warning()`
+  - Added 11 integration tests (5 in test_playbook_engine.py, 6 in test_webhook_delivery.py)
+
+- **Files changed**:
+  - `Medic/Core/playbook_engine.py` (import + validation in execute_webhook_step)
+  - `Medic/Core/webhook_delivery.py` (import + validation in _send_request)
+  - `tests/unit/test_playbook_engine.py` (new TestExecuteWebhookStepSSRFPrevention class)
+  - `tests/unit/test_webhook_delivery.py` (new TestWebhookDeliveryServiceSSRFPrevention class)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - URL validation should happen AFTER variable substitution so ${secrets.XXX} and ${VAR} are resolved first
+  - Use `@patch('Medic.Core.module.validate_url')` to mock URL validation in tests
+  - The playbook_engine uses `StepResult` dataclass for return values with specific status codes
+  - webhook_delivery uses `DeliveryResult` dataclass with `success` and `error_message` fields
+  - When validation fails, HTTP client should NOT be called - verify with `mock_client.assert_not_called()`
+
+---
+
+## 2026-02-04 01:45 - US-004 - Linear Issue: SRE-31
+- **What was implemented**: Fixed script execution environment variable leak
+  - Created `ALLOWED_SCRIPT_ENV_VARS` constant with safe vars: PATH, HOME, USER, LANG, LC_ALL, TZ
+  - Created `_get_script_env(execution)` function to build safe environment dictionary
+  - Modified `execute_script_step()` to use `_get_script_env()` instead of `**dict(os.environ)`
+  - Added support for `MEDIC_ADDITIONAL_SCRIPT_ENV_VARS` env var to extend allowlist
+  - Added 8 unit tests in `TestGetScriptEnvSecurity` class verifying:
+    - MEDIC_SECRETS_KEY is NOT passed to scripts
+    - DATABASE_URL is NOT passed to scripts
+    - AWS credentials are NOT passed to scripts
+    - Only allowlisted variables are passed
+    - MEDIC context vars (MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID) always present
+    - MEDIC_ADDITIONAL_SCRIPT_ENV_VARS extends allowlist
+    - Empty/whitespace handling for additional vars
+
+- **Files changed**:
+  - `Medic/Core/playbook_engine.py` (added ALLOWED_SCRIPT_ENV_VARS, _get_script_env, modified execute_script_step)
+  - `tests/unit/test_playbook_engine.py` (new TestGetScriptEnvSecurity class with 8 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Environment variables passed to subprocess.run() via `env=` parameter replace the entire environment
+  - Using `**dict(os.environ)` is a security antipattern - it leaks all secrets to subprocesses
+  - Use `patch.dict('os.environ', {...})` for testing environment variables
+  - The forward reference `"PlaybookExecution"` in type hints requires quotes for circular import prevention
+  - Flake8 enforces 79 char line limit - keep comments under that limit
+
+---
+
+## 2026-02-04 - US-024 - Linear Issue: SRE-51
+- **What was implemented**: GitHub Actions workflow for CI pipeline (build, test, lint)
+  - Created `.github/workflows/build.yml` with comprehensive CI pipeline:
+    - Triggers: push to main, pull_request to main, workflow_dispatch
+    - **lint job**: Runs ruff check and mypy for code quality
+      - Caches pip dependencies with actions/cache@v4
+      - Uses `--output-format=github` for ruff to integrate with GitHub annotations
+      - Uses `--ignore-missing-imports` for mypy to handle optional deps
+    - **test job**: Runs pytest with coverage reporting
+      - Generates XML, HTML, and terminal coverage reports
+      - Uploads coverage artifacts with 14-day retention
+      - Uses pytest-cov for coverage collection
+    - **build job**: Builds Docker image with buildx
+      - Tags with git SHA and `latest`
+      - Uses GitHub Actions cache for Docker layers (type=gha)
+      - Builds for linux/amd64 platform (multi-arch in US-025)
+    - **helm-lint job**: Validates Helm chart
+      - Runs `helm lint helm/medic`
+      - Verifies `helm template` renders successfully
+  - All jobs run in parallel for efficiency (no inter-job dependencies)
+  - Caching configured:
+    - pip dependencies via actions/cache@v4 with hash of requirements files
+    - Docker layers via docker/build-push-action with type=gha cache
+  - Verified YAML syntax is valid via Python yaml.safe_load
+
+- **Files changed**:
+  - `.github/workflows/build.yml` (new, comprehensive CI workflow)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `actions/cache@v4` for pip with `~/.cache/pip` path
+  - Ruff with `--output-format=github` creates inline annotations on PRs
+  - Docker buildx cache `type=gha,mode=max` stores all layers in GitHub cache
+  - Helm chart icon warning is INFO level - doesn't fail lint
+  - Keep jobs independent (no needs:) when they don't have dependencies for parallel execution
+  - Use `actions/setup-python@v5` and `azure/setup-helm@v4` for latest stable versions
+
+---
+
+## 2026-02-04 - US-025 - Linear Issue: SRE-52
+- **What was implemented**: GitHub Actions workflow for multi-arch ECR push
+  - Extended `.github/workflows/build.yml` with `push-ecr` job:
+    - Job runs only on push to main (not PRs) via `if: github.ref == 'refs/heads/main' && github.event_name == 'push'`
+    - Waits for lint, test, build, and helm-lint jobs to pass via `needs: [lint, test, build, helm-lint]`
+    - Configures AWS credentials via OIDC using `aws-actions/configure-aws-credentials@v4`
+    - Uses `role-to-assume` with OIDC (no static credentials needed)
+    - Logs in to ECR using `aws-actions/amazon-ecr-login@v2`
+    - Sets up QEMU for cross-platform emulation using `docker/setup-qemu-action@v3`
+    - Sets up Docker Buildx for multi-arch builds using `docker/setup-buildx-action@v3`
+    - Uses `docker/metadata-action@v5` to generate image tags (SHA and latest)
+    - Builds and pushes multi-arch manifest for `linux/amd64,linux/arm64`
+    - Uses `docker/build-push-action@v6` with buildx for the push
+    - Tags image with: git SHA (short), latest
+    - Enables provenance and SBOM attestations for supply chain security
+    - Uses GitHub Actions cache for Docker layers (`cache-from: type=gha`)
+  - Required GitHub repository variables documented in workflow comments:
+    - `AWS_ROLE_ARN`: IAM role ARN for OIDC authentication
+    - `AWS_REGION`: AWS region (e.g., us-east-1)
+    - `ECR_REPOSITORY`: Full ECR repository URI
+  - Uses repository variables (`vars.*`) instead of secrets for non-sensitive config
+  - Permissions configured: `id-token: write` for OIDC, `contents: read`
+  - Verified YAML syntax is valid
+
+- **Files changed**:
+  - `.github/workflows/build.yml` (extended with push-ecr job)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `aws-actions/configure-aws-credentials@v4` with `role-to-assume` for OIDC authentication
+  - OIDC requires `permissions: id-token: write` to request tokens
+  - Use `docker/metadata-action` for generating consistent image tags
+  - Multi-arch builds require QEMU for ARM64 emulation on x86 runners
+  - Use GitHub repository variables (`vars.*`) for non-sensitive config instead of secrets
+  - The `provenance: true` and `sbom: true` options enable supply chain attestations
+  - Condition `github.ref == 'refs/heads/main' && github.event_name == 'push'` prevents runs on PRs
+  - Use `needs: [job1, job2]` to wait for multiple jobs before running
+
+---
+## 2026-02-04 - US-026 - Linear Issue: SRE-53
+- **What was implemented**: GitHub Actions workflow for Terraform plan/apply
+  - Created `.github/workflows/terraform.yml` with comprehensive IaC pipeline:
+    - **Triggers**: push to main (paths: terraform/**), pull_request (paths: terraform/**), workflow_dispatch
+    - **Workflow dispatch inputs**: environment (dev/prod), action (plan/apply)
+    - **terraform-plan job**:
+      - Configures AWS credentials via OIDC using `aws-actions/configure-aws-credentials@v4`
+      - Runs `terraform init` with S3 backend configuration
+      - Runs `terraform fmt -check` for format validation
+      - Runs `terraform validate` for configuration validation
+      - Runs `terraform plan` with detailed exit code
+      - Uploads plan artifact for review (7-day retention)
+      - Comments plan output on PRs using `actions/github-script@v7`
+      - Outputs plan exit code and environment for apply job
+    - **terraform-apply job**:
+      - Runs only on push to main OR workflow_dispatch with action=apply
+      - Uses GitHub Environments for approval workflows (prod requires manual approval)
+      - Downloads plan artifact from plan job
+      - Runs `terraform apply` with saved plan
+      - Outputs Terraform outputs to GitHub Step Summary
+  - **GitHub Environments configuration**:
+    - `dev`: Development environment (auto-approval)
+    - `prod`: Production environment (requires manual approval in GitHub settings)
+  - **Required repository variables documented**:
+    - `AWS_ROLE_ARN`: IAM role ARN for OIDC authentication
+    - `AWS_REGION`: AWS region (e.g., us-east-1)
+    - `TF_STATE_BUCKET`: S3 bucket for Terraform state
+    - `TF_STATE_KEY`: Key prefix for state file
+    - `TF_STATE_DYNAMODB_TABLE`: DynamoDB table for state locking
+  - Verified YAML syntax is valid
+
+- **Files changed**:
+  - `.github/workflows/terraform.yml` (new, comprehensive Terraform CI/CD workflow)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `hashicorp/setup-terraform@v3` for Terraform setup, set `terraform_wrapper: false` for cleaner output
+  - Use `-detailed-exitcode` with `terraform plan` to detect changes (exit 0=no changes, 1=error, 2=changes)
+  - Plan artifacts can be uploaded and downloaded across jobs using `actions/upload-artifact@v4`
+  - GitHub Environments provide approval workflows - configure protection rules in repo settings
+  - Use `${{ needs.job-name.outputs.variable }}` to pass data between jobs
+  - PR comments via `actions/github-script` require `pull-requests: write` permission
+  - Truncate plan output to avoid GitHub comment size limits (used `head -c 60000`)
+  - Backend config can be passed via `-backend-config` flags for different environments
+
+---
+## 2026-02-04 - US-027 - Linear Issue: SRE-54
+- **What was implemented**: Terraform module for RDS PostgreSQL
+  - Created `terraform/modules/rds/` directory structure
+  - Created `terraform/modules/rds/main.tf` with:
+    - `aws_security_group.rds`: Security group for RDS
+      - Inbound rule allowing PostgreSQL (5432) from EKS node security group only
+      - Outbound rule allowing all traffic
+    - `aws_security_group_rule.rds_ingress_eks`: Security group rule for EKS access
+    - `aws_db_subnet_group.this`: DB subnet group for private deployment
+    - `aws_db_instance.this`: RDS PostgreSQL instance with:
+      - PostgreSQL 15 engine
+      - Storage 20GB gp3 with autoscaling to 100GB
+      - Storage encryption enabled
+      - Automated backups (7 days retention)
+      - Optional Multi-AZ deployment
+      - Performance Insights support
+      - CloudWatch logs exports (postgresql, upgrade)
+      - Deletion protection (enabled by default)
+  - Created `terraform/modules/rds/variables.tf` with:
+    - Required: identifier, vpc_id, subnet_ids, eks_security_group_id, master_username, master_password
+    - Optional: instance_class (default: db.t3.micro), engine_version (default: 15), database_name (default: medic)
+    - Storage: allocated_storage (default: 20), max_allocated_storage (default: 100), kms_key_id
+    - Backup: backup_retention_period (default: 7), backup_window, maintenance_window
+    - Monitoring: performance_insights_enabled, monitoring_interval, enabled_cloudwatch_logs_exports
+    - Lifecycle: auto_minor_version_upgrade, apply_immediately, deletion_protection
+  - Created `terraform/modules/rds/outputs.tf` with:
+    - endpoint: Full connection endpoint (host:port)
+    - address: Hostname only
+    - port: Port number
+    - database_name: Database name
+    - username: Master username (sensitive)
+    - connection_string: PostgreSQL connection URL (without password, sensitive)
+    - connection_string_with_password: Connection URL with PASSWORD placeholder (sensitive)
+    - arn, id, security_group_id, subnet_group_name
+  - Created `terraform/.gitignore` for Terraform state and secrets
+  - Verified `terraform validate` passes
+
+- **Files changed**:
+  - `terraform/modules/rds/main.tf` (new)
+  - `terraform/modules/rds/variables.tf` (new)
+  - `terraform/modules/rds/outputs.tf` (new)
+  - `terraform/.gitignore` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `source_security_group_id` in security group rules for EKS access (not CIDR blocks)
+  - Mark sensitive outputs with `sensitive = true` for connection strings and credentials
+  - Use `gp3` storage type for better performance (default now, replaces gp2)
+  - Use `ignore_changes = [password]` in lifecycle block to prevent drift on password changes
+  - Set `deletion_protection = true` by default for production safety
+  - Use `-backend=false` for `terraform init` when validating modules without state
+  - Export both endpoint (host:port) and address (host only) for flexibility
+
+---
+## 2026-02-04 - US-028 - Linear Issue: SRE-55
+- **What was implemented**: Terraform module for ElastiCache Redis
+  - Created `terraform/modules/elasticache/` directory structure
+  - Created `terraform/modules/elasticache/main.tf` with:
+    - `aws_security_group.redis`: Security group for ElastiCache
+      - Inbound rule allowing Redis (6379) from EKS node security group only
+      - Outbound rule allowing all traffic
+    - `aws_elasticache_subnet_group.this`: Subnet group for private deployment
+    - `aws_elasticache_cluster.this`: Redis cluster with:
+      - Redis 7.1 engine
+      - Single node configuration (no cluster mode)
+      - No snapshots (ephemeral rate limit data)
+      - Auto minor version upgrade enabled
+  - Created `terraform/modules/elasticache/variables.tf` with:
+    - Required: cluster_id, vpc_id, subnet_ids, eks_security_group_id
+    - Optional: node_type (default: cache.t3.micro), engine_version (default: 7.1)
+    - Snapshot: snapshot_retention_limit (default: 0 - disabled), snapshot_window
+    - Maintenance: maintenance_window, auto_minor_version_upgrade, apply_immediately
+    - Notifications: notification_topic_arn
+  - Created `terraform/modules/elasticache/outputs.tf` with:
+    - endpoint: Full connection endpoint (host:port)
+    - address: Hostname only
+    - port: Port number
+    - connection_string: Redis URL format (redis://host:port)
+    - cluster_id, arn, security_group_id, subnet_group_name
+  - Verified `terraform validate` passes
+
+- **Files changed**:
+  - `terraform/modules/elasticache/main.tf` (new)
+  - `terraform/modules/elasticache/variables.tf` (new)
+  - `terraform/modules/elasticache/outputs.tf` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - ElastiCache single-node uses `aws_elasticache_cluster` with `num_cache_nodes = 1`
+  - Cache node details accessed via `cache_nodes[0].address` and `cache_nodes[0].port`
+  - Set `snapshot_retention_limit = 0` to disable snapshots for ephemeral data
+  - Default parameter group for Redis 7.x is `default.redis7`
+  - ElastiCache doesn't need deletion protection (data is ephemeral)
+
+---
+## 2026-02-04 - US-029 - Linear Issue: SRE-56
+- **What was implemented**: Terraform module for Secrets Manager and IAM (IRSA)
+  - Created `terraform/modules/secrets/` directory structure
+  - Created `terraform/modules/secrets/main.tf` with:
+    - `aws_secretsmanager_secret.this`: Secret at path `medic/${environment}/secrets`
+    - `aws_secretsmanager_secret_version.this`: Optional initial version with placeholders
+    - `aws_iam_role.this`: IAM role with OIDC trust policy for EKS service account
+      - Trust policy requires matching namespace and service account name
+      - Uses `sts:AssumeRoleWithWebIdentity` action
+    - `aws_iam_policy.secrets_access`: Policy for Secrets Manager access
+      - Allows `secretsmanager:GetSecretValue` and `secretsmanager:DescribeSecret`
+      - Scoped to the specific secret ARN
+    - `aws_iam_role_policy_attachment.secrets_access`: Attaches policy to role
+    - `aws_iam_policy.kms_decrypt`: Optional KMS decrypt policy (when custom KMS key used)
+  - Created `terraform/modules/secrets/variables.tf` with:
+    - Required: environment, eks_oidc_provider_arn, eks_namespace
+    - Optional: service_account_name (default: medic), recovery_window_in_days (default: 7)
+    - Optional: kms_key_id, create_initial_version (default: false)
+  - Created `terraform/modules/secrets/outputs.tf` with:
+    - secret_arn, secret_id, secret_name
+    - iam_role_arn (for ServiceAccount annotation)
+    - iam_role_name, iam_role_unique_id
+    - secrets_policy_arn, kms_policy_arn
+    - service_account_annotation (map for easy Helm integration)
+  - Verified `terraform validate` passes
+
+- **Files changed**:
+  - `terraform/modules/secrets/main.tf` (new)
+  - `terraform/modules/secrets/variables.tf` (new)
+  - `terraform/modules/secrets/outputs.tf` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - IRSA trust policy uses `sts:AssumeRoleWithWebIdentity` with OIDC Federated principal
+  - OIDC provider URL extracted from ARN using `replace()` with regex
+  - Condition keys: `oidc-provider:sub` = service account, `oidc-provider:aud` = "sts.amazonaws.com"
+  - Secret version uses `ignore_changes = [secret_string]` to prevent drift
+  - Output `service_account_annotation` as map for easy consumption in Helm values
+  - Use `recovery_window_in_days = 0` for immediate deletion (not recommended for prod)
+
+---
+## 2026-02-04 - US-030 - Linear Issue: SRE-57
+- **What was implemented**: Terraform root module with helm_release for Medic
+  - Created `terraform/environments/dev/` with complete environment:
+    - `main.tf`: Root module calling RDS, ElastiCache, Secrets modules + helm_release
+      - AWS provider with default tags
+      - Helm and Kubernetes providers using EKS cluster auth
+      - Data sources for existing VPC, subnets, EKS cluster, OIDC provider
+      - Module calls for rds, elasticache, secrets
+      - kubernetes_namespace resource
+      - helm_release resource with:
+        - Values from variables (image, replicas, resources, ingress)
+        - set_sensitive for DATABASE_URL with password
+        - yamlencode for complex values
+        - depends_on for proper ordering
+    - `variables.tf`: All input variables (70+ variables)
+    - `outputs.tf`: RDS, ElastiCache, Secrets, Helm outputs
+    - `backend.tf`: S3 backend configuration (values via -backend-config)
+    - `terraform.tfvars.example`: Example variable values
+  - Created `terraform/environments/prod/` as production placeholder:
+    - Same structure as dev
+    - Production-specific defaults (Multi-AZ=true, deletion protection, autoscaling)
+  - Created `terraform/README.md` with:
+    - Architecture overview
+    - Directory structure explanation
+    - Prerequisites and state backend setup
+    - Usage instructions (local and CI/CD)
+    - Module documentation
+    - Environment differences table
+    - Secrets management guide
+    - Troubleshooting section
+  - Verified `terraform init && terraform validate` passes for both environments
+
+- **Files changed**:
+  - `terraform/environments/dev/main.tf` (new)
+  - `terraform/environments/dev/variables.tf` (new)
+  - `terraform/environments/dev/outputs.tf` (new)
+  - `terraform/environments/dev/backend.tf` (new)
+  - `terraform/environments/dev/terraform.tfvars.example` (new)
+  - `terraform/environments/prod/main.tf` (new)
+  - `terraform/environments/prod/variables.tf` (new)
+  - `terraform/environments/prod/outputs.tf` (new)
+  - `terraform/environments/prod/backend.tf` (new)
+  - `terraform/README.md` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `yamlencode()` for complex Helm values to avoid YAML formatting issues
+  - Use `set_sensitive {}` block for sensitive values that shouldn't appear in plans
+  - Helm provider needs kubernetes config: host, cluster_ca_certificate, token
+  - Get EKS auth token with `data.aws_eks_cluster_auth` data source
+  - Use `depends_on` to ensure modules complete before helm_release
+  - Private subnets can be found with `data.aws_subnets` filtering by `Tier = private` tag
+  - Use `data.aws_iam_openid_connect_provider` to get OIDC provider ARN for IRSA
+  - Backend config values passed via `-backend-config` flags in CI/CD
+  - Use `terraform init -backend=false` to validate without state backend
+
+---
+## 2026-02-04 - US-031 - Linear Issue: SRE-58
+- **What was implemented**: Database migration Helm hook job
+  - Created `helm/medic/templates/migration-job.yaml` as Kubernetes Job:
+    - Helm hooks: `pre-install,pre-upgrade` (runs before application)
+    - Hook weight: `-5` (runs before other hooks)
+    - Hook delete policy: `before-hook-creation,hook-succeeded` (cleanup)
+    - Uses same image as application
+    - Container command: `['python', '-m', 'scripts.run_migrations']`
+    - Shares envFrom with API deployment (ConfigMap and Secret)
+    - Security context matching application pods
+    - backoffLimit: 3 (configurable)
+    - activeDeadlineSeconds: 300 (configurable)
+    - ttlSecondsAfterFinished: 86400 (automatic cleanup)
+    - Sidecar injection disabled (Istio, Linkerd)
+    - Conditional creation via `.Values.migrations.enabled`
+  - Created `scripts/__init__.py` and `scripts/run_migrations.py`:
+    - Reads SQL migrations from `migrations/` directory
+    - Tracks applied migrations in `schema_migrations` table
+    - Supports `DATABASE_URL` or individual PG_* env vars
+    - Migrations applied in order by numeric prefix (NNN_*.sql)
+    - Supports `--dry-run` for testing
+    - Supports `--verbose` for debug output
+    - Proper error handling with rollback on failure
+  - Updated `helm/medic/values.yaml` with expanded migrations section:
+    - Added backoffLimit (default: 3)
+    - Added activeDeadlineSeconds (default: 300)
+    - Added ttlSecondsAfterFinished (default: 86400)
+    - Added args for additional script arguments
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid Job
+  - Verified `kubectl apply --dry-run=client` succeeds
+
+- **Files changed**:
+  - `helm/medic/templates/migration-job.yaml` (new)
+  - `scripts/__init__.py` (new)
+  - `scripts/run_migrations.py` (new)
+  - `helm/medic/values.yaml` (expanded migrations section)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Helm hooks run outside normal release lifecycle - use `helm.sh/hook-delete-policy` for cleanup
+  - Use negative hook weights to run migrations before other pre-install hooks
+  - Disable sidecar injection for Job pods to prevent hanging sidecars
+  - restartPolicy: Never required for Jobs (not Always)
+  - Use `envFrom` to share config/secrets between Job and Deployment
+  - Migration runner should create its own tracking table (`schema_migrations`)
+  - Support both `DATABASE_URL` and individual env vars for flexibility
+  - Use `ttlSecondsAfterFinished` for automatic Job cleanup (requires TTLAfterFinished controller)
 
 ---
 

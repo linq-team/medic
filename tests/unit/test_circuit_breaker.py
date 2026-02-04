@@ -72,7 +72,7 @@ class TestGetExecutionCountInWindow:
     """Tests for get_execution_count_in_window function."""
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_returns_zero_when_no_executions(self, mock_now_fn, mock_query):
         """Test returns 0 when no executions exist."""
         mock_now_fn.return_value = datetime(
@@ -84,7 +84,7 @@ class TestGetExecutionCountInWindow:
         assert count == 0
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_returns_correct_count(self, mock_now_fn, mock_query):
         """Test returns correct execution count."""
         mock_now_fn.return_value = datetime(
@@ -96,7 +96,7 @@ class TestGetExecutionCountInWindow:
         assert count == 3
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_handles_empty_result(self, mock_now_fn, mock_query):
         """Test handles empty database result."""
         mock_now_fn.return_value = datetime(
@@ -108,7 +108,7 @@ class TestGetExecutionCountInWindow:
         assert count == 0
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_handles_none_result(self, mock_now_fn, mock_query):
         """Test handles None database result."""
         mock_now_fn.return_value = datetime(
@@ -120,7 +120,7 @@ class TestGetExecutionCountInWindow:
         assert count == 0
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_uses_custom_window(self, mock_now_fn, mock_query):
         """Test uses custom window when provided."""
         mock_now_fn.return_value = datetime(
@@ -142,7 +142,7 @@ class TestGetExecutionCountInWindow:
         assert params[0] == 123
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_handles_invalid_json(self, mock_now_fn, mock_query):
         """Test handles invalid JSON gracefully."""
         mock_now_fn.return_value = datetime(
@@ -198,7 +198,7 @@ class TestCheckCircuitBreaker:
     """Tests for check_circuit_breaker function."""
 
     @patch('Medic.Core.circuit_breaker.get_execution_count_in_window')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_returns_closed_status(self, mock_now_fn, mock_count):
         """Test returns closed status when under threshold."""
         mock_now_fn.return_value = datetime(
@@ -216,7 +216,7 @@ class TestCheckCircuitBreaker:
         assert "3 more allowed" in status.message
 
     @patch('Medic.Core.circuit_breaker.get_execution_count_in_window')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_returns_open_status(self, mock_now_fn, mock_count):
         """Test returns open status when at/over threshold."""
         mock_now_fn.return_value = datetime(
@@ -233,7 +233,7 @@ class TestCheckCircuitBreaker:
         assert "blocked until window expires" in status.message
 
     @patch('Medic.Core.circuit_breaker.get_execution_count_in_window')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_status_to_dict(self, mock_now_fn, mock_count):
         """Test status can be converted to dict."""
         mock_now_fn.return_value = datetime(
@@ -253,7 +253,7 @@ class TestCheckCircuitBreaker:
         assert 'message' in result
 
     @patch('Medic.Core.circuit_breaker.get_execution_count_in_window')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_uses_custom_config(self, mock_now_fn, mock_count):
         """Test uses custom config when provided."""
         mock_now_fn.return_value = datetime(
@@ -320,7 +320,7 @@ class TestGetServicesWithOpenCircuit:
     """Tests for get_services_with_open_circuit function."""
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_returns_empty_when_none_open(self, mock_now_fn, mock_query):
         """Test returns empty list when no circuits are open."""
         mock_now_fn.return_value = datetime(
@@ -332,7 +332,7 @@ class TestGetServicesWithOpenCircuit:
         assert result == []
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_returns_services_with_open_circuits(self, mock_now_fn, mock_query):
         """Test returns services that have open circuits."""
         mock_now_fn.return_value = datetime(
@@ -353,7 +353,7 @@ class TestGetServicesWithOpenCircuit:
         assert result[1].execution_count == 7
 
     @patch('Medic.Core.circuit_breaker.db.query_db')
-    @patch('Medic.Core.circuit_breaker._now')
+    @patch('Medic.Core.circuit_breaker.get_now')
     def test_handles_none_service_id(self, mock_now_fn, mock_query):
         """Test filters out entries with None service_id."""
         mock_now_fn.return_value = datetime(

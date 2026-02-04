@@ -83,11 +83,21 @@ def _get_api_key_from_db(api_key: str) -> Optional[dict]:
 
     # result is a JSON string when show_columns=True
     keys = json.loads(str(result))
+
+    # SECURITY: Timing attack mitigation
+    # We must iterate through ALL keys regardless of whether a match is found.
+    # If we returned early on match, an attacker could measure response times
+    # to determine when their key matched one stored in the database (faster
+    # responses would indicate the matched key appears earlier in the list).
+    # By always iterating through all keys, the response time is consistent
+    # regardless of whether/when a match occurs.
+    matched_key: Optional[dict] = None
     for key_record in keys:
         if verify_api_key(api_key, key_record["key_hash"]):
-            return key_record
+            matched_key = key_record
+            # Continue iterating - do NOT return early
 
-    return None
+    return matched_key
 
 
 def _is_key_expired(expires_at: Optional[str]) -> bool:

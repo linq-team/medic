@@ -1,0 +1,45 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "medic.fullname" . }}
+  namespace: {{ include "medic.namespace" . }}
+  labels:
+    {{- include "medic.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "medic.api.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ include "medic.namespace" . }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- if .Values.metrics.serviceMonitor.honorLabels }}
+      honorLabels: true
+      {{- end }}
+      {{- if .Values.metrics.serviceMonitor.enableExemplars }}
+      # Enable exemplar scraping for trace correlation
+      enableFeatures:
+        - exemplar-storage
+      {{- end }}
+      {{- if .Values.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml .Values.metrics.serviceMonitor.metricRelabelings | nindent 8 }}
+      {{- end }}
+      # Relabelings for target discovery - includes environment label
+      relabelings:
+        {{- if .Values.metrics.serviceMonitor.relabelings }}
+        {{- toYaml .Values.metrics.serviceMonitor.relabelings | nindent 8 }}
+        {{- end }}
+        # Add environment label from global settings for OTEL resource attribution
+        - sourceLabels: []
+          targetLabel: environment
+          replacement: {{ .Values.global.environment }}
+{{- end }}

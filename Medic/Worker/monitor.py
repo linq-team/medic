@@ -5,8 +5,8 @@ import threading
 import time
 import logging
 import psycopg2
-import slack_client as slack
-import pagerduty_client as pagerduty
+from Medic.Core import slack_client as slack
+from Medic.Core import pagerduty_client as pagerduty
 
 # Import maintenance window checker
 try:
@@ -504,7 +504,7 @@ def sendStaleJobAlert(alert):
     )
 
     # Send PagerDuty alert
-    pd_key = pagerduty.create_alert(
+    pagerduty.create_alert(
         alert_message=alert_message,
         service_name=alert.service_name,
         heartbeat_name=alert.service_name,

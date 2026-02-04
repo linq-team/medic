@@ -1,0 +1,18 @@
+apiVersion: v2
+name: medic
+description: Medic - Automated incident remediation and playbook execution platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - incident-management
+  - automation
+  - remediation
+  - playbooks
+  - sre
+maintainers:
+  - name: SRE Team
+    email: sre@example.com
+home: https://github.com/example/medic
+sources:
+  - https://github.com/example/medic

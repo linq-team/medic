@@ -1,0 +1,501 @@
+{
+  "project": "Medic",
+  "branchName": "ralph/medic-ui",
+  "description": "Medic UI Dashboard - Web-based administrative interface for managing services, heartbeats, alerts, and playbooks",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create React project with Vite and TypeScript",
+      "description": "As a developer, I need the React project scaffolded with Vite and TypeScript so we have a foundation to build upon.",
+      "acceptanceCriteria": [
+        "Create ui/ directory with Vite + React + TypeScript",
+        "Configure tsconfig.json with strict mode",
+        "Add basic App.tsx with 'Medic UI' heading",
+        "npm run dev starts development server",
+        "npm run build produces production files",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Completed in SRE-59. Updated App.tsx heading to 'Medic UI'."
+    },
+    {
+      "id": "US-002",
+      "title": "Configure ESLint, Prettier, and code quality tools",
+      "description": "As a developer, I need code quality tools configured for consistent code style.",
+      "acceptanceCriteria": [
+        "Install and configure ESLint with TypeScript support",
+        "Install and configure Prettier",
+        "Add .eslintrc.js and .prettierrc files",
+        "npm run lint checks code",
+        "npm run format formats code",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Completed in prior work. Using eslint.config.js (ESLint 9 flat config) instead of legacy .eslintrc.js."
+    },
+    {
+      "id": "US-003",
+      "title": "Create Docker configuration for UI",
+      "description": "As a developer, I need Docker configuration so the UI can be containerized.",
+      "acceptanceCriteria": [
+        "Create ui/Dockerfile with multi-stage build (Node build to nginx serve)",
+        "Update docker-compose.yml to include ui service",
+        "nginx routes /api/* to medic-api, /* to static React files",
+        "Create ui/nginx.conf with proxy configuration",
+        "docker-compose up builds and runs UI service",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Completed in prior work. docker-compose.yml already includes ui service."
+    },
+    {
+      "id": "US-004",
+      "title": "Install and configure Tailwind CSS",
+      "description": "As a developer, I need Tailwind CSS configured for styling the UI.",
+      "acceptanceCriteria": [
+        "Install tailwindcss, postcss, autoprefixer",
+        "Create tailwind.config.js with content paths",
+        "Create postcss.config.js",
+        "Add Tailwind directives to index.css",
+        "Tailwind classes work in components",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Completed in SRE-60."
+    },
+    {
+      "id": "US-005",
+      "title": "Configure Linq brand color palette in Tailwind",
+      "description": "As a developer, I need the Linq brand colors configured in Tailwind for consistent styling.",
+      "acceptanceCriteria": [
+        "Add Linq brand colors to tailwind.config.js: black (#141414), cream (#FCF9E9), sage (#B0BFB7), linq-blue (#4F9FDF), navy (#1B3D67), linq-green (#83B149), lime (#E8DF6E)",
+        "Add status colors: healthy (#83B149), warning (#CA8A04/#EAB308), error (#DC2626/#EF4444), critical (#991B1B/#DC2626), muted (#6B7280/#9CA3AF)",
+        "Colors accessible via Tailwind classes (e.g., bg-linq-green, text-navy)",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Completed in SRE-60."
+    },
+    {
+      "id": "US-006",
+      "title": "Install Geist font family",
+      "description": "As a developer, I need the Geist font family installed for brand-compliant typography.",
+      "acceptanceCriteria": [
+        "Install geist font package",
+        "Configure Tailwind to use Geist for sans font family",
+        "Configure Tailwind to use Geist Mono for mono font family",
+        "Typography displays correctly in App.tsx",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Completed in SRE-60. Geist variable fonts copied to public/fonts/ for Vite compatibility."
+    },
+    {
+      "id": "US-007",
+      "title": "Install shadcn/ui and base components",
+      "description": "As a developer, I need shadcn/ui installed as the component library foundation.",
+      "acceptanceCriteria": [
+        "Initialize shadcn/ui with npx shadcn-ui@latest init",
+        "Configure components.json for project paths",
+        "Install Button component via shadcn/ui CLI",
+        "Install Card component via shadcn/ui CLI",
+        "Components render correctly in App.tsx",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Completed in SRE-86. shadcn/ui initialized with Button and Card components. CSS variables configured for Linq brand colors. Path aliases set up for @/* imports."
+    },
+    {
+      "id": "US-008",
+      "title": "Create theme provider with dark mode support",
+      "description": "As a user, I want to toggle between light and dark themes.",
+      "acceptanceCriteria": [
+        "Create ThemeProvider component using React context",
+        "Support light, dark, and system themes",
+        "Theme toggle persists to localStorage",
+        "Dark mode uses Linq dark colors (cream background in dark mode is #141414)",
+        "Add theme toggle button in App.tsx",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Completed in SRE-60. ThemeProvider with React context, light/dark/system themes, localStorage persistence, and ThemeToggle component with sun/moon icons."
+    },
+    {
+      "id": "US-009",
+      "title": "Install React Router and create basic routes",
+      "description": "As a developer, I need routing configured for multi-page navigation.",
+      "acceptanceCriteria": [
+        "Install react-router-dom v6",
+        "Create BrowserRouter wrapper in main.tsx",
+        "Create placeholder pages: Dashboard, Services, Alerts, Playbooks, AuditLogs, Settings",
+        "Configure routes in App.tsx",
+        "Navigation between routes works",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Completed in SRE-87. Installed react-router-dom v6, created src/pages/ with placeholder pages, configured BrowserRouter and routes with navigation header."
+    },
+    {
+      "id": "US-010",
+      "title": "Create sidebar navigation component",
+      "description": "As a user, I want a sidebar navigation to move between sections.",
+      "acceptanceCriteria": [
+        "Create Sidebar component with navigation links",
+        "Links: Dashboard, Services, Alerts, Playbooks, Audit Logs, Settings",
+        "Active link is highlighted",
+        "Use Lucide icons for each nav item",
+        "Sidebar styled with Linq colors",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Completed in SRE-64. Created Sidebar component with Lucide icons (LayoutDashboard, Server, AlertTriangle, BookOpen, ScrollText, Settings), active link highlighting via useLocation(), and Linq brand color styling."
+    },
+    {
+      "id": "US-011",
+      "title": "Create header component with branding",
+      "description": "As a user, I want a header showing the Medic logo and theme toggle.",
+      "acceptanceCriteria": [
+        "Create Header component",
+        "Display Medic logo from docs/assets/medic-icon-all-green.png",
+        "Include theme toggle button (sun/moon icon)",
+        "Header uses Linq brand colors",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Completed in SRE-64. Created Header component with Medic logo (copied to ui/public/assets/) and ThemeToggle. Updated App.tsx to use Header component."
+    },
+    {
+      "id": "US-012",
+      "title": "Create main layout with sidebar and header",
+      "description": "As a user, I want a consistent layout across all pages.",
+      "acceptanceCriteria": [
+        "Create Layout component that combines Header, Sidebar, and content area",
+        "Content area renders child routes via Outlet",
+        "Layout is responsive (sidebar collapses on mobile)",
+        "Add hamburger menu for mobile navigation",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Completed in SRE-64. Created Layout component with Header, Sidebar, and Outlet. Responsive design with mobile sidebar using Sheet component. Hamburger menu triggers mobile navigation drawer."
+    },
+    {
+      "id": "US-013",
+      "title": "Create API client module with TypeScript types",
+      "description": "As a developer, I need an API client to communicate with the Medic backend.",
+      "acceptanceCriteria": [
+        "Create src/lib/api.ts with fetch-based API client",
+        "Define TypeScript types for Service, Alert, Heartbeat entities",
+        "Support GET, POST, PUT, DELETE methods",
+        "Include Authorization header with API key",
+        "Handle common error responses (401, 403, 404, 500)",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Completed in SRE-61. Created fetch-based API client with TypeScript types for Service, Alert, Heartbeat, AuditLog, and Playbook entities. Includes ApiError class, createApiClient factory, and methods for all endpoints."
+    },
+    {
+      "id": "US-014",
+      "title": "Create auth context and API key storage",
+      "description": "As a user, I need to enter my API key to authenticate.",
+      "acceptanceCriteria": [
+        "Create AuthContext with isAuthenticated, apiKey, login, logout",
+        "Store API key in sessionStorage (not localStorage)",
+        "Provide useAuth hook for components",
+        "API client uses apiKey from context",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Completed in SRE-61. Created AuthProvider with isAuthenticated, apiKey, login, logout. Uses sessionStorage for API key persistence. useAuth hook for component access. API client synced via apiClient.setApiKey()."
+    },
+    {
+      "id": "US-015",
+      "title": "Create login page for API key entry",
+      "description": "As a user, I want a login page to enter my API key.",
+      "acceptanceCriteria": [
+        "Create Login page with API key input field",
+        "Style with Linq/Medic branding",
+        "Validate API key by making test request to /health",
+        "Show error message for invalid keys",
+        "Redirect to Dashboard on successful login",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Completed in SRE-61. Created Login page with API key input, Linq/Medic branding, /health validation, error messages, and redirect to Dashboard. Added shadcn/ui Input component."
+    },
+    {
+      "id": "US-016",
+      "title": "Add protected route wrapper",
+      "description": "As a developer, I need unauthenticated users redirected to login.",
+      "acceptanceCriteria": [
+        "Create ProtectedRoute component",
+        "Check isAuthenticated from AuthContext",
+        "Redirect to /login if not authenticated",
+        "Wrap all routes except /login in ProtectedRoute",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Completed in SRE-61. Created ProtectedRoute component that checks isAuthenticated and redirects to /login. Wraps Layout route in App.tsx."
+    },
+    {
+      "id": "US-017",
+      "title": "Install React Query for server state",
+      "description": "As a developer, I need React Query for efficient data fetching.",
+      "acceptanceCriteria": [
+        "Install @tanstack/react-query",
+        "Create QueryClient and QueryClientProvider in main.tsx",
+        "Configure default staleTime and cacheTime",
+        "Create useServices query hook example",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Completed in SRE-88. Installed @tanstack/react-query, created QueryClient with 30s staleTime and 5m gcTime, added QueryClientProvider in main.tsx, created useServices and useService hooks in src/hooks/."
+    },
+    {
+      "id": "US-018",
+      "title": "Create Dashboard page with summary cards",
+      "description": "As an SRE, I want to see service health summary on the dashboard.",
+      "acceptanceCriteria": [
+        "Create Dashboard page component",
+        "Display summary cards: Total Services, Active Services, Down Services, Active Alerts",
+        "Cards use Linq color scheme (green for healthy, red for down)",
+        "Use React Query to fetch data from API",
+        "Show loading skeletons while fetching",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Completed in SRE-66. Created Dashboard with summary cards (Total Services, Active Services, Down Services, Active Alerts), useAlerts hook, Skeleton component, loading states, and error handling."
+    },
+    {
+      "id": "US-019",
+      "title": "Create Services list page with table",
+      "description": "As a developer, I want to view all registered services in a table.",
+      "acceptanceCriteria": [
+        "Create Services page component",
+        "Display table with columns: Service Name, Heartbeat Name, Status, Down, Muted, Team, Priority",
+        "Fetch services via React Query",
+        "Show loading skeleton while fetching",
+        "Handle empty state with message",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Completed in SRE-67. Created Services page with shadcn/ui Table and Badge components. Includes loading skeleton, empty state, and status indicators."
+    },
+    {
+      "id": "US-020",
+      "title": "Add pagination to Services table",
+      "description": "As a developer, I want pagination on the services table.",
+      "acceptanceCriteria": [
+        "Add pagination controls (Previous, Next, page numbers)",
+        "Default 25 items per page",
+        "Page state persists in URL query params",
+        "Pagination controls styled with Linq colors",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Completed in SRE-89. Created TablePagination component with usePagination hook for URL state management. Pagination controls styled with Linq colors (linq-blue for active page)."
+    },
+    {
+      "id": "US-021",
+      "title": "Add sorting to Services table",
+      "description": "As a developer, I want to sort the services table by column.",
+      "acceptanceCriteria": [
+        "Click column header to sort ascending",
+        "Click again to sort descending",
+        "Visual indicator for sort direction",
+        "Sort state persists in URL query params",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Completed in SRE-90. Created useSort hook and SortableTableHead component for URL-based sort state management. Sort icons (ArrowUp/ArrowDown/ArrowUpDown) indicate current sort direction. Default sort is service_name ascending."
+    },
+    {
+      "id": "US-022",
+      "title": "Add filtering to Services table",
+      "description": "As a developer, I want to filter services by status.",
+      "acceptanceCriteria": [
+        "Add filter dropdowns: active/inactive, muted/unmuted, down/up",
+        "Filters update URL query params",
+        "Multiple filters combine with AND logic",
+        "Clear filters button",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Completed in SRE-91. Created useFilter hook and TableFilters component for URL-based filter state management. Filter dropdowns for Status (active/inactive), Muted (muted/not muted), and Health (down/up). Filters combine with sort and pagination, resetting to page 1 when changed."
+    },
+    {
+      "id": "US-023",
+      "title": "Add search to Services table",
+      "description": "As a developer, I want to search services by name.",
+      "acceptanceCriteria": [
+        "Add search input above table",
+        "Search by service name or heartbeat name",
+        "Debounce search input by 300ms",
+        "Search term persists in URL query params",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Completed in SRE-92. Created useSearch hook with debounced URL state management and SearchInput component. Search integrates with existing filter/sort/pagination pipeline."
+    },
+    {
+      "id": "US-024",
+      "title": "Create Service detail page",
+      "description": "As a developer, I want to view details of a specific service.",
+      "acceptanceCriteria": [
+        "Create ServiceDetail page at /services/:id route",
+        "Display all service fields: heartbeat_name, service_name, active, alert_interval, threshold, team, priority, muted, down, runbook",
+        "Fetch service data via React Query",
+        "Back button returns to Services list",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Completed in SRE-68. Created ServiceDetail page with all service fields, loading/error/not-found states, and Back button. Uses heartbeat_name for API lookup."
+    },
+    {
+      "id": "US-025",
+      "title": "Create Alerts list page",
+      "description": "As an SRE, I want to view all alerts in a table.",
+      "acceptanceCriteria": [
+        "Create Alerts page component",
+        "Display table with columns: Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration",
+        "Color-coded priority badges",
+        "Fetch alerts via React Query",
+        "Handle empty state",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Completed in SRE-72. Created Alerts page with table displaying Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration columns. Color-coded priority badges, loading/error/empty states."
+    },
+    {
+      "id": "US-026",
+      "title": "Add filtering and sorting to Alerts table",
+      "description": "As an SRE, I want to filter and sort alerts.",
+      "acceptanceCriteria": [
+        "Filter by: active/resolved, priority (P1/P2/P3)",
+        "Sort by any column (default: created date descending)",
+        "Filters and sort persist in URL",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Completed in SRE-93. Added TableFilters with Status (active/resolved) and Priority (P1/P2/P3) filters. All columns sortable with default sort by created_date descending."
+    },
+    {
+      "id": "US-027",
+      "title": "Create Alert detail page",
+      "description": "As an SRE, I want to view details of a specific alert.",
+      "acceptanceCriteria": [
+        "Create AlertDetail page at /alerts/:id route",
+        "Display all alert fields with human-readable timestamps",
+        "Link to associated service detail page",
+        "Link to runbook if configured",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "Completed in SRE-73. Created AlertDetail page with all alert fields, human-readable timestamps (absolute + relative), link to service detail page, runbook link, loading/error/not-found states."
+    },
+    {
+      "id": "US-028",
+      "title": "Create Playbooks list page",
+      "description": "As an SRE, I want to view all playbooks.",
+      "acceptanceCriteria": [
+        "Create Playbooks page component",
+        "Display table with: name, description, trigger type, last run, status",
+        "Filter by: active/inactive, trigger type",
+        "Search by playbook name",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "Completed in SRE-74. Created Playbooks page with table displaying name, description, trigger type, last run, and status columns. Filter by active/inactive and trigger type. Search by playbook name with debounce. Added getPlaybooks API method and usePlaybooks hook."
+    },
+    {
+      "id": "US-029",
+      "title": "Create Audit Logs page",
+      "description": "As an SRE, I want to view audit logs.",
+      "acceptanceCriteria": [
+        "Create AuditLogs page component",
+        "Display table with: Timestamp, Action Type, Actor, Service/Execution ID, Summary",
+        "Filter by: action type, actor, date range",
+        "Pagination with 25 items per page",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "Completed in SRE-78. Created AuditLogs page with table displaying all audit log entries. Server-side pagination with 25 items per page. Filter by action type (dropdown), actor (text input with debounce), and date range (date pickers). Added useAuditLogs React Query hook."
+    },
+    {
+      "id": "US-030",
+      "title": "Create Settings page",
+      "description": "As a user, I want to configure UI preferences.",
+      "acceptanceCriteria": [
+        "Create Settings page component",
+        "Theme toggle (light/dark mode)",
+        "Auto-refresh interval configuration (15s, 30s, 60s, disabled)",
+        "Settings persisted in localStorage",
+        "Reset to defaults button",
+        "Typecheck passes"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": "Completed in SRE-81. Created Settings page with theme toggle (light/dark/system), auto-refresh interval configuration (15s/30s/60s/disabled), SettingsProvider for state management with localStorage persistence, and Reset to defaults button."
+    },
+    {
+      "id": "US-031",
+      "title": "Add unit tests for core components",
+      "description": "As a developer, I need unit tests for key components.",
+      "acceptanceCriteria": [
+        "Install vitest and @testing-library/react",
+        "Add vitest config to vite.config.ts",
+        "Write tests for ThemeProvider",
+        "Write tests for AuthContext",
+        "Write tests for API client",
+        "npm run test passes",
+        "Typecheck passes"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Completed in SRE-94. Installed vitest, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event. Configured vitest with jsdom environment and test setup file. 57 tests passing: ThemeProvider (12 tests), AuthContext (12 tests), API client (33 tests)."
+    },
+    {
+      "id": "US-032",
+      "title": "Create README with setup instructions",
+      "description": "As a developer, I need documentation to get started.",
+      "acceptanceCriteria": [
+        "Create ui/README.md with project overview",
+        "Document local development setup",
+        "Document available npm scripts",
+        "Document environment variables",
+        "Typecheck passes"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Completed in SRE-85. Created comprehensive README with project overview, tech stack, prerequisites, local dev and Docker setup, all npm scripts, environment variables, API proxy config, authentication docs, project structure, styling guide (Linq brand colors and status colors), testing docs, production build instructions, Docker deployment, and troubleshooting."
+    }
+  ]
+}

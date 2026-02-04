@@ -401,13 +401,13 @@ class TestGetStaleRuns:
 
 
 class TestParseDatetime:
-    """Tests for _parse_datetime helper function."""
+    """Tests for parse_datetime helper function."""
 
     def test_parse_datetime_iso_with_tz(self):
         """Test parsing ISO format with timezone."""
-        from Medic.Core.job_runs import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("2026-02-03T10:00:00+00:00")
+        result = parse_datetime("2026-02-03T10:00:00+00:00")
 
         assert result is not None
         assert result.year == 2026
@@ -416,18 +416,18 @@ class TestParseDatetime:
 
     def test_parse_datetime_iso_without_tz(self):
         """Test parsing ISO format without timezone."""
-        from Medic.Core.job_runs import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("2026-02-03 10:00:00")
+        result = parse_datetime("2026-02-03 10:00:00")
 
         assert result is not None
         assert result.year == 2026
 
     def test_parse_datetime_invalid(self):
         """Test parsing invalid datetime string."""
-        from Medic.Core.job_runs import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("not-a-date")
+        result = parse_datetime("not-a-date")
 
         assert result is None
 
