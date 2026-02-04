@@ -371,8 +371,8 @@
         "Typecheck passes"
       ],
       "priority": 24,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed in SRE-68. Created ServiceDetail page with all service fields, loading/error/not-found states, and Back button. Uses heartbeat_name for API lookup."
     },
     {
       "id": "US-025",

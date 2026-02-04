@@ -66,7 +66,29 @@
 - Search + filter + sort + pagination pattern: search → filter → sort → paginate
 - Debounce pattern: use pendingValue state for immediate UI response, update URL after 300ms delay
 - ESLint react-hooks/set-state-in-effect rule: avoid setState in useEffect - use pending state pattern instead
+- Service detail page pattern: use useParams to get id from URL, useService(id) to fetch by heartbeat_name
+- Detail page pattern: Card components for grouping related information (Service Info, Monitoring Config, Timestamps)
+- Detail row pattern: dt/dd pattern with label and value for consistent styling
+- Services link by heartbeat_name (encodeURIComponent) since API uses heartbeat_name for lookup
 
+---
+
+## 2026-02-04 - US-024 - Linear Issue: SRE-68
+- What was implemented: Created Service detail page showing all service fields
+- Files changed:
+  - ui/src/pages/ServiceDetail.tsx (new - Service detail page component)
+  - ui/src/pages/Services.tsx (updated to link by heartbeat_name instead of service_id)
+  - ui/src/pages/index.ts (added ServiceDetail export)
+  - ui/src/App.tsx (added /services/:id route)
+- **Learnings for future iterations:**
+  - useParams<{ id: string }>() to get route parameter
+  - API returns services by heartbeat_name, not by service_id - link using encodeURIComponent(heartbeat_name)
+  - Detail pages need loading, error, and not-found states
+  - formatAlertInterval() helper converts minutes to human-readable (e.g., "30 minutes", "1 hour")
+  - Card components for logical grouping: Service Information, Monitoring Configuration, Timestamps, Runbook
+  - DetailRow component for consistent label/value display with dt/dd pattern
+  - Conditionally render Runbook card only if service.runbook exists
+  - Back button uses Link component with Button variant="outline"
 ---
 
 ## 2026-02-04 - US-023 - Linear Issue: SRE-92
