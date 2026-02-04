@@ -140,3 +140,23 @@ Started: Tue Feb  3 13:50:31 CST 2026
   - SPA routing needs try_files $uri $uri/ /index.html for client-side routes
   - nginx upstream block defines backend service name (medic-api:5000)
 ---
+
+## 2026-02-04 02:47 CST - US-003 - Linear Issue: SRE-59
+- What was implemented:
+  - Added medic-ui service to docker-compose.yml
+  - Service builds from ui/ directory using ui/Dockerfile
+  - Port 80 exposed for nginx (UI access)
+  - Depends on web service (medic-api) with healthcheck condition
+  - Added healthcheck for medic-ui service (curl localhost:80)
+  - Created medic-network bridge network for service communication
+  - Added container_name: medic-api to web service for nginx upstream reference
+  - Added network alias 'medic-api' to web service for nginx.conf compatibility
+  - Updated worker service MEDIC_BASE_URL to use medic-api hostname
+- Files changed:
+  - docker-compose.yml (modified)
+- **Learnings for future iterations:**
+  - Use network aliases when service name differs from hostname referenced in nginx.conf
+  - docker compose config --quiet validates configuration without verbose output
+  - Bridge network allows services to communicate via service/container names
+  - container_name ensures consistent hostname for nginx upstream references
+---
