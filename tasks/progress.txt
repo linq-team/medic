@@ -61,7 +61,30 @@
 - Filter + sort + pagination pattern: filter first, then sort, then paginate (filterItems(allItems) → sortItems → slice)
 - FilterConfig type: { param, label, options, placeholder } for configurable filter dropdowns
 - Filter options use 'all' value for "show all" (not null/empty) for cleaner Select handling
+- Search pattern: useSearch hook with useSearchParams for URL state management (?q=searchterm)
+- SearchInput component: styled input with search icon and clear button
+- Search + filter + sort + pagination pattern: search → filter → sort → paginate
+- Debounce pattern: use pendingValue state for immediate UI response, update URL after 300ms delay
+- ESLint react-hooks/set-state-in-effect rule: avoid setState in useEffect - use pending state pattern instead
 
+---
+
+## 2026-02-04 - US-023 - Linear Issue: SRE-92
+- What was implemented: Added search to Services table with debounced input
+- Files changed:
+  - ui/src/components/table-search.tsx (new - reusable useSearch hook and SearchInput component)
+  - ui/src/pages/Services.tsx (updated to use SearchInput for client-side search)
+  - ui/eslint.config.js (added ESLint override for *-search.tsx files)
+- **Learnings for future iterations:**
+  - useSearch hook returns { searchTerm, inputValue, setSearch, clearSearch, hasSearch, hasInputValue, searchItems }
+  - Search state persists in URL via useSearchParams (e.g., ?q=myservice)
+  - searchItems function accepts array of field names to search across (e.g., ['service_name', 'heartbeat_name'])
+  - Debounce pattern uses pendingValue state for responsive UI - input shows typed value immediately, URL updates after delay
+  - Use hasInputValue (input has text) vs hasSearch (URL has search) - clear button shows based on hasInputValue
+  - setSearch automatically clears any pending debounce timer before setting new one
+  - clearSearch clears immediately (no debounce) for responsive clear button
+  - Search integrates before filter in pipeline: search → filter → sort → paginate
+  - ESLint react-hooks/set-state-in-effect warns about setState in effects - use pending state instead of syncing
 ---
 
 ## 2026-02-04 - US-022 - Linear Issue: SRE-91
