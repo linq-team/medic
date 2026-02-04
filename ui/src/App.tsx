@@ -7,11 +7,16 @@ import {
   Playbooks,
   AuditLogs,
   Settings,
+  Login,
 } from '@/pages'
 
 function App() {
   return (
     <Routes>
+      {/* Login route - standalone without Layout */}
+      <Route path="/login" element={<Login />} />
+
+      {/* Protected routes with Layout */}
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/services" element={<Services />} />
