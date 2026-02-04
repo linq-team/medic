@@ -2168,3 +2168,44 @@
   - Toast notifications use sonner library with toast.success/error() API
 
 ---
+
+## 2026-02-04 - US-012 - Linear Issue: SRE-112
+- **What was implemented**: Row selection and bulk actions toolbar for Services table
+  - Added Checkbox component from shadcn
+  - Added checkbox column to Services table with select-all header functionality
+  - Created BulkActionsToolbar component with:
+    - Selected service count display
+    - Clear selection button
+    - Bulk action buttons: Mute, Unmute, Activate, Deactivate, Change Priority, Change Team
+  - Implemented confirmation dialogs for all bulk actions showing:
+    - Action title and description
+    - List of affected services
+    - Form fields for Change Priority (dropdown) and Change Team (text input)
+    - Destructive styling for deactivation
+  - Added progress indicator during bulk operations
+  - Uses existing `useBulkUpdateServices` hook with optimistic updates
+  - Toast notifications: success for all succeeded, warning for partial success, error for total failure
+  - Selection cleared automatically after successful action
+  - Added comprehensive test suite with 22 test cases covering:
+    - Toolbar rendering and selected count
+    - All action buttons and dialogs
+    - Confirmation flow for each action type
+    - Error handling (all fail, partial fail)
+    - Loading state indicators
+
+- **Files changed**:
+  - `ui/src/components/ui/checkbox.tsx` (new - shadcn Checkbox component)
+  - `ui/src/components/bulk-actions-toolbar.tsx` (new - BulkActionsToolbar component)
+  - `ui/src/components/bulk-actions-toolbar.test.tsx` (new - 22 test cases)
+  - `ui/src/pages/Services.tsx` (added checkbox column, selection state, BulkActionsToolbar integration)
+  - `tasks/prd.json` (marked US-012 as passes: true)
+
+- **Learnings for future iterations**:
+  - Use exact regex patterns like `/^Mute$/` to match button text, avoid `/mute/i` which matches "Unmute" too
+  - When both button and dialog title have same text, use `within(dialog)` to scope queries in tests
+  - Checkbox indeterminate state must be set via ref since it's not a native prop: `el.indeterminate = somePageSelected`
+  - Wrap `allServices` in `useMemo` to avoid ESLint exhaustive-deps warning when used in other useMemo hooks
+  - Radix Select has testing quirks - default value tests are more stable than interacting with dropdown
+  - BulkActionsToolbar pattern: opens dialog for ALL actions (not just destructive) to show service list preview
+
+---

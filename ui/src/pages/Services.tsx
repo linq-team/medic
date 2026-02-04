@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Server, AlertTriangle, Plus } from 'lucide-react'
 import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
 import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
@@ -17,7 +19,9 @@ import { SearchInput, useSearch } from '@/components/table-search'
 import { MuteToggle, ActiveToggle } from '@/components/service-toggle'
 import { PrioritySelector } from '@/components/priority-selector'
 import { ServiceCreateModal } from '@/components/service-create-modal'
+import { BulkActionsToolbar } from '@/components/bulk-actions-toolbar'
 import { useServices } from '@/hooks'
+import type { Service } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 /** Default number of services to display per page */
@@ -95,6 +99,7 @@ function EmptyState() {
  */
 export function Services() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const { data, isLoading, error } = useServices()
   const { pageSize, offset } = usePagination('page', PAGE_SIZE)
   const { sortColumn, sortDirection, toggleSort, sortItems } = useSort(
@@ -119,7 +124,7 @@ export function Services() {
     searchItems,
   } = useSearch('q', 300)
 
-  const allServices = data?.results ?? []
+  const allServices = useMemo(() => data?.results ?? [], [data?.results])
 
   // Search first, then filter, then sort, then paginate
   const searchedServices = searchItems(allServices, ['service_name', 'heartbeat_name'])
@@ -129,6 +134,63 @@ export function Services() {
 
   // Paginate services client-side
   const services = sortedServices.slice(offset, offset + pageSize)
+
+  // Get selected services for bulk actions
+  const selectedServices = useMemo<Service[]>(() => {
+    return allServices.filter((s) => selectedIds.has(s.service_id))
+  }, [allServices, selectedIds])
+
+  // Check if all services on current page are selected
+  const allPageSelected = useMemo(() => {
+    if (services.length === 0) return false
+    return services.every((s) => selectedIds.has(s.service_id))
+  }, [services, selectedIds])
+
+  // Check if some (but not all) services on current page are selected
+  const somePageSelected = useMemo(() => {
+    if (services.length === 0) return false
+    const selectedOnPage = services.filter((s) => selectedIds.has(s.service_id))
+    return selectedOnPage.length > 0 && selectedOnPage.length < services.length
+  }, [services, selectedIds])
+
+  /**
+   * Toggle selection for a single service
+   */
+  const toggleSelection = useCallback((serviceId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(serviceId)) {
+        next.delete(serviceId)
+      } else {
+        next.add(serviceId)
+      }
+      return next
+    })
+  }, [])
+
+  /**
+   * Toggle selection for all services on current page
+   */
+  const toggleAllOnPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allPageSelected) {
+        // Deselect all on current page
+        services.forEach((s) => next.delete(s.service_id))
+      } else {
+        // Select all on current page
+        services.forEach((s) => next.add(s.service_id))
+      }
+      return next
+    })
+  }, [allPageSelected, services])
+
+  /**
+   * Clear all selections
+   */
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
 
   return (
     <div className="p-8">
@@ -217,10 +279,29 @@ export function Services() {
         </div>
       ) : (
         <>
+          {/* Bulk actions toolbar */}
+          <BulkActionsToolbar
+            selectedServices={selectedServices}
+            onClearSelection={clearSelection}
+          />
+
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={allPageSelected}
+                      ref={(el) => {
+                        // Set indeterminate state via ref (not supported as prop)
+                        if (el) {
+                          (el as unknown as HTMLInputElement).indeterminate = somePageSelected
+                        }
+                      }}
+                      onCheckedChange={toggleAllOnPage}
+                      aria-label={allPageSelected ? 'Deselect all services on page' : 'Select all services on page'}
+                    />
+                  </TableHead>
                   <SortableTableHead
                     columnKey="service_name"
                     sortColumn={sortColumn}
@@ -281,7 +362,17 @@ export function Services() {
               </TableHeader>
               <TableBody>
                 {services.map((service) => (
-                  <TableRow key={service.service_id}>
+                  <TableRow
+                    key={service.service_id}
+                    data-state={selectedIds.has(service.service_id) ? 'selected' : undefined}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(service.service_id)}
+                        onCheckedChange={() => toggleSelection(service.service_id)}
+                        aria-label={`Select ${service.service_name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <Link
                         to={`/services/${encodeURIComponent(service.heartbeat_name)}`}
