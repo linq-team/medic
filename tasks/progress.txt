@@ -156,6 +156,30 @@
 
 ---
 
+## 2026-02-04 - US-010 - Linear Issue: SRE-120
+- **What was implemented**: Edit button added to ServiceDetail page header
+  - Added Edit button next to the Back button in the ServiceDetail header
+  - Button opens ServiceEditModal with current service data pre-populated
+  - Page automatically refreshes after successful edit via React Query's `invalidateQueries`
+  - Added comprehensive test suite with 9 test cases covering:
+    - Edit button rendering and visibility
+    - Modal opening with correct service data
+    - Modal closing behavior (Cancel and successful save)
+    - Data refresh after edit
+
+- **Files changed**:
+  - `ui/src/pages/ServiceDetail.tsx` (added Edit button, modal state, ServiceEditModal integration)
+  - `ui/src/pages/ServiceDetail.test.tsx` (new - test suite for Edit button functionality)
+  - `tasks/prd.json` (marked US-010 as passes: true)
+
+- **Learnings for future iterations**:
+  - ServiceEditModal already handles data refresh via useUpdateService hook's `onSettled` callback
+  - When testing pages with React Router, use MemoryRouter with Routes and Route for proper param handling
+  - The useService hook calls `apiClient.getServiceByHeartbeatName()` (not `getService()`)
+  - When multiple elements match the same text (e.g., "Test Service" in heading and detail row), use specific selectors like `getByRole('heading', { name: ... })`
+
+---
+
 ## 2026-02-04 - US-009 - Linear Issue: SRE-70
 - **What was implemented**: ServiceCreateModal component for creating new services through the UI
   - Created `ui/src/components/service-create-modal.tsx` with:
