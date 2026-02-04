@@ -567,7 +567,7 @@
         "Document required GitHub environments and secrets"
       ],
       "priority": 26,
-      "passes": false,
+      "passes": true,
       "notes": "Terraform deploys infra (RDS, Redis, Secrets) AND Helm chart via helm_release"
     },
     {
