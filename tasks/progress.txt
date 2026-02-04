@@ -2049,3 +2049,38 @@
   - Status color classes available: `text-status-error`, `text-status-warning`, `text-muted-foreground`
 
 ---
+
+## 2026-02-04 - US-008 - Linear Issue: SRE-69
+- **What was implemented**: ServiceEditModal component for editing service properties
+  - Created `ui/src/components/service-edit-modal.tsx` with:
+    - Modal dialog with form for editing service_name, team, priority, alert_interval, threshold, runbook
+    - Current values pre-populated from service prop
+    - Client-side validation with error messages (required fields, URL validation, numeric ranges)
+    - Save button disabled while form is invalid or unchanged
+    - Toast notifications on success/failure via sonner
+    - Modal closes on successful save
+    - Uses key prop pattern to reset form state when modal opens (avoids setState in useEffect)
+  - Added `ui/src/components/ui/label.tsx` from shadcn/ui
+  - Created `ui/src/components/service-edit-modal.test.tsx` with 19 test cases covering:
+    - Rendering and pre-population of form fields
+    - Validation error display
+    - Form submission behavior
+    - Toast notifications
+    - Modal open/close behavior
+
+- **Files changed**:
+  - `ui/src/components/service-edit-modal.tsx` (new - modal component)
+  - `ui/src/components/service-edit-modal.test.tsx` (new - tests)
+  - `ui/src/components/ui/label.tsx` (new - shadcn label component)
+  - `ui/package.json` (added @radix-ui/react-label dependency)
+  - `tasks/prd.json` (marked US-008 as passes: true)
+
+- **Learnings for future iterations**:
+  - Avoid setState in useEffect per ESLint rules - use key prop pattern to reset component state instead
+  - Use useMemo for validation errors (derived state) instead of useState + useEffect
+  - Internal form component with key prop allows clean state reset without useEffect
+  - shadcn CLI creates components in literal @/ directory - need to move to src/components/ui/
+  - Form validation: use touched state to only show errors after user interaction
+  - Toast notifications use sonner library with toast.success/error() API
+
+---
