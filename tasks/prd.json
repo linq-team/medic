@@ -388,7 +388,7 @@
         "Verify `helm template` renders valid ScaledObject and PDB"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "Uses KEDA for scaling, Karpenter-aware scheduling"
     },
     {
