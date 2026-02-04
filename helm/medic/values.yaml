@@ -1,0 +1,244 @@
+# Default values for medic Helm chart
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  environment: production
+
+# Namespace configuration
+namespace:
+  create: false
+  name: medic
+
+# Container image settings
+image:
+  repository: medic
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets for private registries
+imagePullSecrets: []
+
+# Override the chart name
+nameOverride: ""
+fullnameOverride: ""
+
+# API deployment configuration
+api:
+  replicaCount: 2
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Liveness probe configuration
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # Readiness probe configuration
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # KEDA autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    cooldownPeriod: 300
+    pollingInterval: 30
+    triggers:
+      cpu:
+        threshold: 70
+      prometheus:
+        enabled: false
+        serverAddress: http://prometheus:9090
+        metricName: http_requests_per_second
+        threshold: "100"
+        query: sum(rate(http_requests_total{service="medic-api"}[1m]))
+
+# Worker deployment configuration
+worker:
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Liveness probe for worker
+  livenessProbe:
+    exec:
+      command:
+        - python
+        - -c
+        - "import sys; sys.exit(0)"
+    initialDelaySeconds: 30
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  # PodDisruptionBudget for worker
+  pdb:
+    enabled: false
+    minAvailable: 1
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  host: medic.example.com
+  tls:
+    enabled: false
+    certificateArn: ""
+
+# ConfigMap for non-sensitive configuration
+config:
+  PORT: "8080"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  MEDIC_TIMEZONE: "America/Chicago"
+  WORKER_INTERVAL_SECONDS: "60"
+  ALERT_AUTO_UNMUTE_HOURS: "24"
+  MEDIC_LOG_FORMAT: "json"
+  # Rate limiting defaults
+  RATE_LIMIT_DEFAULT_REQUESTS: "100"
+  RATE_LIMIT_DEFAULT_WINDOW_SECONDS: "60"
+  RATE_LIMIT_HEALTH_REQUESTS: "1000"
+  RATE_LIMIT_METRICS_REQUESTS: "100"
+  RATE_LIMIT_DOCS_REQUESTS: "60"
+  MEDIC_RATE_LIMITER_TYPE: "auto"
+
+# Secret management
+secret:
+  # Create a Secret resource (for non-ESO deployments)
+  create: false
+  # Secret values (only used if create: true)
+  values: {}
+    # MEDIC_SECRETS_KEY: ""
+    # DATABASE_URL: ""
+    # REDIS_URL: ""
+
+# External Secrets Operator integration
+externalSecret:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  # Keys to fetch from external secret store
+  keys:
+    - secretKey: MEDIC_SECRETS_KEY
+      remoteRef:
+        key: medic/production/secrets
+        property: MEDIC_SECRETS_KEY
+    - secretKey: DATABASE_URL
+      remoteRef:
+        key: medic/production/secrets
+        property: DATABASE_URL
+    - secretKey: REDIS_URL
+      remoteRef:
+        key: medic/production/secrets
+        property: REDIS_URL
+
+# ServiceAccount configuration
+serviceAccount:
+  create: true
+  name: ""
+  # Annotations for IRSA (IAM Roles for Service Accounts)
+  annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/medic-role
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity and topology spread
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: medic
+          topologyKey: kubernetes.io/hostname
+
+# Topology spread constraints for multi-AZ distribution
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: medic
+
+# Metrics and monitoring
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+# Grafana dashboard
+grafana:
+  dashboard:
+    enabled: false
+    labels:
+      grafana_dashboard: "1"
+
+# Database migration job
+migrations:
+  enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

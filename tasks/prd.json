@@ -276,7 +276,7 @@
         "Verify `helm template medic helm/medic` renders valid YAML"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "Helm chart foundation - will be deployed via Terraform helm_release"
     },
     {
