@@ -1,6 +1,7 @@
 import os
 import requests
 import logging
+from typing import Optional
 
 # Log Setup
 logging.basicConfig(level=logging.WARNING)
@@ -15,7 +16,7 @@ def get_base_url() -> str:
     return os.environ.get("MEDIC_BASE_URL", DEFAULT_BASE_URL)
 
 
-def SendHeartbeat(heartbeat_name: str, service_name: str, status: str, base_url: str = None) -> bool:
+def SendHeartbeat(heartbeat_name: str, service_name: str, status: str, base_url: Optional[str] = None) -> bool:
     """
     Send a heartbeat to the Medic service.
 

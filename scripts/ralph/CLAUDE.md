@@ -78,6 +78,32 @@ Only update CLAUDE.md if you have **genuinely reusable knowledge** that would he
 - Keep changes focused and minimal
 - Follow existing code patterns
 
+## Pre-Push CI Checks (REQUIRED)
+
+**Before pushing any changes or creating commits, ALWAYS run these local CI checks:**
+
+```bash
+# 1. Lint check (ruff)
+ruff check Medic/ medic.py config.py --output-format=github
+
+# 2. Type check (mypy)
+mypy Medic/ medic.py config.py --ignore-missing-imports --no-error-summary --show-column-numbers
+
+# 3. Run tests with coverage
+pytest tests/ --cov=Medic --cov-report=term-missing -v
+
+# 4. Helm lint (if helm charts modified)
+helm lint helm/medic
+helm template medic helm/medic
+```
+
+**All checks must pass before committing or pushing.** If any check fails:
+1. Fix the issues immediately
+2. Re-run all checks to verify fixes
+3. Only then proceed with commit/push
+
+These are the exact same checks that run in the GitHub Actions CI pipeline.
+
 ## Browser Testing (If Available)
 
 For any story that changes UI, verify it works in the browser if you have browser testing tools configured (e.g., via MCP):
