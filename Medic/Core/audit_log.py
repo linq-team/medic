@@ -57,6 +57,7 @@ Usage:
         offset=0,
     )
 """
+
 import json
 import logging
 from dataclasses import dataclass
@@ -114,12 +115,8 @@ class AuditLogEntry:
             "action_type": self.action_type.value,
             "details": self.details,
             "actor": self.actor,
-            "timestamp": (
-                self.timestamp.isoformat() if self.timestamp else None
-            ),
-            "created_at": (
-                self.created_at.isoformat() if self.created_at else None
-            ),
+            "timestamp": (self.timestamp.isoformat() if self.timestamp else None),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
         }
 
 
@@ -127,12 +124,13 @@ class AuditLogEntry:
 # Core Logging Function
 # ============================================================================
 
+
 def create_audit_log_entry(
     execution_id: int,
     action_type: AuditActionType,
     details: Dict[str, Any],
     actor: Optional[str] = None,
-    timestamp: Optional[datetime] = None
+    timestamp: Optional[datetime] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Create an audit log entry in the database.
@@ -161,14 +159,14 @@ def create_audit_log_entry(
         RETURNING log_id
         """,
         (execution_id, action_type.value, details_json, actor, now, created_at),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         logger.log(
             level=40,
             msg=f"Failed to create audit log entry for execution {execution_id}, "
-                f"action {action_type.value}"
+            f"action {action_type.value}",
         )
         return None
 
@@ -176,12 +174,12 @@ def create_audit_log_entry(
     if not rows:
         return None
 
-    log_id = rows[0].get('log_id')
+    log_id = rows[0].get("log_id")
 
     logger.log(
         level=10,
         msg=f"Created audit log entry {log_id}: execution={execution_id}, "
-            f"action={action_type.value}"
+        f"action={action_type.value}",
     )
 
     return AuditLogEntry(
@@ -199,6 +197,7 @@ def create_audit_log_entry(
 # Convenience Logging Functions
 # ============================================================================
 
+
 def log_execution_started(
     execution_id: int,
     playbook_id: int,
@@ -206,7 +205,7 @@ def log_execution_started(
     service_id: Optional[int] = None,
     service_name: Optional[str] = None,
     trigger: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None
+    context: Optional[Dict[str, Any]] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook execution has started.
@@ -250,7 +249,7 @@ def log_step_completed(
     step_index: int,
     step_type: Optional[str] = None,
     output: Optional[str] = None,
-    duration_ms: Optional[int] = None
+    duration_ms: Optional[int] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook step completed successfully.
@@ -293,7 +292,7 @@ def log_step_failed(
     step_type: Optional[str] = None,
     error_message: Optional[str] = None,
     output: Optional[str] = None,
-    duration_ms: Optional[int] = None
+    duration_ms: Optional[int] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook step failed.
@@ -338,7 +337,7 @@ def log_approval_requested(
     playbook_name: str,
     service_name: Optional[str] = None,
     expires_at: Optional[datetime] = None,
-    channel_id: Optional[str] = None
+    channel_id: Optional[str] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that approval was requested for a playbook execution.
@@ -375,7 +374,7 @@ def log_approved(
     execution_id: int,
     approved_by: str,
     playbook_name: Optional[str] = None,
-    service_name: Optional[str] = None
+    service_name: Optional[str] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook execution was approved.
@@ -409,7 +408,7 @@ def log_rejected(
     rejected_by: str,
     playbook_name: Optional[str] = None,
     service_name: Optional[str] = None,
-    reason: Optional[str] = None
+    reason: Optional[str] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook execution was rejected.
@@ -446,7 +445,7 @@ def log_execution_completed(
     playbook_name: str,
     steps_completed: int,
     total_duration_ms: Optional[int] = None,
-    service_name: Optional[str] = None
+    service_name: Optional[str] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook execution completed successfully.
@@ -486,7 +485,7 @@ def log_execution_failed(
     failed_step_index: Optional[int] = None,
     steps_completed: Optional[int] = None,
     total_duration_ms: Optional[int] = None,
-    service_name: Optional[str] = None
+    service_name: Optional[str] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook execution failed.
@@ -533,9 +532,9 @@ def log_execution_failed(
 # Query Functions
 # ============================================================================
 
+
 def get_audit_logs_for_execution(
-    execution_id: int,
-    limit: int = 100
+    execution_id: int, limit: int = 100
 ) -> List[AuditLogEntry]:
     """
     Get all audit log entries for an execution.
@@ -557,22 +556,22 @@ def get_audit_logs_for_execution(
         LIMIT %s
         """,
         (execution_id, limit),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
     return [
-        entry for entry in (_parse_audit_log_entry(r) for r in rows if r)
+        entry
+        for entry in (_parse_audit_log_entry(r) for r in rows if r)
         if entry is not None
     ]
 
 
 def get_audit_logs_by_action_type(
-    action_type: AuditActionType,
-    limit: int = 100
+    action_type: AuditActionType, limit: int = 100
 ) -> List[AuditLogEntry]:
     """
     Get audit log entries by action type.
@@ -594,23 +593,21 @@ def get_audit_logs_by_action_type(
         LIMIT %s
         """,
         (action_type.value, limit),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
     return [
-        entry for entry in (_parse_audit_log_entry(r) for r in rows if r)
+        entry
+        for entry in (_parse_audit_log_entry(r) for r in rows if r)
         if entry is not None
     ]
 
 
-def get_audit_logs_by_actor(
-    actor: str,
-    limit: int = 100
-) -> List[AuditLogEntry]:
+def get_audit_logs_by_actor(actor: str, limit: int = 100) -> List[AuditLogEntry]:
     """
     Get audit log entries by actor (user who performed the action).
 
@@ -631,15 +628,16 @@ def get_audit_logs_by_actor(
         LIMIT %s
         """,
         (actor, limit),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
     return [
-        entry for entry in (_parse_audit_log_entry(r) for r in rows if r)
+        entry
+        for entry in (_parse_audit_log_entry(r) for r in rows if r)
         if entry is not None
     ]
 
@@ -647,9 +645,9 @@ def get_audit_logs_by_actor(
 def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
     """Parse a database row into an AuditLogEntry object."""
     try:
-        timestamp = data.get('timestamp')
-        created_at = data.get('created_at')
-        details = data.get('details', {})
+        timestamp = data.get("timestamp")
+        created_at = data.get("created_at")
+        details = data.get("details", {})
 
         # Parse timestamps
         if isinstance(timestamp, str):
@@ -666,11 +664,11 @@ def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
             timestamp = get_now()
 
         return AuditLogEntry(
-            log_id=data['log_id'],
-            execution_id=data['execution_id'],
-            action_type=AuditActionType(data['action_type']),
+            log_id=data["log_id"],
+            execution_id=data["execution_id"],
+            action_type=AuditActionType(data["action_type"]),
             details=details,
-            actor=data.get('actor'),
+            actor=data.get("actor"),
             timestamp=timestamp,
             created_at=created_at,
         )
@@ -682,6 +680,7 @@ def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
 # ============================================================================
 # Comprehensive Query Functions for API
 # ============================================================================
+
 
 @dataclass
 class AuditLogQueryResult:
@@ -712,7 +711,7 @@ def query_audit_logs(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
 ) -> AuditLogQueryResult:
     """
     Query audit logs with flexible filtering and pagination.
@@ -779,10 +778,10 @@ def query_audit_logs(
 
     count_result = db.query_db(count_query, tuple(params), show_columns=True)
     total_count = 0
-    if count_result and count_result != '[]':
+    if count_result and count_result != "[]":
         count_rows = json.loads(str(count_result))
         if count_rows:
-            total_count = count_rows[0].get('total', 0)
+            total_count = count_rows[0].get("total", 0)
 
     # Get the actual entries
     data_query = f"""
@@ -798,10 +797,11 @@ def query_audit_logs(
     data_result = db.query_db(data_query, tuple(data_params), show_columns=True)
 
     entries: List[AuditLogEntry] = []
-    if data_result and data_result != '[]':
+    if data_result and data_result != "[]":
         rows = json.loads(str(data_result))
         entries = [
-            entry for entry in (_parse_audit_log_entry(r) for r in rows if r)
+            entry
+            for entry in (_parse_audit_log_entry(r) for r in rows if r)
             if entry is not None
         ]
 
@@ -833,27 +833,31 @@ def audit_logs_to_csv(entries: List[AuditLogEntry]) -> str:
     writer = csv.writer(output)
 
     # Write header
-    writer.writerow([
-        'log_id',
-        'execution_id',
-        'action_type',
-        'actor',
-        'timestamp',
-        'created_at',
-        'details'
-    ])
+    writer.writerow(
+        [
+            "log_id",
+            "execution_id",
+            "action_type",
+            "actor",
+            "timestamp",
+            "created_at",
+            "details",
+        ]
+    )
 
     # Write data rows
     for entry in entries:
-        writer.writerow([
-            entry.log_id,
-            entry.execution_id,
-            entry.action_type.value,
-            entry.actor or '',
-            entry.timestamp.isoformat() if entry.timestamp else '',
-            entry.created_at.isoformat() if entry.created_at else '',
-            json.dumps(entry.details) if entry.details else ''
-        ])
+        writer.writerow(
+            [
+                entry.log_id,
+                entry.execution_id,
+                entry.action_type.value,
+                entry.actor or "",
+                entry.timestamp.isoformat() if entry.timestamp else "",
+                entry.created_at.isoformat() if entry.created_at else "",
+                json.dumps(entry.details) if entry.details else "",
+            ]
+        )
 
     return output.getvalue()
 
@@ -876,14 +880,14 @@ def get_service_id_for_execution(execution_id: int) -> Optional[int]:
         LIMIT 1
         """,
         (execution_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
     if not rows:
         return None
 
-    return rows[0].get('service_id')
+    return rows[0].get("service_id")

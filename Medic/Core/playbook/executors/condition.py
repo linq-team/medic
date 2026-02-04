@@ -16,6 +16,7 @@ Usage:
 
     result = execute_condition_step(step, execution)
 """
+
 import json
 import logging
 import time
@@ -53,9 +54,7 @@ CONDITION_POLL_INTERVAL = 5
 
 
 def check_heartbeat_received(
-    service_id: int,
-    since: datetime,
-    parameters: Dict[str, Any]
+    service_id: int, since: datetime, parameters: Dict[str, Any]
 ) -> tuple[bool, str]:
     """
     Check if a heartbeat has been received for a service since a given time.
@@ -68,8 +67,8 @@ def check_heartbeat_received(
     Returns:
         Tuple of (condition_met, message)
     """
-    min_count = parameters.get('min_count', 1)
-    status_filter = parameters.get('status')
+    min_count = parameters.get("min_count", 1)
+    status_filter = parameters.get("status")
 
     # Build query to check for heartbeats since the given time
     query = """
@@ -87,7 +86,7 @@ def check_heartbeat_received(
 
     result = db.query_db(query, tuple(params), show_columns=True)
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return (False, "Failed to query heartbeat events")
 
     try:
@@ -95,26 +94,25 @@ def check_heartbeat_received(
         if not rows:
             return (False, "No heartbeat data returned")
 
-        count = rows[0].get('count', 0)
+        count = rows[0].get("count", 0)
         if count >= min_count:
             return (
                 True,
                 f"Heartbeat received: {count} heartbeat(s) since "
-                f"{since.isoformat()}"
+                f"{since.isoformat()}",
             )
         else:
             return (
                 False,
                 f"Waiting for heartbeat: {count}/{min_count} received since "
-                f"{since.isoformat()}"
+                f"{since.isoformat()}",
             )
     except (json.JSONDecodeError, TypeError, KeyError) as e:
         return (False, f"Error parsing heartbeat data: {e}")
 
 
 def execute_condition_step(
-    step: ConditionStep,
-    execution: PlaybookExecution
+    step: ConditionStep, execution: PlaybookExecution
 ) -> StepResult:
     """
     Execute a condition step by polling until condition is met or timeout.
@@ -145,7 +143,7 @@ def execute_condition_step(
         execution_id=execution.execution_id or 0,
         step_name=step.name,
         step_index=step_index,
-        status=StepResultStatus.RUNNING
+        status=StepResultStatus.RUNNING,
     )
 
     if not result:
@@ -171,7 +169,7 @@ def execute_condition_step(
     service_id = execution.service_id
     if not service_id:
         # Try to get from parameters
-        service_id = step.parameters.get('service_id')
+        service_id = step.parameters.get("service_id")
 
     if not service_id:
         completed_at = get_now()
@@ -179,10 +177,7 @@ def execute_condition_step(
             "No service_id available for condition check. "
             "Provide service_id in execution or step parameters."
         )
-        logger.log(
-            level=30,
-            msg=f"Condition step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Condition step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -208,8 +203,8 @@ def execute_condition_step(
     logger.log(
         level=20,
         msg=f"Condition step '{step.name}': "
-            f"checking {step.condition_type.value} "
-            f"for service {service_id} (timeout: {timeout}s)"
+        f"checking {step.condition_type.value} "
+        f"for service {service_id} (timeout: {timeout}s)",
     )
 
     # Poll for condition until timeout
@@ -253,8 +248,7 @@ def execute_condition_step(
             f"{elapsed_total:.1f}s\n{last_message}"
         )
         logger.log(
-            level=20,
-            msg=f"Condition step '{step.name}' completed: {last_message}"
+            level=20, msg=f"Condition step '{step.name}' completed: {last_message}"
         )
 
         update_step_result(
@@ -286,7 +280,7 @@ def execute_condition_step(
         logger.log(
             level=30,
             msg=f"Condition step '{step.name}' timed out but continuing "
-                f"(on_failure=continue): {last_message}"
+            f"(on_failure=continue): {last_message}",
         )
 
         output_msg = f"{timeout_msg}\n(Continuing due to on_failure=continue)"
@@ -317,13 +311,11 @@ def execute_condition_step(
         )
         logger.log(
             level=40,
-            msg=f"Condition step '{step.name}' failed, escalating: {error_msg}"
+            msg=f"Condition step '{step.name}' failed, escalating: {error_msg}",
         )
 
         # Include escalation flag in output for downstream processing
-        output_msg = (
-            f"{timeout_msg}\n[ESCALATE] Condition failure requires escalation"
-        )
+        output_msg = f"{timeout_msg}\n[ESCALATE] Condition failure requires escalation"
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -347,13 +339,8 @@ def execute_condition_step(
 
     else:
         # Default: fail the step (on_failure=fail)
-        error_msg = (
-            f"Condition timed out after {elapsed_total:.1f}s: {last_message}"
-        )
-        logger.log(
-            level=30,
-            msg=f"Condition step '{step.name}' failed: {error_msg}"
-        )
+        error_msg = f"Condition timed out after {elapsed_total:.1f}s: {last_message}"
+        logger.log(level=30, msg=f"Condition step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,

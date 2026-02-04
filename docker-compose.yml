@@ -24,6 +24,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-medic} -d ${DB_NAME:-medic}"]
       interval: 10s
@@ -53,6 +54,28 @@ services:
     command: redis-server --appendonly yes
     networks:
       - medic-network
+
+  # ---------------------------------------------------------------------------
+  # Database Migrations (runs once on startup)
+  # ---------------------------------------------------------------------------
+  medic-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medic-migrations
+    command: ["python", "-m", "scripts.run_migrations"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-medic}
+      PG_USER: ${PG_USER:-medic}
+      PG_PASS: ${PG_PASS:-medic_dev_password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - medic-network
+    restart: "no"
 
   # ---------------------------------------------------------------------------
   # Medic API Server
@@ -91,11 +114,17 @@ services:
       MEDIC_SECRETS_KEY: ${MEDIC_SECRETS_KEY:-}
       MEDIC_WEBHOOK_SECRET: ${MEDIC_WEBHOOK_SECRET:-}
       MEDIC_ALLOWED_WEBHOOK_HOSTS: ${MEDIC_ALLOWED_WEBHOOK_HOSTS:-}
+      # Telemetry configuration (disable for local dev - no Alloy collector)
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      # Auto-create admin API key for local development
+      MEDIC_AUTO_CREATE_ADMIN_KEY: "true"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      medic-migrations:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -117,6 +146,8 @@ services:
     container_name: medic-worker
     restart: unless-stopped
     command: ["python", "-m", "Medic.Worker.monitor"]
+    ports:
+      - "9091:9091"
     environment:
       # Database configuration
       DB_HOST: postgres
@@ -139,11 +170,18 @@ services:
       PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
       # Security configuration
       MEDIC_SECRETS_KEY: ${MEDIC_SECRETS_KEY:-}
+      # Telemetry configuration (disable for local dev - no Alloy collector)
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: medic-worker
+      # Metrics server port
+      METRICS_PORT: 9091
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      medic-migrations:
+        condition: service_completed_successfully
     networks:
       - medic-network
 

@@ -1,4 +1,5 @@
 """Utility functions for Medic."""
+
 import uuid
 
 

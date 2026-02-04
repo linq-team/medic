@@ -15,6 +15,7 @@ Maintenance windows are stored in medic.maintenance_windows table with:
 - timezone: IANA timezone for cron evaluation
 - service_ids: Array of affected service IDs (empty = all services)
 """
+
 import json
 import logging
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Optional croniter import - if not available, recurring windows won't work
 try:
     from croniter import croniter  # type: ignore[import-untyped]
+
     CRONITER_AVAILABLE = True
 except ImportError:
     CRONITER_AVAILABLE = False
@@ -102,9 +104,7 @@ def is_valid_cron_expression(cron_expr: Optional[str]) -> bool:
         True if valid, False otherwise
     """
     if not CRONITER_AVAILABLE:
-        logger.warning(
-            "Cannot validate cron expression: croniter not installed"
-        )
+        logger.warning("Cannot validate cron expression: croniter not installed")
         return False
 
     if not cron_expr or not cron_expr.strip():
@@ -135,9 +135,7 @@ def get_next_occurrence(
         Next occurrence as timezone-aware datetime, or None if invalid
     """
     if not CRONITER_AVAILABLE:
-        logger.warning(
-            "Cannot calculate cron occurrence: croniter not installed"
-        )
+        logger.warning("Cannot calculate cron occurrence: croniter not installed")
         return None
 
     if not is_valid_cron_expression(cron_expr):
@@ -181,9 +179,7 @@ def get_prev_occurrence(
         Previous occurrence as timezone-aware datetime, or None if invalid
     """
     if not CRONITER_AVAILABLE:
-        logger.warning(
-            "Cannot calculate cron occurrence: croniter not installed"
-        )
+        logger.warning("Cannot calculate cron occurrence: croniter not installed")
         return None
 
     if not is_valid_cron_expression(cron_expr):
@@ -252,9 +248,7 @@ def is_within_recurring_window(
         True if within an active recurrence, False otherwise
     """
     if not CRONITER_AVAILABLE:
-        logger.warning(
-            "Cannot evaluate recurring window: croniter not installed"
-        )
+        logger.warning("Cannot evaluate recurring window: croniter not installed")
         return False
 
     if not window.recurrence:
@@ -272,9 +266,7 @@ def is_within_recurring_window(
     )
 
     if prev_occurrence is None:
-        logger.debug(
-            f"No previous occurrence found for window '{window.name}'"
-        )
+        logger.debug(f"No previous occurrence found for window '{window.name}'")
         return False
 
     # Calculate the window duration from the original definition
@@ -327,9 +319,7 @@ def is_in_maintenance_window(
         return is_within_one_time_window(window, check_time)
 
 
-def parse_maintenance_window(
-    row: Dict[str, Any]
-) -> Optional[MaintenanceWindow]:
+def parse_maintenance_window(row: Dict[str, Any]) -> Optional[MaintenanceWindow]:
     """
     Parse a database row into a MaintenanceWindow object.
 
@@ -534,9 +524,7 @@ def get_maintenance_windows_for_service(
                 windows.append(window)
         return windows
     except (json.JSONDecodeError, TypeError) as e:
-        logger.error(
-            f"Failed to get maintenance windows for service {service_id}: {e}"
-        )
+        logger.error(f"Failed to get maintenance windows for service {service_id}: {e}")
         return []
 
 

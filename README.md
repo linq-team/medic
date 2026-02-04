@@ -140,26 +140,81 @@ CREATE INDEX idx_api_keys_key_hash ON medic.api_keys(key_hash);
 ```
 
 ## Running Locally
-- First, clone the repo locally and then CD to it.
-- Pull all the env variables from vault and store them in `.env` file 
-- Export these environment variables 
-- Run `docker-compose up` to start the service
-- After you are done testing use `docker-compose down`
 
-If you wish to make use of the existing staging DB, ensure you're on the platform VPN. Then pull the secrets you need from vault, the are the same for both worker and webserver. It is possible to omit the GENIE_KEY, OG_API_KEY and SLACK_* vars to start the containers without causing alerts. However, it will generate errors in your docker logs when called.
+### Quick Start
 
-Now that you have both the worker and webserver running locally, you should be able to access the API locally on your machine on port [80](http://localhost/docs)
+```bash
+# 1. Clone and navigate to the repo
+git clone https://github.com/linq-team/medic.git
+cd medic
+
+# 2. Copy the example environment file
+cp .env.example .env
+
+# 3. Generate required secrets (paste output into .env)
+python -c "import secrets; import base64; print('MEDIC_SECRETS_KEY=' + base64.b64encode(secrets.token_bytes(32)).decode())"
+python -c "import secrets; print('MEDIC_WEBHOOK_SECRET=' + secrets.token_urlsafe(32))"
+
+# 4. Start all services
+docker-compose up -d
+
+# 5. View logs (optional)
+docker-compose logs -f
+```
+
+### Accessing Services
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| API | http://localhost:8080 | REST API |
+| API Docs | http://localhost:8080/docs | Swagger UI |
+| UI | http://localhost:80 | React dashboard |
+
+### Stopping Services
+
+```bash
+docker-compose down          # Stop containers
+docker-compose down -v       # Stop and remove volumes (resets database)
+```
+
+### Optional Integrations
+
+For Slack notifications, see [docs/SLACK_INTEGRATION.md](docs/SLACK_INTEGRATION.md)
+
+For PagerDuty alerts, see [docs/PAGERDUTY_INTEGRATION.md](docs/PAGERDUTY_INTEGRATION.md)
 
 ## Environmental Variables
-- MEDIC_BASE_URL - Base URL for Medic API (used by clients)
-- SLACK_API_TOKEN
-- SLACK_CHANNEL_ID
-- PORT
-- PG_USER
-- PG_PASS
-- DB_NAME
-- DB_HOST
-- PAGERDUTY_ROUTING_KEY - PagerDuty Events API v2 routing key
+
+### Required
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `PG_USER` | PostgreSQL username | `medic` |
+| `PG_PASS` | PostgreSQL password | `your-secure-password` |
+| `DB_NAME` | Database name | `medic` |
+| `DB_HOST` | Database host | `localhost` or `postgres` (in Docker) |
+| `MEDIC_SECRETS_KEY` | 32-byte base64 key for encryption | Generate with Python (see Quick Start) |
+
+### Optional - Application
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | API server port | `8080` |
+| `MEDIC_BASE_URL` | Base URL for API | `http://localhost:8080` |
+| `MEDIC_TIMEZONE` | Timezone for schedules | `America/Chicago` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `DEBUG` | Enable debug mode | `false` |
+
+### Optional - Integrations
+
+| Variable | Description | How to Get |
+|----------|-------------|------------|
+| `SLACK_API_TOKEN` | Slack bot token | [Slack Integration Guide](docs/SLACK_INTEGRATION.md) |
+| `SLACK_CHANNEL_ID` | Slack channel ID | [Slack Integration Guide](docs/SLACK_INTEGRATION.md) |
+| `SLACK_SIGNING_SECRET` | Slack signing secret | [Slack Integration Guide](docs/SLACK_INTEGRATION.md) |
+| `PAGERDUTY_ROUTING_KEY` | PagerDuty Events API key | [PagerDuty Integration Guide](docs/PAGERDUTY_INTEGRATION.md) |
+
+See `.env.example` for a complete list of all configuration options.
 
 ## Metrics and Telemetry
 - Graphs provided by Cartographer

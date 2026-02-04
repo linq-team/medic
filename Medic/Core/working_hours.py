@@ -19,6 +19,7 @@ Multiple time ranges per day are supported:
     ]
 }
 """
+
 import json
 import logging
 from dataclasses import dataclass
@@ -124,9 +125,7 @@ def parse_time(time_str: str) -> time:
         raise ValueError(f"Invalid time format: {time_str}") from e
 
 
-def parse_hours(
-    hours_data: Dict[str, Any]
-) -> Dict[str, List[TimeRange]]:
+def parse_hours(hours_data: Dict[str, Any]) -> Dict[str, List[TimeRange]]:
     """
     Parse hours JSON data into structured TimeRange objects.
 
@@ -149,16 +148,12 @@ def parse_hours(
             continue
 
         if not isinstance(ranges, list):
-            raise ValueError(
-                f"Hours for {day_name} must be a list, got {type(ranges)}"
-            )
+            raise ValueError(f"Hours for {day_name} must be a list, got {type(ranges)}")
 
         day_ranges: List[TimeRange] = []
         for range_data in ranges:
             if not isinstance(range_data, dict):
-                raise ValueError(
-                    f"Time range must be a dict, got {type(range_data)}"
-                )
+                raise ValueError(f"Time range must be a dict, got {type(range_data)}")
 
             start_str = range_data.get("start")
             end_str = range_data.get("end")
@@ -326,8 +321,7 @@ def is_within_working_hours(
 
     if not day_ranges:
         logger.debug(
-            f"No working hours defined for {day_name} in schedule "
-            f"'{schedule.name}'"
+            f"No working hours defined for {day_name} in schedule " f"'{schedule.name}'"
         )
         return False
 
@@ -342,9 +336,7 @@ def is_within_working_hours(
             )
             return True
 
-    logger.debug(
-        f"Time {local_time_only} is outside all working hours for {day_name}"
-    )
+    logger.debug(f"Time {local_time_only} is outside all working hours for {day_name}")
     return False
 
 
@@ -370,9 +362,7 @@ def is_service_within_working_hours(
 
     if schedule is None:
         # No schedule means always "within hours"
-        logger.debug(
-            f"Service {service_id} has no schedule, treating as within hours"
-        )
+        logger.debug(f"Service {service_id} has no schedule, treating as within hours")
         return (True, None)
 
     within_hours = is_within_working_hours(schedule, check_time)

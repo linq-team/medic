@@ -170,6 +170,22 @@ externalSecret:
       remoteRef:
         key: medic/production/secrets
         property: REDIS_URL
+    - secretKey: MEDIC_ADMIN_API_KEY
+      remoteRef:
+        key: medic/production/secrets
+        property: MEDIC_ADMIN_API_KEY
+    - secretKey: SLACK_API_TOKEN
+      remoteRef:
+        key: medic/production/secrets
+        property: SLACK_API_TOKEN
+    - secretKey: SLACK_SIGNING_SECRET
+      remoteRef:
+        key: medic/production/secrets
+        property: SLACK_SIGNING_SECRET
+    - secretKey: PAGERDUTY_ROUTING_KEY
+      remoteRef:
+        key: medic/production/secrets
+        property: PAGERDUTY_ROUTING_KEY
 
 # ServiceAccount configuration
 serviceAccount:

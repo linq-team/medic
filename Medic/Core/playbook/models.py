@@ -31,6 +31,7 @@ Usage:
         status=StepResultStatus.COMPLETED,
     )
 """
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -124,9 +125,7 @@ class StepResult:
             "status": self.status.value,
             "output": self.output,
             "error_message": self.error_message,
-            "started_at": (
-                self.started_at.isoformat() if self.started_at else None
-            ),
+            "started_at": (self.started_at.isoformat() if self.started_at else None),
             "completed_at": (
                 self.completed_at.isoformat() if self.completed_at else None
             ),
@@ -176,18 +175,12 @@ class PlaybookExecution:
             "service_id": self.service_id,
             "status": self.status.value,
             "current_step": self.current_step,
-            "started_at": (
-                self.started_at.isoformat() if self.started_at else None
-            ),
+            "started_at": (self.started_at.isoformat() if self.started_at else None),
             "completed_at": (
                 self.completed_at.isoformat() if self.completed_at else None
             ),
-            "created_at": (
-                self.created_at.isoformat() if self.created_at else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat() if self.updated_at else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
             "step_results": [sr.to_dict() for sr in self.step_results],
             "context": self.context,
         }

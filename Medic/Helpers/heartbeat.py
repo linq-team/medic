@@ -1,4 +1,5 @@
 """Heartbeat model and database operations."""
+
 import Medic.Core.database as db
 from datetime import datetime
 from enum import Enum
@@ -12,6 +13,7 @@ class HeartbeatStatus(str, Enum):
     UP/DOWN: Traditional heartbeat statuses indicating service health
     STARTED/COMPLETED/FAILED: Job tracking statuses for correlating job runs
     """
+
     UP = "UP"
     DOWN = "DOWN"
     STARTED = "STARTED"
@@ -50,17 +52,13 @@ class Heartbeat:
     """
 
     def __init__(
-        self,
-        s_id: int,
-        name: str,
-        current_status: str,
-        run_id: Optional[str] = None
+        self, s_id: int, name: str, current_status: str, run_id: Optional[str] = None
     ):
         self.service_id = s_id
         self.heartbeat_name = name
-        self.time = datetime.now(
-            pytz.timezone('America/Chicago')
-        ).strftime("%Y-%m-%d %H:%M:%S %Z")
+        self.time = datetime.now(pytz.timezone("America/Chicago")).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
         self.status = current_status
         self.run_id = run_id
 
@@ -78,27 +76,25 @@ def addHeartbeat(heartbeat_obj: Heartbeat) -> bool:
     if heartbeat_obj.run_id is not None:
         result = db.insert_db(
             'INSERT INTO "heartbeatEvents"(service_id, time, status, run_id) '
-            'VALUES(%s, %s, %s, %s)',
+            "VALUES(%s, %s, %s, %s)",
             (
                 heartbeat_obj.service_id,
                 heartbeat_obj.time,
                 heartbeat_obj.status,
-                heartbeat_obj.run_id
-            )
+                heartbeat_obj.run_id,
+            ),
         )
     else:
         result = db.insert_db(
             'INSERT INTO "heartbeatEvents"(service_id, time, status) '
-            'VALUES(%s, %s, %s)',
-            (heartbeat_obj.service_id, heartbeat_obj.time, heartbeat_obj.status)
+            "VALUES(%s, %s, %s)",
+            (heartbeat_obj.service_id, heartbeat_obj.time, heartbeat_obj.status),
         )
     return result
 
 
 def queryHeartbeats(
-    h_name: str,
-    starttime: Optional[str] = None,
-    endtime: Optional[str] = None
+    h_name: str, starttime: Optional[str] = None, endtime: Optional[str] = None
 ) -> Optional[Union[str, List]]:
     """
     Query heartbeats by name and optional time range.
@@ -128,10 +124,10 @@ def queryHeartbeats(
     elif starttime is not None and endtime is None:
         return "You must enter a start_time"
     else:
-        query = base_query + \
-            " AND time >= %s AND time <= %s ORDER BY time DESC LIMIT 250"
-        result = db.query_db(query, (h_name, starttime, endtime),
-                             show_columns=True)
+        query = (
+            base_query + " AND time >= %s AND time <= %s ORDER BY time DESC LIMIT 250"
+        )
+        result = db.query_db(query, (h_name, starttime, endtime), show_columns=True)
         return result
 
 

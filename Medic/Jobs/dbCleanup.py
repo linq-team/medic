@@ -1,4 +1,5 @@
 """Database cleanup job for Medic - removes old heartbeat events."""
+
 import logging
 import psycopg2
 import os
@@ -16,17 +17,19 @@ def connect_db():
     dbhost = os.environ["DB_HOST"]
     try:
         conn = psycopg2.connect(
-            user=user,
-            password=password,
-            host=dbhost,
-            port="5432",
-            database=dbname
+            user=user, password=password, host=dbhost, port="5432", database=dbname
         )
-        logger.log(level=20, msg=f"Connected to {dbhost}:5432\\{dbname} with user: {user} successfully.")
+        logger.log(
+            level=20,
+            msg=f"Connected to {dbhost}:5432\\{dbname} with user: {user} successfully.",
+        )
         return conn
     except psycopg2.Error as e:
-        logger.log(level=50, msg=f"Failed to connect to {dbname} with supplied credentials. "
-                                  f"Is it running and do you have access? Error: {str(e)}")
+        logger.log(
+            level=50,
+            msg=f"Failed to connect to {dbname} with supplied credentials. "
+            f"Is it running and do you have access? Error: {str(e)}",
+        )
         raise ConnectionError(str(e))
 
 
@@ -48,11 +51,14 @@ def cleanup_old_heartbeats(days: int = 30) -> int:
         # Use parameterized interval - note: psycopg2 handles interval properly
         cur.execute(
             'DELETE FROM "heartbeatEvents" WHERE time <= (NOW() - INTERVAL %s)',
-            (f'{days} days',)
+            (f"{days} days",),
         )
         rows_deleted = cur.rowcount
         client.commit()
-        logger.log(level=20, msg=f"DB Cleanup: Deleted {rows_deleted} heartbeat events older than {days} days")
+        logger.log(
+            level=20,
+            msg=f"DB Cleanup: Deleted {rows_deleted} heartbeat events older than {days} days",
+        )
         return rows_deleted
     except psycopg2.Error as e:
         logger.log(level=40, msg=f"Unable to perform cleanup: {str(e)}")

@@ -1,0 +1,70 @@
+# =============================================================================
+# Dev-Medic Slack App Manifest (Development/Local)
+# =============================================================================
+# This manifest creates a separate Slack app for development and testing.
+# Using a separate app prevents dev/test notifications from going to production
+# channels and allows testing interactive features without affecting production.
+#
+# To use:
+#   1. Go to https://api.slack.com/apps
+#   2. Click "Create New App"
+#   3. Select "From an app manifest"
+#   4. Select your workspace
+#   5. Paste this YAML content
+#   6. Review and create the app
+#   7. Install to your workspace
+#
+# After creation, you'll need to:
+#   - Upload the DEV app icon: docs/assets/medic-icon-dev.png
+#     (Basic Information -> Display Information -> App Icon)
+#     This icon has a red "DEV" banner to distinguish from production!
+#   - Copy the Bot User OAuth Token -> SLACK_API_TOKEN
+#   - Copy the Signing Secret -> SLACK_SIGNING_SECRET
+#   - Update the interactivity URL (see notes below)
+#
+# For local development with interactivity:
+#   - Use ngrok or similar to expose your local server:
+#     ngrok http 8080
+#   - Update the request_url to your ngrok URL:
+#     https://abc123.ngrok.io/api/v1/slack/interactions
+# =============================================================================
+
+display_information:
+  name: Dev-Medic
+  description: "[DEV] Heartbeat monitoring and automated remediation service for development and testing."
+  background_color: "#8B4513"
+  long_description: |
+    Development version of the Medic Slack app.
+
+    This app is used for:
+    - Local development testing
+    - Staging environment notifications
+    - Testing playbook approval workflows
+
+    DO NOT use this app for production alerts.
+
+features:
+  bot_user:
+    display_name: Dev-Medic
+    always_online: false
+
+oauth_config:
+  scopes:
+    bot:
+      # Send messages to channels
+      - chat:write
+      # Send messages to public channels without being a member
+      - chat:write.public
+
+settings:
+  interactivity:
+    is_enabled: true
+    # For local development, use ngrok or similar tunnel service:
+    #   ngrok http 8080
+    # Then update this URL to match your tunnel URL
+    request_url: https://violinistic-hummel-lylah.ngrok-free.dev/api/v1/slack/interactions
+    # request_url: https://your-dev-tunnel.ngrok.io/api/v1/slack/interactions
+
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

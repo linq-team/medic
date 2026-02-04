@@ -22,6 +22,7 @@ Usage:
         # Handle invalid URL
         pass
 """
+
 import ipaddress
 import logging
 import os
@@ -53,20 +54,20 @@ ALLOWED_SCHEMES: Set[str] = {"http", "https"}
 
 # Private IP networks that should be blocked (RFC 1918 + special ranges)
 BLOCKED_IP_NETWORKS: List[ipaddress.IPv4Network] = [
-    ipaddress.IPv4Network("127.0.0.0/8"),      # Loopback
-    ipaddress.IPv4Network("10.0.0.0/8"),       # Private Class A
-    ipaddress.IPv4Network("172.16.0.0/12"),    # Private Class B
-    ipaddress.IPv4Network("192.168.0.0/16"),   # Private Class C
-    ipaddress.IPv4Network("169.254.0.0/16"),   # Link-local (includes cloud metadata)
-    ipaddress.IPv4Network("0.0.0.0/8"),        # "This" network
+    ipaddress.IPv4Network("127.0.0.0/8"),  # Loopback
+    ipaddress.IPv4Network("10.0.0.0/8"),  # Private Class A
+    ipaddress.IPv4Network("172.16.0.0/12"),  # Private Class B
+    ipaddress.IPv4Network("192.168.0.0/16"),  # Private Class C
+    ipaddress.IPv4Network("169.254.0.0/16"),  # Link-local (includes cloud metadata)
+    ipaddress.IPv4Network("0.0.0.0/8"),  # "This" network
 ]
 
 # IPv6 blocked networks
 BLOCKED_IPV6_NETWORKS: List[ipaddress.IPv6Network] = [
-    ipaddress.IPv6Network("::1/128"),          # Loopback
-    ipaddress.IPv6Network("fc00::/7"),         # Unique local
-    ipaddress.IPv6Network("fe80::/10"),        # Link-local
-    ipaddress.IPv6Network("::/128"),           # Unspecified
+    ipaddress.IPv6Network("::1/128"),  # Loopback
+    ipaddress.IPv6Network("fc00::/7"),  # Unique local
+    ipaddress.IPv6Network("fe80::/10"),  # Link-local
+    ipaddress.IPv6Network("::/128"),  # Unspecified
 ]
 
 # Specific IPs that should always be blocked
@@ -74,7 +75,7 @@ BLOCKED_IPS: Set[str] = {
     "0.0.0.0",
     "127.0.0.1",
     "localhost",
-    "169.254.169.254",    # AWS/GCP/Azure metadata endpoint
+    "169.254.169.254",  # AWS/GCP/Azure metadata endpoint
     "metadata.google.internal",
     "metadata",
 }
@@ -192,16 +193,10 @@ def resolve_hostname(hostname: str, timeout: float = DNS_TIMEOUT) -> List[str]:
             ips: List[str] = list(set(str(info[4][0]) for info in addr_info))
             return ips
         except socket.gaierror as e:
-            logger.log(
-                level=30,
-                msg=f"DNS resolution failed for {hostname}: {e}"
-            )
+            logger.log(level=30, msg=f"DNS resolution failed for {hostname}: {e}")
             raise InvalidURLError("Invalid webhook URL")
         except socket.timeout:
-            logger.log(
-                level=30,
-                msg=f"DNS resolution timed out for {hostname}"
-            )
+            logger.log(level=30, msg=f"DNS resolution timed out for {hostname}")
             raise InvalidURLError("Invalid webhook URL")
 
     finally:
@@ -243,10 +238,7 @@ def validate_url(url: str, skip_dns_check: bool = False) -> bool:
     # Check scheme
     scheme = (parsed.scheme or "").lower()
     if scheme not in ALLOWED_SCHEMES:
-        logger.log(
-            level=30,
-            msg=f"URL validation failed: invalid scheme '{scheme}'"
-        )
+        logger.log(level=30, msg=f"URL validation failed: invalid scheme '{scheme}'")
         raise InvalidURLError("Invalid webhook URL")
 
     # Extract hostname
@@ -258,17 +250,13 @@ def validate_url(url: str, skip_dns_check: bool = False) -> bool:
     # Check against explicit blocklist
     if hostname in BLOCKED_IPS:
         logger.log(
-            level=30,
-            msg=f"URL validation failed: blocked hostname '{hostname}'"
+            level=30, msg=f"URL validation failed: blocked hostname '{hostname}'"
         )
         raise InvalidURLError("Invalid webhook URL")
 
     # Check if hostname is a direct IP address
     if is_private_ip(hostname):
-        logger.log(
-            level=30,
-            msg=f"URL validation failed: private IP '{hostname}'"
-        )
+        logger.log(level=30, msg=f"URL validation failed: private IP '{hostname}'")
         raise InvalidURLError("Invalid webhook URL")
 
     # Check against explicit allowlist if configured
@@ -277,7 +265,7 @@ def validate_url(url: str, skip_dns_check: bool = False) -> bool:
         if hostname not in allowed_hosts:
             logger.log(
                 level=30,
-                msg=f"URL validation failed: host '{hostname}' not in allowlist"
+                msg=f"URL validation failed: host '{hostname}' not in allowlist",
             )
             raise InvalidURLError("Invalid webhook URL")
         # If in allowlist, skip further checks
@@ -293,7 +281,7 @@ def validate_url(url: str, skip_dns_check: bool = False) -> bool:
                 logger.log(
                     level=30,
                     msg=f"URL validation failed: hostname '{hostname}' "
-                        f"resolves to private IP '{ip}'"
+                    f"resolves to private IP '{ip}'",
                 )
                 raise InvalidURLError("Invalid webhook URL")
 
@@ -302,7 +290,7 @@ def validate_url(url: str, skip_dns_check: bool = False) -> bool:
                 logger.log(
                     level=30,
                     msg=f"URL validation failed: hostname '{hostname}' "
-                        f"resolves to blocked IP '{ip}'"
+                    f"resolves to blocked IP '{ip}'",
                 )
                 raise InvalidURLError("Invalid webhook URL")
 

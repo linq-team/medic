@@ -2,6 +2,7 @@
 
 Supports in-memory and Redis backends with sliding window algorithm.
 """
+
 import logging
 import os
 import threading
@@ -342,9 +343,7 @@ class InMemoryRateLimiter(RateLimiter):
             # Reset all endpoint types for this key
             with self._buckets_lock:
                 prefix = f"{key}:"
-                keys_to_clear = [
-                    k for k in self._buckets if k.startswith(prefix)
-                ]
+                keys_to_clear = [k for k in self._buckets if k.startswith(prefix)]
                 for bucket_key in keys_to_clear:
                     self._buckets[bucket_key].clear()
             logger.debug(f"Reset all rate limits for key {key}")
@@ -556,9 +555,7 @@ class RedisRateLimiter(RateLimiter):
 
         if current_count >= limit:
             # Rate limited - get oldest timestamp for reset time
-            oldest_entries = self.redis.zrange(
-                redis_key, 0, 0, withscores=True
-            )
+            oldest_entries = self.redis.zrange(redis_key, 0, 0, withscores=True)
             if oldest_entries:
                 oldest_timestamp = oldest_entries[0][1]
                 reset_at = oldest_timestamp + window_seconds
@@ -691,26 +688,20 @@ def _create_rate_limiter() -> RateLimiter:
 
     # Force in-memory limiter
     if limiter_type == RATE_LIMITER_TYPE_MEMORY:
-        logger.info(
-            "Using InMemoryRateLimiter (MEDIC_RATE_LIMITER_TYPE=memory)"
-        )
+        logger.info("Using InMemoryRateLimiter (MEDIC_RATE_LIMITER_TYPE=memory)")
         return InMemoryRateLimiter()
 
     # Force Redis limiter
     if limiter_type == RATE_LIMITER_TYPE_REDIS:
         if not redis_url:
-            raise ValueError(
-                "REDIS_URL is required when MEDIC_RATE_LIMITER_TYPE=redis"
-            )
+            raise ValueError("REDIS_URL is required when MEDIC_RATE_LIMITER_TYPE=redis")
         logger.info("Using RedisRateLimiter (MEDIC_RATE_LIMITER_TYPE=redis)")
         return RedisRateLimiter()
 
     # Auto-select: try Redis if REDIS_URL is set
     if limiter_type == RATE_LIMITER_TYPE_AUTO:
         if not redis_url:
-            logger.info(
-                "Using InMemoryRateLimiter (REDIS_URL not set)"
-            )
+            logger.info("Using InMemoryRateLimiter (REDIS_URL not set)")
             return InMemoryRateLimiter()
 
         # Try to create Redis limiter, fall back to in-memory on failure
@@ -725,8 +716,7 @@ def _create_rate_limiter() -> RateLimiter:
                 return redis_limiter
             else:
                 logger.warning(
-                    "Redis health check failed, falling back to "
-                    "InMemoryRateLimiter"
+                    "Redis health check failed, falling back to " "InMemoryRateLimiter"
                 )
                 return InMemoryRateLimiter()
         except Exception as e:
@@ -808,6 +798,4 @@ def set_key_rate_limit(key: str, config: RateLimitConfig) -> None:
     if isinstance(limiter, InMemoryRateLimiter):
         limiter.set_key_config(key, config)
     else:
-        logger.warning(
-            "set_key_rate_limit only supported for InMemoryRateLimiter"
-        )
+        logger.warning("set_key_rate_limit only supported for InMemoryRateLimiter")

@@ -26,6 +26,7 @@ Usage:
         status=ExecutionStatus.RUNNING,
     )
 """
+
 import json
 import logging
 from datetime import datetime
@@ -54,11 +55,12 @@ logger.setLevel(logLevel.logSetup())
 # Execution Database Operations
 # ============================================================================
 
+
 def create_execution(
     playbook_id: int,
     service_id: Optional[int] = None,
     status: ExecutionStatus = ExecutionStatus.PENDING_APPROVAL,
-    context: Optional[Dict[str, Any]] = None
+    context: Optional[Dict[str, Any]] = None,
 ) -> Optional[PlaybookExecution]:
     """
     Create a new playbook execution record.
@@ -86,13 +88,12 @@ def create_execution(
         RETURNING execution_id
         """,
         (playbook_id, service_id, status.value, started_at, now, now),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         logger.log(
-            level=40,
-            msg=f"Failed to create execution for playbook {playbook_id}"
+            level=40, msg=f"Failed to create execution for playbook {playbook_id}"
         )
         return None
 
@@ -100,12 +101,12 @@ def create_execution(
     if not rows:
         return None
 
-    execution_id = rows[0].get('execution_id')
+    execution_id = rows[0].get("execution_id")
 
     logger.log(
         level=20,
         msg=f"Created playbook execution {execution_id} for playbook "
-            f"{playbook_id} (service: {service_id})"
+        f"{playbook_id} (service: {service_id})",
     )
 
     return PlaybookExecution(
@@ -139,10 +140,10 @@ def get_execution(execution_id: int) -> Optional[PlaybookExecution]:
         WHERE execution_id = %s
         """,
         (execution_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
@@ -169,16 +170,14 @@ def get_active_executions() -> List[PlaybookExecution]:
         WHERE status IN ('running', 'waiting')
         ORDER BY started_at ASC
         """,
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
-    return [
-        ex for ex in (_parse_execution(r) for r in rows if r) if ex is not None
-    ]
+    return [ex for ex in (_parse_execution(r) for r in rows if r) if ex is not None]
 
 
 def get_pending_approval_executions() -> List[PlaybookExecution]:
@@ -196,16 +195,14 @@ def get_pending_approval_executions() -> List[PlaybookExecution]:
         WHERE status = 'pending_approval'
         ORDER BY created_at ASC
         """,
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
-    return [
-        ex for ex in (_parse_execution(r) for r in rows if r) if ex is not None
-    ]
+    return [ex for ex in (_parse_execution(r) for r in rows if r) if ex is not None]
 
 
 def get_pending_approval_count() -> int:
@@ -221,16 +218,16 @@ def get_pending_approval_count() -> int:
         FROM medic.playbook_executions
         WHERE status = 'pending_approval'
         """,
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return 0
 
     try:
         rows = json.loads(str(result))
         if rows:
-            return rows[0].get('count', 0)
+            return rows[0].get("count", 0)
     except (json.JSONDecodeError, TypeError, KeyError):
         pass
 
@@ -241,7 +238,7 @@ def update_execution_status(
     execution_id: int,
     status: ExecutionStatus,
     current_step: Optional[int] = None,
-    completed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None,
 ) -> bool:
     """
     Update an execution's status and optionally step/completion time.
@@ -271,9 +268,7 @@ def update_execution_status(
 
     # If transitioning to running and started_at is null, set it
     if status == ExecutionStatus.RUNNING:
-        set_clauses.append(
-            "started_at = COALESCE(started_at, %s)"
-        )
+        set_clauses.append("started_at = COALESCE(started_at, %s)")
         params.append(now)
 
     params.append(execution_id)
@@ -281,13 +276,12 @@ def update_execution_status(
     result = db.insert_db(
         f"UPDATE medic.playbook_executions SET {', '.join(set_clauses)} "
         "WHERE execution_id = %s",
-        tuple(params)
+        tuple(params),
     )
 
     if result:
         logger.log(
-            level=10,
-            msg=f"Updated execution {execution_id} status to {status.value}"
+            level=10, msg=f"Updated execution {execution_id} status to {status.value}"
         )
 
     return bool(result)
@@ -296,10 +290,10 @@ def update_execution_status(
 def _parse_execution(data: Dict[str, Any]) -> Optional[PlaybookExecution]:
     """Parse a database row into a PlaybookExecution object."""
     try:
-        started_at = data.get('started_at')
-        completed_at = data.get('completed_at')
-        created_at = data.get('created_at')
-        updated_at = data.get('updated_at')
+        started_at = data.get("started_at")
+        completed_at = data.get("completed_at")
+        created_at = data.get("created_at")
+        updated_at = data.get("updated_at")
 
         # Parse datetime strings if needed
         if isinstance(started_at, str):
@@ -312,11 +306,11 @@ def _parse_execution(data: Dict[str, Any]) -> Optional[PlaybookExecution]:
             updated_at = parse_datetime(updated_at)
 
         return PlaybookExecution(
-            execution_id=data['execution_id'],
-            playbook_id=data['playbook_id'],
-            service_id=data.get('service_id'),
-            status=ExecutionStatus(data['status']),
-            current_step=data.get('current_step', 0),
+            execution_id=data["execution_id"],
+            playbook_id=data["playbook_id"],
+            service_id=data.get("service_id"),
+            status=ExecutionStatus(data["status"]),
+            current_step=data.get("current_step", 0),
             started_at=started_at,
             completed_at=completed_at,
             created_at=created_at,
@@ -331,11 +325,12 @@ def _parse_execution(data: Dict[str, Any]) -> Optional[PlaybookExecution]:
 # Step Result Database Operations
 # ============================================================================
 
+
 def create_step_result(
     execution_id: int,
     step_name: str,
     step_index: int,
-    status: StepResultStatus = StepResultStatus.PENDING
+    status: StepResultStatus = StepResultStatus.PENDING,
 ) -> Optional[StepResult]:
     """
     Create a new step result record.
@@ -359,14 +354,14 @@ def create_step_result(
         RETURNING result_id
         """,
         (execution_id, step_name, step_index, status.value, now, now),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         logger.log(
             level=40,
             msg=f"Failed to create step result for execution {execution_id}, "
-                f"step {step_name}"
+            f"step {step_name}",
         )
         return None
 
@@ -374,7 +369,7 @@ def create_step_result(
     if not rows:
         return None
 
-    result_id = rows[0].get('result_id')
+    result_id = rows[0].get("result_id")
 
     return StepResult(
         result_id=result_id,
@@ -391,7 +386,7 @@ def update_step_result(
     output: Optional[str] = None,
     error_message: Optional[str] = None,
     started_at: Optional[datetime] = None,
-    completed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None,
 ) -> bool:
     """
     Update a step result record.
@@ -434,15 +429,13 @@ def update_step_result(
     result = db.insert_db(
         f"UPDATE medic.playbook_step_results SET {', '.join(set_clauses)} "
         "WHERE result_id = %s",
-        tuple(params)
+        tuple(params),
     )
 
     return bool(result)
 
 
-def get_step_results_for_execution(
-    execution_id: int
-) -> List[StepResult]:
+def get_step_results_for_execution(execution_id: int) -> List[StepResult]:
     """
     Get all step results for an execution.
 
@@ -461,10 +454,10 @@ def get_step_results_for_execution(
         ORDER BY step_index ASC
         """,
         (execution_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
@@ -475,8 +468,8 @@ def get_step_results_for_execution(
 def _parse_step_result(data: Dict[str, Any]) -> Optional[StepResult]:
     """Parse a database row into a StepResult object."""
     try:
-        started_at = data.get('started_at')
-        completed_at = data.get('completed_at')
+        started_at = data.get("started_at")
+        completed_at = data.get("completed_at")
 
         if isinstance(started_at, str):
             started_at = parse_datetime(started_at)
@@ -484,13 +477,13 @@ def _parse_step_result(data: Dict[str, Any]) -> Optional[StepResult]:
             completed_at = parse_datetime(completed_at)
 
         return StepResult(
-            result_id=data['result_id'],
-            execution_id=data['execution_id'],
-            step_name=data['step_name'],
-            step_index=data['step_index'],
-            status=StepResultStatus(data['status']),
-            output=data.get('output'),
-            error_message=data.get('error_message'),
+            result_id=data["result_id"],
+            execution_id=data["execution_id"],
+            step_name=data["step_name"],
+            step_index=data["step_index"],
+            status=StepResultStatus(data["status"]),
+            output=data.get("output"),
+            error_message=data.get("error_message"),
             started_at=started_at,
             completed_at=completed_at,
         )
@@ -502,6 +495,7 @@ def _parse_step_result(data: Dict[str, Any]) -> Optional[StepResult]:
 # ============================================================================
 # Playbook Loading
 # ============================================================================
+
 
 def get_playbook_by_id(playbook_id: int) -> Optional[Playbook]:
     """
@@ -520,10 +514,10 @@ def get_playbook_by_id(playbook_id: int) -> Optional[Playbook]:
         WHERE playbook_id = %s
         """,
         (playbook_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
@@ -531,20 +525,14 @@ def get_playbook_by_id(playbook_id: int) -> Optional[Playbook]:
         return None
 
     playbook_data = rows[0]
-    yaml_content = playbook_data.get('yaml_content')
+    yaml_content = playbook_data.get("yaml_content")
 
     if not yaml_content:
-        logger.log(
-            level=30,
-            msg=f"Playbook {playbook_id} has no YAML content"
-        )
+        logger.log(level=30, msg=f"Playbook {playbook_id} has no YAML content")
         return None
 
     try:
         return parse_playbook_yaml(yaml_content)
     except Exception as e:
-        logger.log(
-            level=40,
-            msg=f"Failed to parse playbook {playbook_id}: {e}"
-        )
+        logger.log(level=40, msg=f"Failed to parse playbook {playbook_id}: {e}")
         return None

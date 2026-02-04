@@ -13,6 +13,7 @@ Usage:
 
     result = execute_wait_step(step, execution)
 """
+
 import logging
 import time
 from datetime import timedelta
@@ -35,10 +36,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logLevel.logSetup())
 
 
-def execute_wait_step(
-    step: WaitStep,
-    execution: PlaybookExecution
-) -> StepResult:
+def execute_wait_step(step: WaitStep, execution: PlaybookExecution) -> StepResult:
     """
     Execute a wait step by pausing for the specified duration.
 
@@ -61,7 +59,7 @@ def execute_wait_step(
         execution_id=execution.execution_id or 0,
         step_name=step.name,
         step_index=step_index,
-        status=StepResultStatus.RUNNING
+        status=StepResultStatus.RUNNING,
     )
 
     if not result:
@@ -89,7 +87,7 @@ def execute_wait_step(
     logger.log(
         level=20,
         msg=f"Wait step '{step.name}' starting: {step.duration_seconds}s "
-            f"(resume at {resume_at.isoformat()})"
+        f"(resume at {resume_at.isoformat()})",
     )
 
     # For synchronous execution, sleep for the duration
@@ -108,7 +106,7 @@ def execute_wait_step(
 
     logger.log(
         level=20,
-        msg=f"Wait step '{step.name}' completed after {step.duration_seconds}s"
+        msg=f"Wait step '{step.name}' completed after {step.duration_seconds}s",
     )
 
     return StepResult(

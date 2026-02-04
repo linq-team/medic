@@ -24,6 +24,7 @@ Usage:
     if execution:
         print(f"Started playbook execution {execution.execution_id}")
 """
+
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -47,6 +48,7 @@ try:
         check_circuit_breaker,
         record_circuit_breaker_trip,
     )
+
     CIRCUIT_BREAKER_AVAILABLE = True
 except ImportError:
     CIRCUIT_BREAKER_AVAILABLE = False
@@ -70,21 +72,16 @@ class PlaybookTriggerResult:
         """Convert to dictionary for JSON serialization."""
         return {
             "triggered": self.triggered,
-            "execution_id": (
-                self.execution.execution_id if self.execution else None
-            ),
+            "execution_id": (self.execution.execution_id if self.execution else None),
             "playbook_id": self.playbook.playbook_id if self.playbook else None,
-            "playbook_name": (
-                self.playbook.playbook_name if self.playbook else None
-            ),
+            "playbook_name": (self.playbook.playbook_name if self.playbook else None),
             "status": self.status,
             "message": self.message,
         }
 
 
 def should_trigger_playbook(
-    service_name: str,
-    consecutive_failures: int
+    service_name: str, consecutive_failures: int
 ) -> Optional[MatchedPlaybook]:
     """
     Check if a playbook should be triggered for an alert.
@@ -106,7 +103,7 @@ def trigger_playbook_for_alert(
     service_id: int,
     service_name: str,
     consecutive_failures: int,
-    alert_context: Optional[Dict[str, Any]] = None
+    alert_context: Optional[Dict[str, Any]] = None,
 ) -> PlaybookTriggerResult:
     """
     Trigger a playbook execution for an alerting service.
@@ -136,17 +133,17 @@ def trigger_playbook_for_alert(
             record_circuit_breaker_trip(
                 service_id=service_id,
                 execution_count=cb_status.execution_count,
-                playbook_name=None  # Don't know playbook yet
+                playbook_name=None,  # Don't know playbook yet
             )
             logger.log(
                 level=40,
                 msg=f"Circuit breaker blocked playbook execution for service "
-                    f"'{service_name}' (ID: {service_id}): {cb_status.message}"
+                f"'{service_name}' (ID: {service_id}): {cb_status.message}",
             )
             return PlaybookTriggerResult(
                 triggered=False,
                 status="circuit_breaker_open",
-                message=cb_status.message
+                message=cb_status.message,
             )
 
     # Check for matching playbook
@@ -156,33 +153,32 @@ def trigger_playbook_for_alert(
         logger.log(
             level=10,
             msg=f"No playbook trigger matched for service '{service_name}' "
-                f"with {consecutive_failures} consecutive failures"
+            f"with {consecutive_failures} consecutive failures",
         )
         return PlaybookTriggerResult(
             triggered=False,
             status="no_match",
-            message=f"No playbook trigger matched for '{service_name}'"
+            message=f"No playbook trigger matched for '{service_name}'",
         )
 
     logger.log(
         level=20,
         msg=f"Playbook '{matched.playbook_name}' matched for service "
-            f"'{service_name}' (failures: {consecutive_failures}/"
-            f"{matched.consecutive_failures})"
+        f"'{service_name}' (failures: {consecutive_failures}/"
+        f"{matched.consecutive_failures})",
     )
 
     # Load the full playbook to check approval settings
     playbook = get_playbook_by_id(matched.playbook_id)
     if not playbook:
         logger.log(
-            level=40,
-            msg=f"Failed to load playbook {matched.playbook_id} for execution"
+            level=40, msg=f"Failed to load playbook {matched.playbook_id} for execution"
         )
         return PlaybookTriggerResult(
             triggered=False,
             playbook=matched,
             status="error",
-            message=f"Failed to load playbook {matched.playbook_id}"
+            message=f"Failed to load playbook {matched.playbook_id}",
         )
 
     # Build execution context
@@ -203,20 +199,19 @@ def trigger_playbook_for_alert(
         playbook_id=matched.playbook_id,
         service_id=service_id,
         context=context,
-        skip_approval=skip_approval
+        skip_approval=skip_approval,
     )
 
     if not execution:
         logger.log(
             level=40,
-            msg=f"Failed to start playbook execution for "
-                f"'{matched.playbook_name}'"
+            msg=f"Failed to start playbook execution for " f"'{matched.playbook_name}'",
         )
         return PlaybookTriggerResult(
             triggered=False,
             playbook=matched,
             status="error",
-            message="Failed to create playbook execution"
+            message="Failed to create playbook execution",
         )
 
     # Determine appropriate status message
@@ -235,9 +230,7 @@ def trigger_playbook_for_alert(
             )
         else:
             status = "pending_approval"
-            message = (
-                f"Playbook '{matched.playbook_name}' awaiting approval"
-            )
+            message = f"Playbook '{matched.playbook_name}' awaiting approval"
     else:
         status = execution.status.value
         message = f"Playbook '{matched.playbook_name}' status: {status}"
@@ -245,7 +238,7 @@ def trigger_playbook_for_alert(
     logger.log(
         level=20,
         msg=f"Playbook execution {execution.execution_id} created for "
-            f"'{matched.playbook_name}': {message}"
+        f"'{matched.playbook_name}': {message}",
     )
 
     return PlaybookTriggerResult(
@@ -253,7 +246,7 @@ def trigger_playbook_for_alert(
         execution=execution,
         playbook=matched,
         status=status,
-        message=message
+        message=message,
     )
 
 

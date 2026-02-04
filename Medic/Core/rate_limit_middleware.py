@@ -3,6 +3,7 @@
 All endpoints are rate limited to prevent abuse and DoS attacks.
 Endpoint-specific rate limits can be configured via environment variables.
 """
+
 import json
 import logging
 import os
@@ -30,9 +31,7 @@ RATE_LIMIT_HEALTH_REQUESTS: int = int(
 RATE_LIMIT_METRICS_REQUESTS: int = int(
     os.environ.get("RATE_LIMIT_METRICS_REQUESTS", "100")
 )
-RATE_LIMIT_DOCS_REQUESTS: int = int(
-    os.environ.get("RATE_LIMIT_DOCS_REQUESTS", "60")
-)
+RATE_LIMIT_DOCS_REQUESTS: int = int(os.environ.get("RATE_LIMIT_DOCS_REQUESTS", "60"))
 
 # Endpoint types for rate limiting
 ENDPOINT_TYPE_HEALTH: str = "health"
@@ -214,9 +213,7 @@ def rate_limit(
                 # No API key - use IP address as fallback for rate limiting.
                 # This handles unauthenticated requests.
                 api_key_id = f"ip:{request.remote_addr}"
-                logger.debug(
-                    f"No API key, using IP for rate limiting: {api_key_id}"
-                )
+                logger.debug(f"No API key, using IP for rate limiting: {api_key_id}")
 
             # Determine endpoint type
             etype = endpoint_type
@@ -237,9 +234,7 @@ def rate_limit(
                     f"Limit: {result.limit}, Reset: {result.reset_at}"
                 )
                 body, status, headers = _create_rate_limit_response(result)
-                response = Response(
-                    body, status=status, mimetype="application/json"
-                )
+                response = Response(body, status=status, mimetype="application/json")
                 for key, value in headers.items():
                     response.headers[key] = value
                 return response
@@ -269,9 +264,7 @@ def rate_limit(
             else:
                 # Plain string response - wrap it
                 headers = _create_rate_limit_headers(result)
-                resp = Response(
-                    response, status=200, mimetype="application/json"
-                )
+                resp = Response(response, status=200, mimetype="application/json")
                 for key, value in headers.items():
                     resp.headers[key] = value
                 return resp

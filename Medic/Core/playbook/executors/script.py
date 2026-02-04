@@ -21,6 +21,7 @@ Usage:
 
     result = execute_script_step(step, execution)
 """
+
 import json
 import logging
 import os
@@ -69,12 +70,12 @@ MAX_SCRIPT_OUTPUT_SIZE = 8192
 # etc.) from leaking to script execution environments. Only basic system
 # variables and explicit MEDIC context variables are allowed.
 ALLOWED_SCRIPT_ENV_VARS: List[str] = [
-    'PATH',      # Required for finding executables
-    'HOME',      # User home directory
-    'USER',      # Current user name
-    'LANG',      # Locale settings
-    'LC_ALL',    # Locale override
-    'TZ',        # Timezone
+    "PATH",  # Required for finding executables
+    "HOME",  # User home directory
+    "USER",  # Current user name
+    "LANG",  # Locale settings
+    "LC_ALL",  # Locale override
+    "TZ",  # Timezone
 ]
 
 
@@ -103,9 +104,9 @@ def _get_script_env(execution: "PlaybookExecution") -> Dict[str, str]:
 
     # Allow extending the allowlist via environment variable
     # MEDIC_ADDITIONAL_SCRIPT_ENV_VARS is comma-separated list of var names
-    additional_vars = os.environ.get('MEDIC_ADDITIONAL_SCRIPT_ENV_VARS', '')
+    additional_vars = os.environ.get("MEDIC_ADDITIONAL_SCRIPT_ENV_VARS", "")
     if additional_vars:
-        for var_name in additional_vars.split(','):
+        for var_name in additional_vars.split(","):
             var_name = var_name.strip()
             if var_name:
                 allowed_vars.add(var_name)
@@ -116,9 +117,9 @@ def _get_script_env(execution: "PlaybookExecution") -> Dict[str, str]:
             safe_env[var_name] = os.environ[var_name]
 
     # Add explicit MEDIC context variables (these are always safe to expose)
-    safe_env['MEDIC_EXECUTION_ID'] = str(execution.execution_id or '')
-    safe_env['MEDIC_PLAYBOOK_ID'] = str(execution.playbook_id)
-    safe_env['MEDIC_SERVICE_ID'] = str(execution.service_id or '')
+    safe_env["MEDIC_EXECUTION_ID"] = str(execution.execution_id or "")
+    safe_env["MEDIC_PLAYBOOK_ID"] = str(execution.playbook_id)
+    safe_env["MEDIC_SERVICE_ID"] = str(execution.service_id or "")
 
     return safe_env
 
@@ -151,10 +152,10 @@ def get_registered_script(script_name: str) -> Optional[RegisteredScript]:
         WHERE name = %s
         """,
         (script_name,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
@@ -163,18 +164,16 @@ def get_registered_script(script_name: str) -> Optional[RegisteredScript]:
 
     row = rows[0]
     return RegisteredScript(
-        script_id=row['script_id'],
-        name=row['name'],
-        content=row['content'],
-        interpreter=row['interpreter'],
-        timeout_seconds=row.get('timeout_seconds', DEFAULT_SCRIPT_TIMEOUT),
+        script_id=row["script_id"],
+        name=row["name"],
+        content=row["content"],
+        interpreter=row["interpreter"],
+        timeout_seconds=row.get("timeout_seconds", DEFAULT_SCRIPT_TIMEOUT),
     )
 
 
 def _substitute_script_variables(
-    script_content: str,
-    context: Dict[str, Any],
-    parameters: Dict[str, Any]
+    script_content: str, context: Dict[str, Any], parameters: Dict[str, Any]
 ) -> str:
     """
     Substitute variables and secrets in script content.
@@ -203,10 +202,7 @@ def _substitute_script_variables(
     return str(substitute_all(script_content, merged))
 
 
-def execute_script_step(
-    step: ScriptStep,
-    execution: PlaybookExecution
-) -> StepResult:
+def execute_script_step(step: ScriptStep, execution: PlaybookExecution) -> StepResult:
     """
     Execute a script step by running a pre-registered script.
 
@@ -230,7 +226,7 @@ def execute_script_step(
         execution_id=execution.execution_id or 0,
         step_name=step.name,
         step_index=step_index,
-        status=StepResultStatus.RUNNING
+        status=StepResultStatus.RUNNING,
     )
 
     if not result:
@@ -260,10 +256,7 @@ def execute_script_step(
             f"Script '{step.script_name}' not found in registered scripts. "
             "Only pre-registered scripts can be executed for security."
         )
-        logger.log(
-            level=30,
-            msg=f"Script step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Script step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -289,18 +282,13 @@ def execute_script_step(
     # Substitute variables and secrets in script content
     try:
         script_content = _substitute_script_variables(
-            script.content,
-            context,
-            step.parameters
+            script.content, context, step.parameters
         )
     except Exception as e:
         # Handle secret substitution errors
         completed_at = get_now()
         error_msg = f"Variable/secret substitution failed: {e}"
-        logger.log(
-            level=30,
-            msg=f"Script step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Script step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -321,17 +309,14 @@ def execute_script_step(
         )
 
     # Determine interpreter command
-    if script.interpreter == 'python':
-        interpreter_cmd = ['python3', '-u']
-    elif script.interpreter == 'bash':
-        interpreter_cmd = ['bash', '-e']
+    if script.interpreter == "python":
+        interpreter_cmd = ["python3", "-u"]
+    elif script.interpreter == "bash":
+        interpreter_cmd = ["bash", "-e"]
     else:
         completed_at = get_now()
         error_msg = f"Unsupported interpreter: {script.interpreter}"
-        logger.log(
-            level=30,
-            msg=f"Script step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Script step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -358,17 +343,13 @@ def execute_script_step(
     logger.log(
         level=20,
         msg=f"Script step '{step.name}': executing '{script.name}' "
-            f"with {script.interpreter} (timeout: {timeout}s)"
+        f"with {script.interpreter} (timeout: {timeout}s)",
     )
 
     try:
         # Write script to temporary file
-        suffix = '.py' if script.interpreter == 'python' else '.sh'
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix=suffix,
-            delete=False
-        ) as f:
+        suffix = ".py" if script.interpreter == "python" else ".sh"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
             f.write(script_content)
             script_path = f.name
 
@@ -379,13 +360,10 @@ def execute_script_step(
                 # Set memory limit (virtual memory)
                 resource.setrlimit(
                     resource.RLIMIT_AS,
-                    (MAX_SCRIPT_MEMORY_BYTES, MAX_SCRIPT_MEMORY_BYTES)
+                    (MAX_SCRIPT_MEMORY_BYTES, MAX_SCRIPT_MEMORY_BYTES),
                 )
                 # Set CPU time limit (as backup to timeout)
-                resource.setrlimit(
-                    resource.RLIMIT_CPU,
-                    (timeout + 5, timeout + 10)
-                )
+                resource.setrlimit(resource.RLIMIT_CPU, (timeout + 5, timeout + 10))
             except (ValueError, resource.error):
                 # Resource limits may not be available on all platforms
                 pass
@@ -400,7 +378,7 @@ def execute_script_step(
             text=True,
             timeout=timeout,
             preexec_fn=set_limits,
-            env=script_env
+            env=script_env,
         )
 
         # Clean up temp file
@@ -410,8 +388,8 @@ def execute_script_step(
             pass
 
         # Capture output (truncate if needed)
-        stdout = proc.stdout or ''
-        stderr = proc.stderr or ''
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
         combined_output = stdout + (f"\n[STDERR]\n{stderr}" if stderr else "")
 
         if len(combined_output) > MAX_SCRIPT_OUTPUT_SIZE:
@@ -433,7 +411,7 @@ def execute_script_step(
             logger.log(
                 level=20,
                 msg=f"Script step '{step.name}' completed successfully "
-                    f"(exit code: 0)"
+                f"(exit code: 0)",
             )
 
             update_step_result(
@@ -455,10 +433,7 @@ def execute_script_step(
             )
         else:
             error_msg = f"Script exited with code {proc.returncode}"
-            logger.log(
-                level=30,
-                msg=f"Script step '{step.name}' failed: {error_msg}"
-            )
+            logger.log(level=30, msg=f"Script step '{step.name}' failed: {error_msg}")
 
             update_step_result(
                 result_id=result.result_id or 0,
@@ -489,10 +464,7 @@ def execute_script_step(
 
         completed_at = get_now()
         error_msg = f"Script execution timed out after {timeout}s"
-        logger.log(
-            level=30,
-            msg=f"Script step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Script step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -521,10 +493,7 @@ def execute_script_step(
 
         completed_at = get_now()
         error_msg = f"Script execution failed: {str(e)}"
-        logger.log(
-            level=30,
-            msg=f"Script step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Script step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,

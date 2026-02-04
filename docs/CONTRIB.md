@@ -109,8 +109,6 @@ Follow conventional commits:
 type(scope): short description
 
 Longer description if needed.
-
-Co-Authored-By: Your Name <your.email@example.com>
 ```
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
