@@ -23,6 +23,26 @@
 - Provider components (e.g., ThemeProvider) export both component and hook - add ESLint override in eslint.config.js
 - Static assets (images, logos) go in ui/public/ and are served at root path (e.g., /assets/logo.png)
 
+- Layout component pattern: use Outlet for nested route rendering in React Router v6
+- Mobile navigation: use shadcn/ui Sheet component with side="left" for drawer pattern
+- Responsive breakpoints: md: (768px) is standard breakpoint to hide/show sidebar
+
+---
+
+## 2026-02-04 - US-012 - Linear Issue: SRE-64
+- What was implemented: Created main Layout component with responsive sidebar and mobile navigation
+- Files changed:
+  - ui/src/components/layout.tsx (new - Layout component with DesktopSidebar, MobileSidebar, Header)
+  - ui/src/components/ui/sheet.tsx (new - shadcn/ui Sheet component for mobile drawer)
+  - ui/src/App.tsx (refactored to use Layout with nested Routes pattern via Outlet)
+  - ui/package.json (added @radix-ui/react-dialog dependency)
+- **Learnings for future iterations:**
+  - React Router v6 nested routes: parent Route with element={<Layout />} renders child routes via <Outlet />
+  - Responsive sidebar pattern: hidden (hidden md:flex) on mobile, visible on desktop
+  - Mobile sidebar uses Sheet component (slides from left) with same NavItem structure
+  - Hamburger menu button uses Menu icon from lucide-react, hidden on desktop (md:hidden)
+  - Sheet component uses @radix-ui/react-dialog under the hood
+  - shadcn CLI still creates files in literal @/ directory - must move to src/components/ui/
 ---
 
 ## 2026-02-04 - US-011 - Linear Issue: SRE-64
