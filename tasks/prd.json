@@ -648,8 +648,8 @@
         "Typecheck passes"
       ],
       "priority": 44,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration 016 creates medic.secrets table with encrypted_value (BYTEA), nonce, tag columns. Medic/Core/secrets.py implements AES-256-GCM encryption with cryptography library. Key from MEDIC_SECRETS_KEY env var. Playbook engine updated with substitute_all() for ${secrets.SECRET_NAME} syntax in webhooks and scripts. 45 unit tests in tests/unit/test_secrets.py."
     }
   ]
 }

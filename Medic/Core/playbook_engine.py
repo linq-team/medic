@@ -827,6 +827,18 @@ DEFAULT_WEBHOOK_TIMEOUT = 30
 # Variable pattern for substitution: ${VAR_NAME}
 VARIABLE_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
 
+# Import secrets module - use try/except for graceful degradation
+try:
+    from Medic.Core.secrets import (
+        substitute_secrets,
+        SecretNotFoundError,
+        DecryptionError,
+        SecretsError,
+    )
+    SECRETS_AVAILABLE = True
+except ImportError:
+    SECRETS_AVAILABLE = False
+
 
 def substitute_variables(
     value: Any,
@@ -873,6 +885,40 @@ def substitute_variables(
 
     else:
         return value
+
+
+def substitute_all(
+    value: Any,
+    context: Dict[str, Any],
+    secrets_cache: Optional[Dict[str, str]] = None
+) -> Any:
+    """
+    Substitute both variables and secrets in a value.
+
+    First substitutes ${VAR_NAME} variables from context, then
+    substitutes ${secrets.SECRET_NAME} secrets from the database.
+
+    Args:
+        value: Value to substitute (string, dict, list, or other)
+        context: Dictionary of variable values
+        secrets_cache: Optional cache for resolved secrets
+
+    Returns:
+        Value with all substitutions applied
+
+    Raises:
+        SecretNotFoundError: If a referenced secret doesn't exist
+        DecryptionError: If secret decryption fails
+    """
+    # First substitute regular variables
+    result = substitute_variables(value, context)
+
+    # Then substitute secrets if available
+    if SECRETS_AVAILABLE:
+        cache = secrets_cache if secrets_cache is not None else {}
+        result = substitute_secrets(result, cache)
+
+    return result
 
 
 def _build_webhook_context(
@@ -977,10 +1023,38 @@ def execute_webhook_step(
     # Build variable context
     context = _build_webhook_context(execution)
 
-    # Substitute variables in URL, headers, and body
-    url = substitute_variables(step.url, context)
-    headers = substitute_variables(step.headers, context)
-    body = substitute_variables(step.body, context) if step.body else None
+    # Substitute variables and secrets in URL, headers, and body
+    # Secrets use ${secrets.SECRET_NAME} syntax
+    try:
+        url = substitute_all(step.url, context)
+        headers = substitute_all(step.headers, context)
+        body = substitute_all(step.body, context) if step.body else None
+    except Exception as e:
+        # Handle secret substitution errors
+        completed_at = _now()
+        error_msg = f"Variable/secret substitution failed: {e}"
+        logger.log(
+            level=30,
+            msg=f"Webhook step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
 
     logger.log(
         level=20,
@@ -1227,9 +1301,10 @@ def _substitute_script_variables(
     parameters: Dict[str, Any]
 ) -> str:
     """
-    Substitute variables in script content.
+    Substitute variables and secrets in script content.
 
-    Supports ${VAR_NAME} syntax from context and parameters.
+    Supports ${VAR_NAME} syntax from context and parameters,
+    and ${secrets.SECRET_NAME} syntax for encrypted secrets.
     Parameters override context variables.
 
     Args:
@@ -1238,14 +1313,18 @@ def _substitute_script_variables(
         parameters: Step-specific parameters
 
     Returns:
-        Script content with variables substituted
+        Script content with variables and secrets substituted
+
+    Raises:
+        SecretNotFoundError: If a referenced secret doesn't exist
+        DecryptionError: If secret decryption fails
     """
     # Merge context and parameters (parameters take precedence)
     merged = dict(context)
     merged.update(parameters)
 
-    # Use the existing substitute_variables function for string substitution
-    return str(substitute_variables(script_content, merged))
+    # Use substitute_all to handle both variables and secrets
+    return str(substitute_all(script_content, merged))
 
 
 def execute_script_step(
@@ -1331,12 +1410,39 @@ def execute_script_step(
     # Build variable context
     context = _build_webhook_context(execution)
 
-    # Substitute variables in script content
-    script_content = _substitute_script_variables(
-        script.content,
-        context,
-        step.parameters
-    )
+    # Substitute variables and secrets in script content
+    try:
+        script_content = _substitute_script_variables(
+            script.content,
+            context,
+            step.parameters
+        )
+    except Exception as e:
+        # Handle secret substitution errors
+        completed_at = _now()
+        error_msg = f"Variable/secret substitution failed: {e}"
+        logger.log(
+            level=30,
+            msg=f"Script step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
 
     # Determine interpreter command
     if script.interpreter == 'python':
