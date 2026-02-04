@@ -765,6 +765,167 @@ def exposeRoutes(app):
         }), 200
 
     # =========================================================================
+    # Playbook Execution API
+    # =========================================================================
+
+    @app.route('/v2/playbooks/<int:playbook_id>/execute', methods=['POST'])
+    def execute_playbook(playbook_id):
+        """
+        Trigger a playbook execution via API.
+
+        Request body (JSON):
+            service_id: Optional service ID for the execution context
+            variables: Optional dictionary of variables to pass to playbook
+
+        Returns:
+            JSON with execution_id and status on success
+
+        Rate limited to 10 requests per minute per API key.
+        """
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            get_playbook_by_id,
+            start_playbook_execution,
+        )
+        from Medic.Core.rate_limiter import RateLimitConfig
+        from Medic.Core.rate_limit_middleware import verify_rate_limit
+
+        # Apply rate limiting: 10 req/min for playbook executions
+        playbook_rate_config = RateLimitConfig(
+            heartbeat_limit=100,  # Not used for this endpoint
+            management_limit=10,  # 10 req/min for playbook executions
+            window_seconds=60,
+        )
+        rate_limit_response = verify_rate_limit(
+            endpoint_type="management",
+            config=playbook_rate_config,
+        )
+        if rate_limit_response is not None:
+            body, status, headers = rate_limit_response
+            return body, status, headers
+
+        # Verify playbook exists
+        playbook = get_playbook_by_id(playbook_id)
+        if not playbook:
+            logger.log(
+                level=30,
+                msg=f"Playbook ID {playbook_id} not found for API execution"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Playbook ID {playbook_id} not found.",
+                "results": ""
+            }), 404
+
+        # Parse request body
+        service_id = None
+        variables = {}
+
+        if request.data:
+            try:
+                jData = json.loads(request.data)
+                service_id = jData.get('service_id')
+                variables = jData.get('variables', {})
+
+                # Validate service_id if provided
+                if service_id is not None:
+                    if not isinstance(service_id, int):
+                        try:
+                            service_id = int(service_id)
+                        except (ValueError, TypeError):
+                            return json.dumps({
+                                "success": False,
+                                "message": "service_id must be an integer.",
+                                "results": ""
+                            }), 400
+
+                    # Verify service exists if provided
+                    service_check = db.query_db(
+                        "SELECT service_id, heartbeat_name FROM services "
+                        "WHERE service_id = %s LIMIT 1",
+                        (service_id,),
+                        show_columns=True
+                    )
+                    if not service_check or service_check == '[]':
+                        return json.dumps({
+                            "success": False,
+                            "message": f"Service ID {service_id} not found.",
+                            "results": ""
+                        }), 404
+
+                # Validate variables is a dictionary
+                if variables and not isinstance(variables, dict):
+                    return json.dumps({
+                        "success": False,
+                        "message": "variables must be a dictionary.",
+                        "results": ""
+                    }), 400
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.log(
+                    level=30,
+                    msg=f"Invalid JSON in playbook execute request: {e}"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid JSON in request body.",
+                    "results": ""
+                }), 400
+
+        # Build execution context from variables
+        context = dict(variables) if variables else {}
+        context['trigger'] = 'api'
+
+        # Start playbook execution
+        # Note: skip_approval=False so approval settings in playbook are respected
+        execution = start_playbook_execution(
+            playbook_id=playbook_id,
+            service_id=service_id,
+            context=context,
+            skip_approval=False,
+        )
+
+        if not execution:
+            logger.log(
+                level=40,
+                msg=f"Failed to start playbook execution for playbook "
+                    f"{playbook_id}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Failed to start playbook execution.",
+                "results": ""
+            }), 500
+
+        logger.log(
+            level=20,
+            msg=f"Started playbook execution {execution.execution_id} for "
+                f"playbook '{playbook.name}' via API"
+        )
+
+        # Build response
+        response_data = {
+            "execution_id": execution.execution_id,
+            "playbook_id": playbook_id,
+            "playbook_name": playbook.name,
+            "status": execution.status.value,
+            "service_id": service_id,
+        }
+
+        # Include approval info if pending
+        if execution.status == ExecutionStatus.PENDING_APPROVAL:
+            response_data["message"] = (
+                "Playbook requires approval before execution. "
+                "Approve via Slack or API."
+            )
+
+        return json.dumps({
+            "success": True,
+            "message": "Playbook execution started successfully.",
+            "results": response_data
+        }), 201
+
+    # =========================================================================
     # Slack Interaction Webhook Endpoint
     # =========================================================================
 

@@ -856,3 +856,514 @@ class TestV2AuditLogs:
             assert call_kwargs["service_id"] == 42
             assert call_kwargs["action_type"] == "approved"
             assert call_kwargs["actor"] == "user123"
+
+
+@pytest.mark.integration
+class TestV2PlaybookExecute:
+    """Integration tests for V2 playbook execution API endpoint."""
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_success_no_approval(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test successful playbook execution without approval required."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=123,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.RUNNING,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/playbooks/1/execute",
+                    data=json.dumps({}),
+                    content_type="application/json"
+                )
+
+                assert response.status_code == 201
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["execution_id"] == 123
+                assert data["results"]["playbook_id"] == 1
+                assert data["results"]["playbook_name"] == "test-playbook"
+                assert data["results"]["status"] == "running"
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_with_service_id(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution with service_id parameter."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="service-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch("Medic.Core.routes.db.query_db") as mock_query:
+                # Service exists
+                mock_query.return_value = json.dumps([{
+                    "service_id": 42,
+                    "heartbeat_name": "test-service"
+                }])
+
+                with patch(
+                    "Medic.Core.playbook_engine.start_playbook_execution"
+                ) as mock_start:
+                    from Medic.Core.playbook_engine import (
+                        ExecutionStatus,
+                        PlaybookExecution,
+                    )
+                    mock_execution = PlaybookExecution(
+                        execution_id=124,
+                        playbook_id=1,
+                        service_id=42,
+                        status=ExecutionStatus.RUNNING,
+                    )
+                    mock_start.return_value = mock_execution
+
+                    response = client.post(
+                        "/v2/playbooks/1/execute",
+                        data=json.dumps({"service_id": 42}),
+                        content_type="application/json"
+                    )
+
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["success"] is True
+                    assert data["results"]["execution_id"] == 124
+                    assert data["results"]["service_id"] == 42
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_with_variables(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution with custom variables."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="var-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=125,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.RUNNING,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/playbooks/1/execute",
+                    data=json.dumps({
+                        "variables": {
+                            "ENV": "production",
+                            "TIMEOUT": 30
+                        }
+                    }),
+                    content_type="application/json"
+                )
+
+                assert response.status_code == 201
+
+                # Verify variables were passed to start_playbook_execution
+                mock_start.assert_called_once()
+                call_kwargs = mock_start.call_args[1]
+                assert call_kwargs["context"]["ENV"] == "production"
+                assert call_kwargs["context"]["TIMEOUT"] == 30
+                assert call_kwargs["context"]["trigger"] == "api"
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_pending_approval(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution that requires approval."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="approval-playbook",
+                description="Test playbook requiring approval",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.REQUIRED,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=126,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.PENDING_APPROVAL,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/playbooks/1/execute",
+                    data=json.dumps({}),
+                    content_type="application/json"
+                )
+
+                assert response.status_code == 201
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["status"] == "pending_approval"
+                assert "approval" in data["results"]["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_not_found(self, mock_rate, app, mock_env_vars):
+        """Test playbook execution when playbook doesn't exist."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            mock_get.return_value = None
+
+            response = client.post(
+                "/v2/playbooks/999/execute",
+                data=json.dumps({}),
+                content_type="application/json"
+            )
+
+            assert response.status_code == 404
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "not found" in data["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_service_not_found(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution when service_id doesn't exist."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch("Medic.Core.routes.db.query_db") as mock_query:
+                # Service doesn't exist
+                mock_query.return_value = '[]'
+
+                response = client.post(
+                    "/v2/playbooks/1/execute",
+                    data=json.dumps({"service_id": 999}),
+                    content_type="application/json"
+                )
+
+                assert response.status_code == 404
+                data = json.loads(response.data)
+                assert data["success"] is False
+                assert "Service ID 999 not found" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_invalid_service_id(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution with invalid service_id type."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            response = client.post(
+                "/v2/playbooks/1/execute",
+                data=json.dumps({"service_id": "not-an-int"}),
+                content_type="application/json"
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "integer" in data["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_invalid_variables(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution with invalid variables type."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            response = client.post(
+                "/v2/playbooks/1/execute",
+                data=json.dumps({"variables": "not-a-dict"}),
+                content_type="application/json"
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "dictionary" in data["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_invalid_json(self, mock_rate, app, mock_env_vars):
+        """Test playbook execution with invalid JSON body."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            response = client.post(
+                "/v2/playbooks/1/execute",
+                data="not valid json",
+                content_type="application/json"
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "Invalid JSON" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_execution_failure(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution when start fails."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                mock_start.return_value = None  # Execution failed
+
+                response = client.post(
+                    "/v2/playbooks/1/execute",
+                    data=json.dumps({}),
+                    content_type="application/json"
+                )
+
+                assert response.status_code == 500
+                data = json.loads(response.data)
+                assert data["success"] is False
+                assert "Failed to start" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_empty_body(self, mock_rate, app, mock_env_vars):
+        """Test playbook execution with empty request body."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=127,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.RUNNING,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/playbooks/1/execute",
+                    content_type="application/json"
+                )
+
+                assert response.status_code == 201
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["service_id"] is None
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_execute_playbook_string_service_id_conversion(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test playbook execution with string service_id that converts."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch("Medic.Core.routes.db.query_db") as mock_query:
+                # Service exists
+                mock_query.return_value = json.dumps([{
+                    "service_id": 42,
+                    "heartbeat_name": "test-service"
+                }])
+
+                with patch(
+                    "Medic.Core.playbook_engine.start_playbook_execution"
+                ) as mock_start:
+                    from Medic.Core.playbook_engine import (
+                        ExecutionStatus,
+                        PlaybookExecution,
+                    )
+                    mock_execution = PlaybookExecution(
+                        execution_id=128,
+                        playbook_id=1,
+                        service_id=42,
+                        status=ExecutionStatus.RUNNING,
+                    )
+                    mock_start.return_value = mock_execution
+
+                    # Send service_id as string "42"
+                    response = client.post(
+                        "/v2/playbooks/1/execute",
+                        data=json.dumps({"service_id": "42"}),
+                        content_type="application/json"
+                    )
+
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["success"] is True
+                    assert data["results"]["service_id"] == 42
