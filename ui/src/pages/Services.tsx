@@ -10,9 +10,13 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TablePagination, usePagination } from '@/components/table-pagination'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
+
+/** Default number of services to display per page */
+const PAGE_SIZE = 25
 
 /**
  * Get status badge variant and label for a service
@@ -75,8 +79,13 @@ function EmptyState() {
  */
 export function Services() {
   const { data, isLoading, error } = useServices()
+  const { pageSize, offset } = usePagination('page', PAGE_SIZE)
 
-  const services = data?.results ?? []
+  const allServices = data?.results ?? []
+  const totalItems = allServices.length
+
+  // Paginate services client-side
+  const services = allServices.slice(offset, offset + pageSize)
 
   return (
     <div className="p-8">
@@ -99,98 +108,109 @@ export function Services() {
 
       {isLoading ? (
         <TableSkeleton />
-      ) : services.length === 0 ? (
+      ) : allServices.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Service Name</TableHead>
-                <TableHead>Heartbeat Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Down</TableHead>
-                <TableHead>Muted</TableHead>
-                <TableHead>Team</TableHead>
-                <TableHead>Priority</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {services.map((service) => {
-                const statusBadge = getStatusBadge(service)
-                const priorityBadge = getPriorityBadge(service.priority)
+        <>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Service Name</TableHead>
+                  <TableHead>Heartbeat Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Down</TableHead>
+                  <TableHead>Muted</TableHead>
+                  <TableHead>Team</TableHead>
+                  <TableHead>Priority</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {services.map((service) => {
+                  const statusBadge = getStatusBadge(service)
+                  const priorityBadge = getPriorityBadge(service.priority)
 
-                return (
-                  <TableRow key={service.service_id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        to={`/services/${service.service_id}`}
-                        className="hover:underline hover:text-linq-blue"
-                      >
-                        {service.service_name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {service.heartbeat_name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusBadge.variant}>
-                        {statusBadge.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 text-sm font-medium',
-                          service.down === 1
-                            ? 'text-status-error'
-                            : 'text-status-healthy'
-                        )}
-                      >
-                        {service.down === 1 ? (
-                          <>
-                            <AlertTriangle className="h-4 w-4" />
-                            Yes
-                          </>
-                        ) : (
-                          'No'
-                        )}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 text-sm',
-                          service.muted === 1
-                            ? 'text-muted-foreground'
-                            : 'text-foreground'
-                        )}
-                      >
-                        {service.muted === 1 ? (
-                          <>
-                            <EyeOff className="h-4 w-4" />
-                            Yes
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-4 w-4" />
-                            No
-                          </>
-                        )}
-                      </span>
-                    </TableCell>
-                    <TableCell>{service.team || '—'}</TableCell>
-                    <TableCell>
-                      <Badge className={priorityBadge.className}>
-                        {priorityBadge.label}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                  return (
+                    <TableRow key={service.service_id}>
+                      <TableCell className="font-medium">
+                        <Link
+                          to={`/services/${service.service_id}`}
+                          className="hover:underline hover:text-linq-blue"
+                        >
+                          {service.service_name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {service.heartbeat_name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusBadge.variant}>
+                          {statusBadge.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 text-sm font-medium',
+                            service.down === 1
+                              ? 'text-status-error'
+                              : 'text-status-healthy'
+                          )}
+                        >
+                          {service.down === 1 ? (
+                            <>
+                              <AlertTriangle className="h-4 w-4" />
+                              Yes
+                            </>
+                          ) : (
+                            'No'
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 text-sm',
+                            service.muted === 1
+                              ? 'text-muted-foreground'
+                              : 'text-foreground'
+                          )}
+                        >
+                          {service.muted === 1 ? (
+                            <>
+                              <EyeOff className="h-4 w-4" />
+                              Yes
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-4 w-4" />
+                              No
+                            </>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>{service.team || '—'}</TableCell>
+                      <TableCell>
+                        <Badge className={priorityBadge.className}>
+                          {priorityBadge.label}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination info and controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Showing {offset + 1} to {Math.min(offset + pageSize, totalItems)} of{' '}
+              {totalItems} services
+            </p>
+            <TablePagination totalItems={totalItems} pageSize={PAGE_SIZE} />
+          </div>
+        </>
       )}
     </div>
   )

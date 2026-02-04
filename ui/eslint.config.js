@@ -39,4 +39,11 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  // Components that export hooks alongside UI components
+  {
+    files: ['src/components/*-pagination.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
