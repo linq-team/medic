@@ -457,3 +457,21 @@
   - Alert link pattern: use alert_id (number) for URL route, not heartbeat_name
   - StatusIcon pattern: extract icon from badge config object and render dynamically
 ---
+
+## 2026-02-04 - US-028 - Linear Issue: SRE-74
+- What was implemented: Created Playbooks list page with table, filtering, and search
+- Files changed:
+  - ui/src/lib/api.ts (added getPlaybooks API method)
+  - ui/src/hooks/use-playbooks.ts (new - usePlaybooks React Query hook)
+  - ui/src/hooks/index.ts (added usePlaybooks export)
+  - ui/src/pages/Playbooks.tsx (replaced placeholder with full table implementation)
+- **Learnings for future iterations:**
+  - Playbook type from api.ts includes: playbook_id, name, description, trigger_type, active, last_run, status
+  - usePlaybooks() hook follows same pattern as useServices/useAlerts
+  - PlaybookStatus type: 'pending_approval' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'
+  - Trigger types: 'alert', 'manual', 'scheduled' with distinct badge colors
+  - Status badges show execution state with icons (Loader2 for running with animate-spin)
+  - Search searches both name and description fields
+  - No pagination added (similar to Alerts page pattern)
+  - Table columns: Name, Description, Trigger Type, Last Run, Status, Active
+---
