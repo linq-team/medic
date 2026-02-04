@@ -153,6 +153,38 @@
 - **Toast notifications**: Use sonner library via `import { toast } from "sonner"`, call `toast.success()`, `toast.error()`, `toast.warning()` for variants. Toaster component configured in main.tsx with 5s auto-dismiss.
 - **Service mutation hooks**: Use `useUpdateService`, `useCreateService`, `useBulkUpdateServices` from `@/hooks/use-service-mutations` for service CRUD operations with optimistic updates
 - **ServiceCreateModal pattern**: Modal for creating new services with heartbeat_name validation (alphanumeric + hyphens + underscores only), sensible defaults (priority=p3, alert_interval=5, threshold=1), and duplicate detection via error message parsing
+- **Quick action buttons**: ServiceDetail page has Mute/Unmute and Activate/Deactivate buttons in header with icons, using `useUpdateService` hook for mutations with toast notifications
+
+---
+
+## 2026-02-04 - US-011 - Linear Issue: SRE-119
+- **What was implemented**: Quick action buttons added to ServiceDetail page header
+  - Added Mute/Unmute button with VolumeX/Volume2 icons
+  - Added Activate/Deactivate button with Power/PowerOff icons
+  - Deactivation shows confirmation dialog with explanation of consequences
+  - Actions use `useUpdateService` hook with optimistic updates
+  - Toast notifications for success/failure
+  - Page refreshes after action via React Query cache invalidation
+  - Added 19 test cases covering:
+    - Mute/Unmute button rendering and click handling
+    - Activate/Deactivate button rendering
+    - Confirmation dialog for deactivation
+    - No confirmation needed for activation
+    - Toast notifications for success/failure
+    - Dialog closing after action
+
+- **Files changed**:
+  - `ui/src/pages/ServiceDetail.tsx` (added quick action buttons, state, handlers, deactivate dialog)
+  - `ui/src/pages/ServiceDetail.test.tsx` (extended with 19 new test cases for quick action buttons)
+  - `tasks/prd.json` (marked US-011 as passes: true)
+
+- **Learnings for future iterations**:
+  - Deactivation is a destructive action requiring confirmation dialog, activation is not
+  - Use icons from lucide-react for button affordance (VolumeX/Volume2 for mute, Power/PowerOff for active)
+  - Dialog footer should have Cancel and destructive action button with loading state
+  - When testing dialog interactions, use `within(dialog)` to scope button queries to the dialog
+  - Use regex `^Deactivate$` to match exact button text when multiple buttons have similar text
+  - Snapshot creation happens server-side on service updates (no client-side code needed)
 
 ---
 

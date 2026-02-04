@@ -265,7 +265,8 @@
         "Add tests",
         "Verify in browser",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-012",
