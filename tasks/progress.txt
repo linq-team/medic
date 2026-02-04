@@ -56,6 +56,9 @@
 - **Dashboard exemplars: Enable `exemplar: true` in query targets for trace correlation**
 - **Dashboard variables: Use `datasource` type for Prometheus/Tempo/Loki selections**
 - **Helm template escaping: Use `{{` + "`{{ variable }}`" + `}}` syntax to escape Grafana template variables**
+- **GitHub Actions: Use `actions/cache@v4` for pip caching, `docker/build-push-action@v6` with `cache-from: type=gha` for Docker layers**
+- **GitHub Actions ruff: Use `--output-format=github` for inline PR annotations**
+- **GitHub Actions Helm: Use `azure/setup-helm@v4` for Helm installation**
 
 ---
 
@@ -891,5 +894,44 @@
   - Use `patch.dict('os.environ', {...})` for testing environment variables
   - The forward reference `"PlaybookExecution"` in type hints requires quotes for circular import prevention
   - Flake8 enforces 79 char line limit - keep comments under that limit
+
+---
+
+## 2026-02-04 - US-024 - Linear Issue: SRE-51
+- **What was implemented**: GitHub Actions workflow for CI pipeline (build, test, lint)
+  - Created `.github/workflows/build.yml` with comprehensive CI pipeline:
+    - Triggers: push to main, pull_request to main, workflow_dispatch
+    - **lint job**: Runs ruff check and mypy for code quality
+      - Caches pip dependencies with actions/cache@v4
+      - Uses `--output-format=github` for ruff to integrate with GitHub annotations
+      - Uses `--ignore-missing-imports` for mypy to handle optional deps
+    - **test job**: Runs pytest with coverage reporting
+      - Generates XML, HTML, and terminal coverage reports
+      - Uploads coverage artifacts with 14-day retention
+      - Uses pytest-cov for coverage collection
+    - **build job**: Builds Docker image with buildx
+      - Tags with git SHA and `latest`
+      - Uses GitHub Actions cache for Docker layers (type=gha)
+      - Builds for linux/amd64 platform (multi-arch in US-025)
+    - **helm-lint job**: Validates Helm chart
+      - Runs `helm lint helm/medic`
+      - Verifies `helm template` renders successfully
+  - All jobs run in parallel for efficiency (no inter-job dependencies)
+  - Caching configured:
+    - pip dependencies via actions/cache@v4 with hash of requirements files
+    - Docker layers via docker/build-push-action with type=gha cache
+  - Verified YAML syntax is valid via Python yaml.safe_load
+
+- **Files changed**:
+  - `.github/workflows/build.yml` (new, comprehensive CI workflow)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `actions/cache@v4` for pip with `~/.cache/pip` path
+  - Ruff with `--output-format=github` creates inline annotations on PRs
+  - Docker buildx cache `type=gha,mode=max` stores all layers in GitHub cache
+  - Helm chart icon warning is INFO level - doesn't fail lint
+  - Keep jobs independent (no needs:) when they don't have dependencies for parallel execution
+  - Use `actions/setup-python@v5` and `azure/setup-helm@v4` for latest stable versions
 
 ---

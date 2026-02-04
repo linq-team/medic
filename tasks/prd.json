@@ -523,7 +523,7 @@
         "Verify workflow YAML is valid"
       ],
       "priority": 24,
-      "passes": false,
+      "passes": true,
       "notes": "CI pipeline"
     },
     {
