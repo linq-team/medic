@@ -605,7 +605,7 @@
         "Verify `terraform validate` passes in modules/elasticache"
       ],
       "priority": 28,
-      "passes": false,
+      "passes": true,
       "notes": "Redis outputs will be passed to Helm via helm_release"
     },
     {
