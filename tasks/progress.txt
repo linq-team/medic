@@ -77,7 +77,22 @@
 - formatDate() helper: uses toLocaleString() with month, day, year, hour, minute options
 - Alert icons: Bell for active alerts, CheckCircle for resolved, Clock for timestamps
 - useAlerts hook already exists in src/hooks/use-alerts.ts - no need to create new hooks
+- Alert detail page pattern: fetch all alerts via useAlerts() and filter by alert_id since no single-alert API endpoint exists
+- formatRelativeTime() helper: calculate diff from now and show "X hours ago", "X minutes ago", etc.
 
+---
+
+## 2026-02-04 - US-026 - Linear Issue: SRE-93
+- What was implemented: Added filtering and sorting to Alerts table
+- Files changed:
+  - ui/src/pages/Alerts.tsx (added filter configs, useFilter, useSort hooks, TableFilters, SortableTableHead components)
+- **Learnings for future iterations:**
+  - Reuse existing table-filter.tsx and table-sort.tsx components - same pattern as Services table
+  - ALERT_FILTERS config: Status filter uses 'active' param (1=Active, 0=Resolved), Priority uses 'priority' param (P1/P2/P3)
+  - Default sort for alerts is created_date descending (most recent first)
+  - Pipeline order: filter → sort (no pagination added in this story, but would follow same pattern as Services)
+  - Empty filtered state: show "No matching alerts" with Bell icon and clear filters button
+  - All columns are sortable via SortableTableHead component
 ---
 
 ## 2026-02-04 - US-025 - Linear Issue: SRE-72
@@ -426,3 +441,19 @@
   - Tailwind CSS and brand colors were already configured in US-003, US-004, US-005
 ---
 
+
+## 2026-02-04 - US-027 - Linear Issue: SRE-73
+- What was implemented: Created Alert detail page showing all alert fields with human-readable timestamps
+- Files changed:
+  - ui/src/pages/AlertDetail.tsx (new - Alert detail page component)
+  - ui/src/pages/Alerts.tsx (updated to link alert names to detail page)
+  - ui/src/pages/index.ts (added AlertDetail export)
+  - ui/src/App.tsx (added /alerts/:id route)
+- **Learnings for future iterations:**
+  - Alert detail page uses same DetailRow, Card patterns as ServiceDetail
+  - No single-alert API endpoint - fetch all alerts and filter client-side by alert_id
+  - formatRelativeTime() helper shows relative timestamps (e.g., "2 hours ago") alongside absolute
+  - Active alerts show "Ongoing" for duration instead of calculating live duration
+  - Alert link pattern: use alert_id (number) for URL route, not heartbeat_name
+  - StatusIcon pattern: extract icon from badge config object and render dynamically
+---
