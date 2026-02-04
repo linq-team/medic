@@ -321,7 +321,7 @@
         "Verify `helm template` renders valid deployment"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Worker deployment template"
     },
     {

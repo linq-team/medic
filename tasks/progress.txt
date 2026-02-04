@@ -26,6 +26,38 @@
 - **Helm values: Structure values.yaml with logical groupings (api, worker, ingress, config, secret)**
 - **API Deployment: Use checksum annotations on configmap/secret for automatic pod restart on config changes**
 - **Volume mounts: Add emptyDir for /tmp when using readOnlyRootFilesystem**
+- **Worker deployment: Use exec-based liveness probe (not HTTP) for non-service deployments**
+
+---
+
+## 2026-02-04 - US-015 - Linear Issue: SRE-42
+- **What was implemented**: Worker Deployment Helm template for Kubernetes deployment
+  - Created `helm/medic/templates/worker-deployment.yaml` with full Deployment spec:
+    - Deployment name: `{{ include "medic.fullname" . }}-worker`
+    - Replicas: `{{ .Values.worker.replicaCount }}` (default: 1)
+    - Container command: `['python', '-m', 'Medic.Worker.monitor']`
+    - Resources from `{{ .Values.worker.resources }}`
+    - Liveness probe: exec-based (python health check) with configurable delays
+    - Security context matching API deployment (runAsNonRoot, readOnlyRootFilesystem)
+    - Environment variables shared with API via envFrom
+    - Checksum annotations for config/secret to trigger pod restart on changes
+    - Volume mount for /tmp (emptyDir) to support readOnlyRootFilesystem
+    - Shared affinity, tolerations, and nodeSelector with API
+  - Worker values.yaml defaults already existed in values.yaml (lines 75-102)
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid deployment YAML
+  - Verified with `kubectl apply --dry-run=client` for Kubernetes validation
+
+- **Files changed**:
+  - `helm/medic/templates/worker-deployment.yaml` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Worker uses exec-based liveness probe (not HTTP) since it doesn't expose ports
+  - Worker does not need readinessProbe since it has no service/ingress
+  - Worker does not have ports section since it's not a service
+  - Worker shares same securityContext, envFrom, and volumes as API for consistency
+  - No autoscaling support for worker (single replica is typical for monitor workers)
 
 ---
 
