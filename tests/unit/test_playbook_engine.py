@@ -198,7 +198,7 @@ class TestPlaybookExecution:
 class TestCreateExecution:
     """Tests for create_execution function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_execution_success(self, mock_db):
         """Test creating an execution record successfully."""
         from Medic.Core.playbook_engine import (
@@ -220,7 +220,7 @@ class TestCreateExecution:
         assert execution.service_id == 100
         assert execution.status == ExecutionStatus.RUNNING
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_execution_failure(self, mock_db):
         """Test create_execution returns None on failure."""
         from Medic.Core.playbook_engine import create_execution
@@ -231,7 +231,7 @@ class TestCreateExecution:
 
         assert execution is None
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_execution_with_context(self, mock_db):
         """Test create_execution stores context."""
         from Medic.Core.playbook_engine import create_execution
@@ -251,7 +251,7 @@ class TestCreateExecution:
 class TestGetExecution:
     """Tests for get_execution function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_execution_found(self, mock_db):
         """Test getting an existing execution."""
         from Medic.Core.playbook_engine import ExecutionStatus, get_execution
@@ -276,7 +276,7 @@ class TestGetExecution:
         assert execution.status == ExecutionStatus.RUNNING
         assert execution.current_step == 2
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_execution_not_found(self, mock_db):
         """Test get_execution returns None for missing execution."""
         from Medic.Core.playbook_engine import get_execution
@@ -291,7 +291,7 @@ class TestGetExecution:
 class TestGetActiveExecutions:
     """Tests for get_active_executions function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_active_executions_with_results(self, mock_db):
         """Test getting active executions."""
         from Medic.Core.playbook_engine import get_active_executions
@@ -327,7 +327,7 @@ class TestGetActiveExecutions:
         assert executions[0].execution_id == 1
         assert executions[1].execution_id == 2
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_active_executions_empty(self, mock_db):
         """Test get_active_executions returns empty list when none."""
         from Medic.Core.playbook_engine import get_active_executions
@@ -342,7 +342,7 @@ class TestGetActiveExecutions:
 class TestUpdateExecutionStatus:
     """Tests for update_execution_status function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_execution_status_success(self, mock_db):
         """Test updating execution status successfully."""
         from Medic.Core.playbook_engine import (
@@ -360,7 +360,7 @@ class TestUpdateExecutionStatus:
         assert result is True
         mock_db.insert_db.assert_called_once()
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_execution_status_with_step(self, mock_db):
         """Test updating execution with current_step."""
         from Medic.Core.playbook_engine import (
@@ -385,7 +385,7 @@ class TestUpdateExecutionStatus:
 class TestStepResultOperations:
     """Tests for step result database operations."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_create_step_result_success(self, mock_db):
         """Test creating a step result successfully."""
         from Medic.Core.playbook_engine import (
@@ -407,7 +407,7 @@ class TestStepResultOperations:
         assert result.step_name == "test-step"
         assert result.status == StepResultStatus.PENDING
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_step_result_success(self, mock_db):
         """Test updating a step result."""
         from Medic.Core.playbook_engine import (
@@ -425,7 +425,7 @@ class TestStepResultOperations:
 
         assert result is True
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_update_step_result_truncates_long_output(self, mock_db):
         """Test that long output is truncated."""
         from Medic.Core.playbook_engine import (
@@ -456,7 +456,7 @@ class TestStepResultOperations:
 class TestGetStepResultsForExecution:
     """Tests for get_step_results_for_execution function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_step_results_with_results(self, mock_db):
         """Test getting step results for execution."""
         from Medic.Core.playbook_engine import get_step_results_for_execution
@@ -496,7 +496,7 @@ class TestGetStepResultsForExecution:
 class TestGetPlaybookById:
     """Tests for get_playbook_by_id function."""
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_playbook_by_id_found(self, mock_db):
         """Test getting a playbook by ID."""
         from Medic.Core.playbook_engine import get_playbook_by_id
@@ -523,7 +523,7 @@ steps:
         assert playbook.name == "test-playbook"
         assert len(playbook.steps) == 1
 
-    @patch('Medic.Core.playbook_engine.db')
+    @patch('Medic.Core.playbook.db.db')
     def test_get_playbook_by_id_not_found(self, mock_db):
         """Test get_playbook_by_id returns None when not found."""
         from Medic.Core.playbook_engine import get_playbook_by_id
