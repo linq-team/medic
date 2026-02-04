@@ -24,6 +24,27 @@
 
 ---
 
+## 2026-02-04 - US-009 - Linear Issue: SRE-87
+- What was implemented: Installed React Router v6 and created basic routes with placeholder pages
+- Files changed:
+  - ui/package.json (added react-router-dom dependency)
+  - ui/src/main.tsx (added BrowserRouter wrapper)
+  - ui/src/App.tsx (replaced demo content with Routes configuration and NavLink component)
+  - ui/src/pages/Dashboard.tsx (new - placeholder page)
+  - ui/src/pages/Services.tsx (new - placeholder page)
+  - ui/src/pages/Alerts.tsx (new - placeholder page)
+  - ui/src/pages/Playbooks.tsx (new - placeholder page)
+  - ui/src/pages/AuditLogs.tsx (new - placeholder page)
+  - ui/src/pages/Settings.tsx (new - placeholder page)
+  - ui/src/pages/index.ts (new - barrel export for all pages)
+- **Learnings for future iterations:**
+  - React Router v6 uses Routes/Route components (not Switch from v5)
+  - BrowserRouter should wrap the entire app in main.tsx
+  - Create a pages/ directory with barrel export (index.ts) for clean imports
+  - NavLink helper component with useLocation() for active link highlighting
+  - Path aliases (@/pages) work for page imports same as components
+---
+
 ## 2026-02-04 - US-008 - Linear Issue: SRE-60
 - What was implemented: Created ThemeProvider with dark mode support
 - Files changed:
