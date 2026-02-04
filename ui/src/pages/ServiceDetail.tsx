@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -9,11 +10,13 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Pencil,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ServiceEditModal } from '@/components/service-edit-modal'
 import { useService } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
@@ -162,6 +165,7 @@ function DetailRow({
 export function ServiceDetail() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, error } = useService(id ?? '')
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   // The API returns an array, get the first (and usually only) result
   const service = data?.results?.[0]
@@ -207,14 +211,20 @@ export function ServiceDetail() {
 
   return (
     <div className="p-8">
-      {/* Header with back button */}
+      {/* Header with back button and edit button */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
-        <Link to="/services">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+        <div className="flex items-center gap-2">
+          <Link to="/services">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={() => setIsEditModalOpen(true)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit
           </Button>
-        </Link>
+        </div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-foreground">{service.service_name}</h1>
           <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
@@ -226,6 +236,13 @@ export function ServiceDetail() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <ServiceEditModal
+        service={service}
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+      />
 
       {/* Main content grid */}
       <div className="grid gap-6 md:grid-cols-2">
