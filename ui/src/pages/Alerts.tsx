@@ -4,15 +4,43 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
+import { SortableTableHead, useSort } from '@/components/table-sort'
 import { useAlerts } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { Alert } from '@/lib/api'
+
+/**
+ * Filter configurations for the Alerts table
+ */
+const ALERT_FILTERS: FilterConfig[] = [
+  {
+    param: 'active',
+    label: 'Status',
+    options: [
+      { value: 'all', label: 'All' },
+      { value: '1', label: 'Active' },
+      { value: '0', label: 'Resolved' },
+    ],
+    placeholder: 'All',
+  },
+  {
+    param: 'priority',
+    label: 'Priority',
+    options: [
+      { value: 'all', label: 'All' },
+      { value: 'P1', label: 'P1' },
+      { value: 'P2', label: 'P2' },
+      { value: 'P3', label: 'P3' },
+    ],
+    placeholder: 'All',
+  },
+]
 
 /**
  * Get status badge variant and label for an alert
@@ -114,8 +142,26 @@ function EmptyState() {
  */
 export function Alerts() {
   const { data, isLoading, error } = useAlerts()
+  const { sortColumn, sortDirection, toggleSort, sortItems } = useSort(
+    'sort',
+    'dir',
+    'created_date', // default sort column
+    'desc' // default direction (most recent first)
+  )
+  const {
+    filterState,
+    setFilter,
+    clearFilters,
+    hasActiveFilters,
+    filterItems,
+  } = useFilter(ALERT_FILTERS)
 
-  const alerts = data?.results ?? []
+  const allAlerts = data?.results ?? []
+
+  // Filter first, then sort
+  const filteredAlerts = filterItems(allAlerts)
+  const alerts = sortItems(filteredAlerts)
+  const totalItems = alerts.length
 
   return (
     <div className="p-8">
@@ -136,22 +182,98 @@ export function Alerts() {
         </div>
       )}
 
+      {/* Filter controls */}
+      {!isLoading && allAlerts.length > 0 && (
+        <TableFilters
+          filters={ALERT_FILTERS}
+          filterState={filterState}
+          onFilterChange={setFilter}
+          onClearFilters={clearFilters}
+          hasActiveFilters={hasActiveFilters}
+        />
+      )}
+
       {isLoading ? (
         <TableSkeleton />
-      ) : alerts.length === 0 ? (
+      ) : allAlerts.length === 0 ? (
         <EmptyState />
+      ) : totalItems === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Bell className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium text-foreground mb-2">No matching alerts</h3>
+          <p className="text-muted-foreground max-w-sm mb-4">
+            No alerts match your current filters. Try adjusting or clearing them.
+          </p>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-linq-blue hover:underline text-sm"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Alert Name</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Created Date</TableHead>
-                <TableHead>Closed Date</TableHead>
-                <TableHead>Duration</TableHead>
+                <SortableTableHead
+                  columnKey="heartbeat_name"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Alert Name
+                </SortableTableHead>
+                <SortableTableHead
+                  columnKey="service_name"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Service
+                </SortableTableHead>
+                <SortableTableHead
+                  columnKey="active"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Status
+                </SortableTableHead>
+                <SortableTableHead
+                  columnKey="priority"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Priority
+                </SortableTableHead>
+                <SortableTableHead
+                  columnKey="created_date"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Created Date
+                </SortableTableHead>
+                <SortableTableHead
+                  columnKey="closed_date"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Closed Date
+                </SortableTableHead>
+                <SortableTableHead
+                  columnKey="duration"
+                  sortColumn={sortColumn}
+                  sortDirection={sortDirection}
+                  onSort={toggleSort}
+                >
+                  Duration
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
