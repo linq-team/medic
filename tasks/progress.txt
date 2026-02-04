@@ -150,6 +150,7 @@
 - Date input filter: use Input type="date" with pl-8 padding for Calendar icon
 - Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
 - **Service snapshots table**: Migration 017 creates medic.service_snapshots for backup/restore functionality
+- **Toast notifications**: Use sonner library via `import { toast } from "sonner"`, call `toast.success()`, `toast.error()`, `toast.warning()` for variants. Toaster component configured in main.tsx with 5s auto-dismiss.
 
 ---
 
@@ -1927,4 +1928,32 @@
   - Radix UI primitives provide built-in accessibility (focus trap, escape to close, ARIA)
   - Dialog supports controlled mode via `open` and `onOpenChange` props on Root component
   - DialogContent automatically includes close button with X icon
+---
+
+## 2026-02-04 - US-004 - Linear Issue: SRE-108
+- **What was implemented**: Toast notification system using sonner library
+  - Installed sonner via `npx shadcn@latest add sonner` (shadcn deprecated native toast in favor of sonner)
+  - Component located at `ui/src/components/ui/sonner.tsx`
+  - Integrated Toaster in main.tsx inside ThemeProvider for theme-aware toasts
+  - Features:
+    - Success variant: `toast.success("Message")`
+    - Error variant: `toast.error("Message")`
+    - Warning variant: `toast.warning("Message")`
+    - Default variant: `toast("Message")`
+    - Auto-dismiss after 5 seconds (configurable via duration prop)
+    - Theme-aware (adapts to light/dark mode)
+    - Custom classNames for status colors using existing status-* color classes
+
+- **Files changed**:
+  - `ui/src/components/ui/sonner.tsx` (new) - Toaster wrapper component
+  - `ui/src/main.tsx` (modified) - Added Toaster import and component
+  - `ui/package.json` (modified) - Added sonner dependency
+  - `tasks/prd.json` (marked US-004 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn deprecated toast component in favor of sonner - use `npx shadcn@latest add sonner`
+  - Sonner toasts are called via `import { toast } from "sonner"` not from the component file
+  - The Toaster component must be inside ThemeProvider to access theme context via useTheme()
+  - shadcn CLI still creates files in literal `@/` directory - must move to `src/components/ui/`
+  - Sonner supports rich toast options: duration, dismissible, action buttons, descriptions
 ---
