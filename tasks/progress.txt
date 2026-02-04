@@ -17,6 +17,35 @@
 - **Executor patches: When testing executor functions directly, patch at `Medic.Core.playbook.executors.<executor_name>.<function>` (e.g., `Medic.Core.playbook.executors.webhook.create_step_result`)**
 - **Redis rate limiter: Use `REDIS_URL` env var for connection, `REDIS_POOL_SIZE` for pool (default 10), use `is_healthy()` to check connectivity**
 - **Redis testing: Use `fakeredis` package for testing Redis-dependent code**
+- **Rate limiter factory: Use `MEDIC_RATE_LIMITER_TYPE` env var (redis/memory/auto) for selection, `get_rate_limiter()` returns cached singleton**
+
+---
+
+## 2026-02-04 - US-010 - Linear Issue: SRE-37
+- **What was implemented**: Rate limiter factory with automatic Redis/InMemory selection
+  - Enhanced `get_rate_limiter()` to auto-select between Redis and InMemory based on config
+  - Added `_create_rate_limiter()` internal factory with selection logic
+  - Added `MEDIC_RATE_LIMITER_TYPE` env var support: 'redis', 'memory', 'auto' (default: 'auto')
+  - Auto mode: Tries Redis if `REDIS_URL` set, falls back to InMemory on failure
+  - Redis mode: Forces Redis (raises ValueError if `REDIS_URL` not set)
+  - Memory mode: Forces InMemory (ignores Redis even if configured)
+  - Logs INFO when selecting limiter, WARNING on Redis fallback
+  - Type is case-insensitive (MEMORY, Memory, memory all work)
+  - Unknown types fall back to InMemory with WARNING log
+  - Limiter instance cached as module-level singleton
+  - Middleware already uses `check_rate_limit()` which calls factory - no changes needed
+
+- **Files changed**:
+  - `Medic/Core/rate_limiter.py` (enhanced get_rate_limiter, added _create_rate_limiter)
+  - `tests/unit/test_rate_limiter.py` (added 14 TestRateLimiterFactory tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `_create_rate_limiter()` for the actual creation logic, `get_rate_limiter()` for singleton
+  - Test Redis fallback by mocking `_create_redis_client()` and `ping()` methods
+  - Mock at `Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client` for client creation
+  - Use `set_rate_limiter(None)` in test setup/teardown to reset singleton state
+  - Type constants (RATE_LIMITER_TYPE_*) make code more maintainable than string literals
 
 ---
 
