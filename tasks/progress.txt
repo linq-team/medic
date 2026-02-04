@@ -59,6 +59,16 @@
 - **GitHub Actions: Use `actions/cache@v4` for pip caching, `docker/build-push-action@v6` with `cache-from: type=gha` for Docker layers**
 - **GitHub Actions ruff: Use `--output-format=github` for inline PR annotations**
 - **GitHub Actions Helm: Use `azure/setup-helm@v4` for Helm installation**
+- **GitHub Actions Terraform: Use `hashicorp/setup-terraform@v3` with `terraform_wrapper: false` for cleaner output**
+- **Terraform modules: Validate with `terraform init -backend=false && terraform validate`**
+- **Terraform RDS: Use `source_security_group_id` for EKS access, mark connection strings as `sensitive = true`**
+- **Terraform ElastiCache: Use `num_cache_nodes = 1` for single-node, access endpoint via `cache_nodes[0].address`**
+- **Terraform IRSA: Use `sts:AssumeRoleWithWebIdentity` with OIDC Federated principal and service account conditions**
+- **Terraform helm_release: Use `yamlencode()` for complex values, `set_sensitive {}` for credentials**
+- **Terraform EKS auth: Use `data.aws_eks_cluster_auth` for token, `data.aws_eks_cluster` for endpoint/CA**
+- **Helm hooks: Use `helm.sh/hook: pre-install,pre-upgrade` for migrations, negative weight runs first**
+- **Helm Job cleanup: Use `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded`**
+- **Migration script: Track applied migrations in `schema_migrations` table, support `DATABASE_URL` env var**
 
 ---
 
@@ -973,5 +983,294 @@
   - The `provenance: true` and `sbom: true` options enable supply chain attestations
   - Condition `github.ref == 'refs/heads/main' && github.event_name == 'push'` prevents runs on PRs
   - Use `needs: [job1, job2]` to wait for multiple jobs before running
+
+---
+## 2026-02-04 - US-026 - Linear Issue: SRE-53
+- **What was implemented**: GitHub Actions workflow for Terraform plan/apply
+  - Created `.github/workflows/terraform.yml` with comprehensive IaC pipeline:
+    - **Triggers**: push to main (paths: terraform/**), pull_request (paths: terraform/**), workflow_dispatch
+    - **Workflow dispatch inputs**: environment (dev/prod), action (plan/apply)
+    - **terraform-plan job**:
+      - Configures AWS credentials via OIDC using `aws-actions/configure-aws-credentials@v4`
+      - Runs `terraform init` with S3 backend configuration
+      - Runs `terraform fmt -check` for format validation
+      - Runs `terraform validate` for configuration validation
+      - Runs `terraform plan` with detailed exit code
+      - Uploads plan artifact for review (7-day retention)
+      - Comments plan output on PRs using `actions/github-script@v7`
+      - Outputs plan exit code and environment for apply job
+    - **terraform-apply job**:
+      - Runs only on push to main OR workflow_dispatch with action=apply
+      - Uses GitHub Environments for approval workflows (prod requires manual approval)
+      - Downloads plan artifact from plan job
+      - Runs `terraform apply` with saved plan
+      - Outputs Terraform outputs to GitHub Step Summary
+  - **GitHub Environments configuration**:
+    - `dev`: Development environment (auto-approval)
+    - `prod`: Production environment (requires manual approval in GitHub settings)
+  - **Required repository variables documented**:
+    - `AWS_ROLE_ARN`: IAM role ARN for OIDC authentication
+    - `AWS_REGION`: AWS region (e.g., us-east-1)
+    - `TF_STATE_BUCKET`: S3 bucket for Terraform state
+    - `TF_STATE_KEY`: Key prefix for state file
+    - `TF_STATE_DYNAMODB_TABLE`: DynamoDB table for state locking
+  - Verified YAML syntax is valid
+
+- **Files changed**:
+  - `.github/workflows/terraform.yml` (new, comprehensive Terraform CI/CD workflow)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `hashicorp/setup-terraform@v3` for Terraform setup, set `terraform_wrapper: false` for cleaner output
+  - Use `-detailed-exitcode` with `terraform plan` to detect changes (exit 0=no changes, 1=error, 2=changes)
+  - Plan artifacts can be uploaded and downloaded across jobs using `actions/upload-artifact@v4`
+  - GitHub Environments provide approval workflows - configure protection rules in repo settings
+  - Use `${{ needs.job-name.outputs.variable }}` to pass data between jobs
+  - PR comments via `actions/github-script` require `pull-requests: write` permission
+  - Truncate plan output to avoid GitHub comment size limits (used `head -c 60000`)
+  - Backend config can be passed via `-backend-config` flags for different environments
+
+---
+## 2026-02-04 - US-027 - Linear Issue: SRE-54
+- **What was implemented**: Terraform module for RDS PostgreSQL
+  - Created `terraform/modules/rds/` directory structure
+  - Created `terraform/modules/rds/main.tf` with:
+    - `aws_security_group.rds`: Security group for RDS
+      - Inbound rule allowing PostgreSQL (5432) from EKS node security group only
+      - Outbound rule allowing all traffic
+    - `aws_security_group_rule.rds_ingress_eks`: Security group rule for EKS access
+    - `aws_db_subnet_group.this`: DB subnet group for private deployment
+    - `aws_db_instance.this`: RDS PostgreSQL instance with:
+      - PostgreSQL 15 engine
+      - Storage 20GB gp3 with autoscaling to 100GB
+      - Storage encryption enabled
+      - Automated backups (7 days retention)
+      - Optional Multi-AZ deployment
+      - Performance Insights support
+      - CloudWatch logs exports (postgresql, upgrade)
+      - Deletion protection (enabled by default)
+  - Created `terraform/modules/rds/variables.tf` with:
+    - Required: identifier, vpc_id, subnet_ids, eks_security_group_id, master_username, master_password
+    - Optional: instance_class (default: db.t3.micro), engine_version (default: 15), database_name (default: medic)
+    - Storage: allocated_storage (default: 20), max_allocated_storage (default: 100), kms_key_id
+    - Backup: backup_retention_period (default: 7), backup_window, maintenance_window
+    - Monitoring: performance_insights_enabled, monitoring_interval, enabled_cloudwatch_logs_exports
+    - Lifecycle: auto_minor_version_upgrade, apply_immediately, deletion_protection
+  - Created `terraform/modules/rds/outputs.tf` with:
+    - endpoint: Full connection endpoint (host:port)
+    - address: Hostname only
+    - port: Port number
+    - database_name: Database name
+    - username: Master username (sensitive)
+    - connection_string: PostgreSQL connection URL (without password, sensitive)
+    - connection_string_with_password: Connection URL with PASSWORD placeholder (sensitive)
+    - arn, id, security_group_id, subnet_group_name
+  - Created `terraform/.gitignore` for Terraform state and secrets
+  - Verified `terraform validate` passes
+
+- **Files changed**:
+  - `terraform/modules/rds/main.tf` (new)
+  - `terraform/modules/rds/variables.tf` (new)
+  - `terraform/modules/rds/outputs.tf` (new)
+  - `terraform/.gitignore` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `source_security_group_id` in security group rules for EKS access (not CIDR blocks)
+  - Mark sensitive outputs with `sensitive = true` for connection strings and credentials
+  - Use `gp3` storage type for better performance (default now, replaces gp2)
+  - Use `ignore_changes = [password]` in lifecycle block to prevent drift on password changes
+  - Set `deletion_protection = true` by default for production safety
+  - Use `-backend=false` for `terraform init` when validating modules without state
+  - Export both endpoint (host:port) and address (host only) for flexibility
+
+---
+## 2026-02-04 - US-028 - Linear Issue: SRE-55
+- **What was implemented**: Terraform module for ElastiCache Redis
+  - Created `terraform/modules/elasticache/` directory structure
+  - Created `terraform/modules/elasticache/main.tf` with:
+    - `aws_security_group.redis`: Security group for ElastiCache
+      - Inbound rule allowing Redis (6379) from EKS node security group only
+      - Outbound rule allowing all traffic
+    - `aws_elasticache_subnet_group.this`: Subnet group for private deployment
+    - `aws_elasticache_cluster.this`: Redis cluster with:
+      - Redis 7.1 engine
+      - Single node configuration (no cluster mode)
+      - No snapshots (ephemeral rate limit data)
+      - Auto minor version upgrade enabled
+  - Created `terraform/modules/elasticache/variables.tf` with:
+    - Required: cluster_id, vpc_id, subnet_ids, eks_security_group_id
+    - Optional: node_type (default: cache.t3.micro), engine_version (default: 7.1)
+    - Snapshot: snapshot_retention_limit (default: 0 - disabled), snapshot_window
+    - Maintenance: maintenance_window, auto_minor_version_upgrade, apply_immediately
+    - Notifications: notification_topic_arn
+  - Created `terraform/modules/elasticache/outputs.tf` with:
+    - endpoint: Full connection endpoint (host:port)
+    - address: Hostname only
+    - port: Port number
+    - connection_string: Redis URL format (redis://host:port)
+    - cluster_id, arn, security_group_id, subnet_group_name
+  - Verified `terraform validate` passes
+
+- **Files changed**:
+  - `terraform/modules/elasticache/main.tf` (new)
+  - `terraform/modules/elasticache/variables.tf` (new)
+  - `terraform/modules/elasticache/outputs.tf` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - ElastiCache single-node uses `aws_elasticache_cluster` with `num_cache_nodes = 1`
+  - Cache node details accessed via `cache_nodes[0].address` and `cache_nodes[0].port`
+  - Set `snapshot_retention_limit = 0` to disable snapshots for ephemeral data
+  - Default parameter group for Redis 7.x is `default.redis7`
+  - ElastiCache doesn't need deletion protection (data is ephemeral)
+
+---
+## 2026-02-04 - US-029 - Linear Issue: SRE-56
+- **What was implemented**: Terraform module for Secrets Manager and IAM (IRSA)
+  - Created `terraform/modules/secrets/` directory structure
+  - Created `terraform/modules/secrets/main.tf` with:
+    - `aws_secretsmanager_secret.this`: Secret at path `medic/${environment}/secrets`
+    - `aws_secretsmanager_secret_version.this`: Optional initial version with placeholders
+    - `aws_iam_role.this`: IAM role with OIDC trust policy for EKS service account
+      - Trust policy requires matching namespace and service account name
+      - Uses `sts:AssumeRoleWithWebIdentity` action
+    - `aws_iam_policy.secrets_access`: Policy for Secrets Manager access
+      - Allows `secretsmanager:GetSecretValue` and `secretsmanager:DescribeSecret`
+      - Scoped to the specific secret ARN
+    - `aws_iam_role_policy_attachment.secrets_access`: Attaches policy to role
+    - `aws_iam_policy.kms_decrypt`: Optional KMS decrypt policy (when custom KMS key used)
+  - Created `terraform/modules/secrets/variables.tf` with:
+    - Required: environment, eks_oidc_provider_arn, eks_namespace
+    - Optional: service_account_name (default: medic), recovery_window_in_days (default: 7)
+    - Optional: kms_key_id, create_initial_version (default: false)
+  - Created `terraform/modules/secrets/outputs.tf` with:
+    - secret_arn, secret_id, secret_name
+    - iam_role_arn (for ServiceAccount annotation)
+    - iam_role_name, iam_role_unique_id
+    - secrets_policy_arn, kms_policy_arn
+    - service_account_annotation (map for easy Helm integration)
+  - Verified `terraform validate` passes
+
+- **Files changed**:
+  - `terraform/modules/secrets/main.tf` (new)
+  - `terraform/modules/secrets/variables.tf` (new)
+  - `terraform/modules/secrets/outputs.tf` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - IRSA trust policy uses `sts:AssumeRoleWithWebIdentity` with OIDC Federated principal
+  - OIDC provider URL extracted from ARN using `replace()` with regex
+  - Condition keys: `oidc-provider:sub` = service account, `oidc-provider:aud` = "sts.amazonaws.com"
+  - Secret version uses `ignore_changes = [secret_string]` to prevent drift
+  - Output `service_account_annotation` as map for easy consumption in Helm values
+  - Use `recovery_window_in_days = 0` for immediate deletion (not recommended for prod)
+
+---
+## 2026-02-04 - US-030 - Linear Issue: SRE-57
+- **What was implemented**: Terraform root module with helm_release for Medic
+  - Created `terraform/environments/dev/` with complete environment:
+    - `main.tf`: Root module calling RDS, ElastiCache, Secrets modules + helm_release
+      - AWS provider with default tags
+      - Helm and Kubernetes providers using EKS cluster auth
+      - Data sources for existing VPC, subnets, EKS cluster, OIDC provider
+      - Module calls for rds, elasticache, secrets
+      - kubernetes_namespace resource
+      - helm_release resource with:
+        - Values from variables (image, replicas, resources, ingress)
+        - set_sensitive for DATABASE_URL with password
+        - yamlencode for complex values
+        - depends_on for proper ordering
+    - `variables.tf`: All input variables (70+ variables)
+    - `outputs.tf`: RDS, ElastiCache, Secrets, Helm outputs
+    - `backend.tf`: S3 backend configuration (values via -backend-config)
+    - `terraform.tfvars.example`: Example variable values
+  - Created `terraform/environments/prod/` as production placeholder:
+    - Same structure as dev
+    - Production-specific defaults (Multi-AZ=true, deletion protection, autoscaling)
+  - Created `terraform/README.md` with:
+    - Architecture overview
+    - Directory structure explanation
+    - Prerequisites and state backend setup
+    - Usage instructions (local and CI/CD)
+    - Module documentation
+    - Environment differences table
+    - Secrets management guide
+    - Troubleshooting section
+  - Verified `terraform init && terraform validate` passes for both environments
+
+- **Files changed**:
+  - `terraform/environments/dev/main.tf` (new)
+  - `terraform/environments/dev/variables.tf` (new)
+  - `terraform/environments/dev/outputs.tf` (new)
+  - `terraform/environments/dev/backend.tf` (new)
+  - `terraform/environments/dev/terraform.tfvars.example` (new)
+  - `terraform/environments/prod/main.tf` (new)
+  - `terraform/environments/prod/variables.tf` (new)
+  - `terraform/environments/prod/outputs.tf` (new)
+  - `terraform/environments/prod/backend.tf` (new)
+  - `terraform/README.md` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `yamlencode()` for complex Helm values to avoid YAML formatting issues
+  - Use `set_sensitive {}` block for sensitive values that shouldn't appear in plans
+  - Helm provider needs kubernetes config: host, cluster_ca_certificate, token
+  - Get EKS auth token with `data.aws_eks_cluster_auth` data source
+  - Use `depends_on` to ensure modules complete before helm_release
+  - Private subnets can be found with `data.aws_subnets` filtering by `Tier = private` tag
+  - Use `data.aws_iam_openid_connect_provider` to get OIDC provider ARN for IRSA
+  - Backend config values passed via `-backend-config` flags in CI/CD
+  - Use `terraform init -backend=false` to validate without state backend
+
+---
+## 2026-02-04 - US-031 - Linear Issue: SRE-58
+- **What was implemented**: Database migration Helm hook job
+  - Created `helm/medic/templates/migration-job.yaml` as Kubernetes Job:
+    - Helm hooks: `pre-install,pre-upgrade` (runs before application)
+    - Hook weight: `-5` (runs before other hooks)
+    - Hook delete policy: `before-hook-creation,hook-succeeded` (cleanup)
+    - Uses same image as application
+    - Container command: `['python', '-m', 'scripts.run_migrations']`
+    - Shares envFrom with API deployment (ConfigMap and Secret)
+    - Security context matching application pods
+    - backoffLimit: 3 (configurable)
+    - activeDeadlineSeconds: 300 (configurable)
+    - ttlSecondsAfterFinished: 86400 (automatic cleanup)
+    - Sidecar injection disabled (Istio, Linkerd)
+    - Conditional creation via `.Values.migrations.enabled`
+  - Created `scripts/__init__.py` and `scripts/run_migrations.py`:
+    - Reads SQL migrations from `migrations/` directory
+    - Tracks applied migrations in `schema_migrations` table
+    - Supports `DATABASE_URL` or individual PG_* env vars
+    - Migrations applied in order by numeric prefix (NNN_*.sql)
+    - Supports `--dry-run` for testing
+    - Supports `--verbose` for debug output
+    - Proper error handling with rollback on failure
+  - Updated `helm/medic/values.yaml` with expanded migrations section:
+    - Added backoffLimit (default: 3)
+    - Added activeDeadlineSeconds (default: 300)
+    - Added ttlSecondsAfterFinished (default: 86400)
+    - Added args for additional script arguments
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid Job
+  - Verified `kubectl apply --dry-run=client` succeeds
+
+- **Files changed**:
+  - `helm/medic/templates/migration-job.yaml` (new)
+  - `scripts/__init__.py` (new)
+  - `scripts/run_migrations.py` (new)
+  - `helm/medic/values.yaml` (expanded migrations section)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Helm hooks run outside normal release lifecycle - use `helm.sh/hook-delete-policy` for cleanup
+  - Use negative hook weights to run migrations before other pre-install hooks
+  - Disable sidecar injection for Job pods to prevent hanging sidecars
+  - restartPolicy: Never required for Jobs (not Always)
+  - Use `envFrom` to share config/secrets between Job and Deployment
+  - Migration runner should create its own tracking table (`schema_migrations`)
+  - Support both `DATABASE_URL` and individual env vars for flexibility
+  - Use `ttlSecondsAfterFinished` for automatic Job cleanup (requires TTLAfterFinished controller)
 
 ---
