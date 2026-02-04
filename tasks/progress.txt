@@ -152,6 +152,34 @@
 - **Service snapshots table**: Migration 017 creates medic.service_snapshots for backup/restore functionality
 - **Toast notifications**: Use sonner library via `import { toast } from "sonner"`, call `toast.success()`, `toast.error()`, `toast.warning()` for variants. Toaster component configured in main.tsx with 5s auto-dismiss.
 - **Service mutation hooks**: Use `useUpdateService`, `useCreateService`, `useBulkUpdateServices` from `@/hooks/use-service-mutations` for service CRUD operations with optimistic updates
+- **ServiceCreateModal pattern**: Modal for creating new services with heartbeat_name validation (alphanumeric + hyphens + underscores only), sensible defaults (priority=p3, alert_interval=5, threshold=1), and duplicate detection via error message parsing
+
+---
+
+## 2026-02-04 - US-009 - Linear Issue: SRE-70
+- **What was implemented**: ServiceCreateModal component for creating new services through the UI
+  - Created `ui/src/components/service-create-modal.tsx` with:
+    - Form fields: heartbeat_name, service_name, team, priority, alert_interval, threshold, runbook
+    - Sensible defaults: priority=P3, alert_interval=5, threshold=1
+    - Client-side validation including heartbeat_name format validation (alphanumeric + hyphens + underscores)
+    - Error handling for duplicate heartbeat_name detection
+    - Toast notifications for success/failure
+  - Added "Add Service" button to Services page header
+  - Modal closes on successful creation and invalidates services query cache
+  - Comprehensive test suite with 24 test cases
+
+- **Files changed**:
+  - `ui/src/components/service-create-modal.tsx` (new - modal component)
+  - `ui/src/components/service-create-modal.test.tsx` (new - tests)
+  - `ui/src/pages/Services.tsx` (added Add Service button and modal)
+  - `tasks/prd.json` (marked US-009 as passes: true)
+
+- **Learnings for future iterations**:
+  - Heartbeat names must follow identifier format (letters, numbers, hyphens, underscores) for API compatibility
+  - Use key prop on form component to reset state when modal opens (avoids useEffect for state reset)
+  - Detect duplicate name errors by checking error message content (e.g., "already exists" or "duplicate")
+  - For create modals, check hasRequiredFields instead of hasChanges for submit button enabling
+  - Optional fields should be converted to undefined when empty (not empty string) for API payload
 
 ---
 
