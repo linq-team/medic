@@ -296,7 +296,7 @@ export function Services() {
                     <TableRow key={service.service_id}>
                       <TableCell className="font-medium">
                         <Link
-                          to={`/services/${service.service_id}`}
+                          to={`/services/${encodeURIComponent(service.heartbeat_name)}`}
                           className="hover:underline hover:text-linq-blue"
                         >
                           {service.service_name}

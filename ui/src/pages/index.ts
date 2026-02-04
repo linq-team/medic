@@ -1,5 +1,6 @@
 export { Dashboard } from './Dashboard'
 export { Services } from './Services'
+export { ServiceDetail } from './ServiceDetail'
 export { Alerts } from './Alerts'
 export { Playbooks } from './Playbooks'
 export { AuditLogs } from './AuditLogs'

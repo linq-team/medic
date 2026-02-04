@@ -4,6 +4,7 @@ import { ProtectedRoute } from '@/components/protected-route'
 import {
   Dashboard,
   Services,
+  ServiceDetail,
   Alerts,
   Playbooks,
   AuditLogs,
@@ -27,6 +28,7 @@ function App() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/services" element={<Services />} />
+        <Route path="/services/:id" element={<ServiceDetail />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/playbooks" element={<Playbooks />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
