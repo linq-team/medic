@@ -20,6 +20,24 @@
 - cn() utility in src/lib/utils.ts for conditional class merging
 - Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
 
+- Provider components (e.g., ThemeProvider) export both component and hook - add ESLint override in eslint.config.js
+
+---
+
+## 2026-02-04 - US-008 - Linear Issue: SRE-60
+- What was implemented: Created ThemeProvider with dark mode support
+- Files changed:
+  - ui/src/components/theme-provider.tsx (new - ThemeProvider context and useTheme hook)
+  - ui/src/components/theme-toggle.tsx (new - ThemeToggle button with sun/moon icons)
+  - ui/src/main.tsx (wrapped App in ThemeProvider)
+  - ui/src/App.tsx (added ThemeToggle button in top-right corner)
+  - ui/eslint.config.js (added rule override for *-provider.tsx files)
+- **Learnings for future iterations:**
+  - ThemeProvider uses React context with useState for theme state (light/dark/system)
+  - Theme is applied by adding/removing 'dark' class on document.documentElement
+  - localStorage persistence with configurable storage key (medic-ui-theme)
+  - ThemeToggle cycles through light -> dark -> system on click
+  - ESLint react-refresh rule needs override for files that export both components and hooks
 ---
 
 ## 2026-02-04 - US-007 - Linear Issue: SRE-86
