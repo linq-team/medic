@@ -21,6 +21,98 @@
 - **Dockerfile: Multi-stage build (builder -> runtime), python:3.11-slim-bookworm base, port 8080, gunicorn WSGI server**
 - **Docker user: Non-root user `medic` with uid 1000 for Kubernetes compatibility**
 - **Docker Compose: Use `condition: service_healthy` for depends_on with healthchecks**
+- **Helm chart: Use `helm lint` and `helm template` to validate charts before committing**
+- **Helm helpers: Define reusable helpers in `_helpers.tpl` (medic.fullname, medic.labels, etc.)**
+- **Helm values: Structure values.yaml with logical groupings (api, worker, ingress, config, secret)**
+- **API Deployment: Use checksum annotations on configmap/secret for automatic pod restart on config changes**
+- **Volume mounts: Add emptyDir for /tmp when using readOnlyRootFilesystem**
+
+---
+
+## 2026-02-04 - US-014 - Linear Issue: SRE-41
+- **What was implemented**: API Deployment Helm template for Kubernetes deployment
+  - Created `helm/medic/templates/api-deployment.yaml` with full Deployment spec:
+    - Deployment name: `{{ include "medic.fullname" . }}-api`
+    - Replicas from values with KEDA autoscaling support (omits replicas when autoscaling enabled)
+    - Image from `{{ .Values.image.repository }}:{{ .Values.image.tag }}`
+    - Resources from `{{ .Values.api.resources }}`
+    - Configurable liveness probe: /health/live with initialDelaySeconds, periodSeconds, timeoutSeconds, failureThreshold
+    - Configurable readiness probe: /health/ready with same configurable delays
+    - Pod security context: runAsNonRoot, runAsUser 1000, fsGroup 1000
+    - Container security context: allowPrivilegeEscalation false, readOnlyRootFilesystem true, drop ALL capabilities
+    - Pod anti-affinity for spreading across nodes (preferredDuringSchedulingIgnoredDuringExecution)
+    - Topology spread constraints for Karpenter multi-AZ distribution (topology.kubernetes.io/zone)
+    - Environment variables via envFrom from ConfigMap and optional Secret
+    - Checksum annotations for config/secret to trigger pod restart on changes
+    - Volume mount for /tmp (emptyDir) to support readOnlyRootFilesystem
+  - Created `helm/medic/templates/configmap.yaml` for non-sensitive configuration
+  - Created `helm/medic/templates/secret.yaml` for sensitive values (conditional)
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid deployment YAML
+
+- **Files changed**:
+  - `helm/medic/templates/api-deployment.yaml` (new)
+  - `helm/medic/templates/configmap.yaml` (new)
+  - `helm/medic/templates/secret.yaml` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use checksum annotations (`checksum/config`, `checksum/secret`) to trigger pod restarts on ConfigMap/Secret changes
+  - When using readOnlyRootFilesystem, mount emptyDir at /tmp for apps that need temp file access
+  - Omit `replicas` field when KEDA autoscaling is enabled to avoid conflicts
+  - Use `include` instead of `template` for helpers that return values (include allows piping)
+  - Pod template labels must match selector labels exactly for Deployment to work
+  - topologySpreadConstraints with `whenUnsatisfiable: ScheduleAnyway` provides soft multi-AZ distribution
+
+---
+
+## 2026-02-04 - US-013 - Linear Issue: SRE-40
+- **What was implemented**: Helm chart structure for Medic deployment to Kubernetes
+  - Created `helm/medic/Chart.yaml` with chart metadata (name, version, appVersion)
+  - Created `helm/medic/values.yaml` with comprehensive default values:
+    - Image configuration (repository, tag, pullPolicy)
+    - API deployment (replicaCount, resources, probes, KEDA autoscaling)
+    - Worker deployment (replicaCount, resources, probes, PDB)
+    - Service configuration (ClusterIP, port 8080)
+    - Ingress configuration (ALB support, TLS, host)
+    - ConfigMap for non-sensitive config (PORT, LOG_LEVEL, rate limiting)
+    - Secret management (direct secrets or ExternalSecret/ESO)
+    - ServiceAccount with IRSA annotations support
+    - Security contexts (runAsNonRoot, readOnlyRootFilesystem)
+    - Affinity and topology spread for multi-AZ distribution
+    - ServiceMonitor for Prometheus/Alloy metrics
+    - Grafana dashboard support
+    - Database migrations hook support
+  - Created `helm/medic/templates/_helpers.tpl` with reusable template helpers:
+    - medic.name, medic.fullname, medic.chart
+    - medic.labels, medic.selectorLabels
+    - medic.api.selectorLabels, medic.worker.selectorLabels
+    - medic.serviceAccountName, medic.namespace
+    - medic.configmapName, medic.secretName
+    - medic.image, medic.envFrom
+    - medic.podSecurityContext, medic.securityContext
+  - Created `helm/medic/templates/namespace.yaml` (conditional, controlled by value)
+  - Created `helm/medic/templates/NOTES.txt` with post-install instructions
+  - Verified `helm lint` passes (only INFO about optional icon)
+  - Verified `helm template` renders valid YAML
+
+- **Files changed**:
+  - `helm/medic/Chart.yaml` (new)
+  - `helm/medic/values.yaml` (new)
+  - `helm/medic/templates/_helpers.tpl` (new)
+  - `helm/medic/templates/namespace.yaml` (new)
+  - `helm/medic/templates/NOTES.txt` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `helm lint` before committing to catch YAML syntax errors
+  - Use `helm template` to verify rendered output without deploying
+  - Organize values.yaml with clear sections and comments for maintainability
+  - Template helpers (`_helpers.tpl`) reduce duplication across templates
+  - Use conditional rendering ({{- if .Values.x }}) for optional resources
+  - IRSA annotations go on ServiceAccount for AWS IAM integration
+  - topologySpreadConstraints enable Karpenter-aware scheduling
+  - External Secrets Operator (ESO) integration via externalSecret values
 
 ---
 

@@ -300,7 +300,7 @@
         "Verify `helm template` renders valid deployment"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Core API deployment template with Karpenter-aware scheduling"
     },
     {
