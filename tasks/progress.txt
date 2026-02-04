@@ -2020,3 +2020,32 @@
   - Dialog tests need to wait for dialog to appear with `waitFor`
 
 ---
+
+## 2026-02-04 - US-007 - Linear Issue: SRE-111
+- **What was implemented**: Inline priority selector for Services table
+  - Created `ui/src/components/priority-selector.tsx` with:
+    - Compact dropdown selector using shadcn Select component
+    - Color-coded priority options: P1 (red/error), P2 (yellow/warning), P3 (gray/muted)
+    - Integration with `useUpdateService` hook for immediate updates
+    - Toast notifications on success/failure
+    - Case-insensitive priority handling (normalizes to uppercase display, lowercase API)
+  - Updated `ui/src/pages/Services.tsx` to:
+    - Replace Badge component with PrioritySelector in the table
+    - Removed unused `getPriorityBadge` function and Badge import
+  - Added comprehensive test suite with 10 test cases
+
+- **Files changed**:
+  - `ui/src/components/priority-selector.tsx` (new - inline priority selector component)
+  - `ui/src/components/priority-selector.test.tsx` (new - tests)
+  - `ui/src/pages/Services.tsx` (use PrioritySelector instead of Badge)
+  - `tasks/prd.json` (marked US-007 as passes: true)
+
+- **Learnings for future iterations**:
+  - Radix UI Select uses portals which have known testing limitations in jsdom
+  - Focus tests on initial render state and styling for portal-based components
+  - Complex dropdown interaction tests should be deferred to E2E tests
+  - Use `fireEvent` sparingly with Radix components - prefer render-state assertions
+  - Compact styling for inline selectors: `h-7 w-16 border-none bg-transparent shadow-none`
+  - Status color classes available: `text-status-error`, `text-status-warning`, `text-muted-foreground`
+
+---
