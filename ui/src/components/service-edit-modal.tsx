@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { useUpdateService } from '@/hooks/use-service-mutations'
 import type { Service } from '@/lib/api'
+import { PRIORITY_OPTIONS } from '@/lib/constants'
 
 // ============================================================================
 // Types
@@ -57,17 +58,6 @@ interface FormData {
   threshold: string
   runbook: string
 }
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/** Priority options with labels */
-const PRIORITY_OPTIONS = [
-  { value: 'p1', label: 'P1 - Critical' },
-  { value: 'p2', label: 'P2 - High' },
-  { value: 'p3', label: 'P3 - Normal' },
-] as const
 
 // ============================================================================
 // Validation
@@ -299,7 +289,7 @@ function ServiceEditForm({ service, onOpenChange }: ServiceEditFormProps) {
           <SelectContent>
             {PRIORITY_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
-                {option.label}
+                {option.labelWithDescription}
               </SelectItem>
             ))}
           </SelectContent>

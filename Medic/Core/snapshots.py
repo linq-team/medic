@@ -55,6 +55,10 @@ from Medic.Core.utils.datetime_helpers import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logLevel.logSetup())
 
+# Constants
+MAX_SNAPSHOT_QUERY_LIMIT = 250  # Maximum number of snapshots returned per query
+MAX_ACTOR_LENGTH = 255  # Maximum length for actor string
+
 
 class SnapshotActionType(str, Enum):
     """Types of actions that trigger snapshots."""
@@ -371,7 +375,7 @@ def query_snapshots(
         SnapshotQueryResult with entries, total count, and pagination info
     """
     # Validate and cap limits
-    limit = min(max(1, limit), 250)
+    limit = min(max(1, limit), MAX_SNAPSHOT_QUERY_LIMIT)
     offset = max(0, offset)
 
     # Build the WHERE clause dynamically

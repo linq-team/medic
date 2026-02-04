@@ -3,6 +3,7 @@
 from flask import request, send_file, Response
 from flask_swagger_ui import get_swaggerui_blueprint
 from datetime import datetime
+from typing import Optional
 import pytz
 from cerberus import Validator
 import os
@@ -19,6 +20,38 @@ import Medic.Helpers.logSettings as logLevel
 # Log Setup
 logger = logging.getLogger(__name__)
 logger.setLevel(logLevel.logSetup())
+
+# Constants
+MAX_ACTOR_LENGTH = 255
+
+
+def validate_actor_header(actor: Optional[str]) -> Optional[str]:
+    """
+    Validate the X-Actor header value.
+
+    Args:
+        actor: The actor string from X-Actor header
+
+    Returns:
+        The validated actor string, or None if invalid
+    """
+    if actor is None:
+        return None
+
+    # Check length
+    if len(actor) > MAX_ACTOR_LENGTH:
+        return None
+
+    # Check for printable characters only (no control characters)
+    if not actor.isprintable():
+        return None
+
+    # Strip whitespace
+    actor = actor.strip()
+    if not actor:
+        return None
+
+    return actor
 
 
 def exposeRoutes(app):
@@ -462,7 +495,7 @@ def exposeRoutes(app):
 
                 # Create snapshot before the update
                 if snapshot_action:
-                    actor = request.headers.get("X-Actor")  # Optional header for actor
+                    actor = validate_actor_header(request.headers.get("X-Actor"))
                     snapshot = create_snapshot(
                         service_id=service_id,
                         action_type=snapshot_action,
@@ -1625,12 +1658,14 @@ def exposeRoutes(app):
                 400,
             )
 
-        # Parse optional actor from request body
-        actor = None
-        if request.data:
+        # Parse optional actor from X-Actor header or request body
+        actor = validate_actor_header(request.headers.get("X-Actor"))
+        if actor is None and request.data:
             try:
                 jData = json.loads(request.data)
-                actor = jData.get("actor")
+                body_actor = jData.get("actor")
+                if isinstance(body_actor, str):
+                    actor = validate_actor_header(body_actor)
             except (json.JSONDecodeError, ValueError):
                 pass  # actor is optional
 

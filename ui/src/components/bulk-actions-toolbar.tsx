@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useBulkUpdateServices } from '@/hooks/use-service-mutations'
 import type { Service } from '@/lib/api'
+import { PRIORITY_OPTIONS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
@@ -55,17 +56,6 @@ interface DialogState {
   type: ActionType | null
   open: boolean
 }
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/** Priority options for bulk update */
-const PRIORITY_OPTIONS = [
-  { value: 'p1', label: 'P1 - Critical', className: 'text-status-error' },
-  { value: 'p2', label: 'P2 - High', className: 'text-status-warning' },
-  { value: 'p3', label: 'P3 - Normal', className: 'text-muted-foreground' },
-] as const
 
 // ============================================================================
 // Component
@@ -375,7 +365,7 @@ export function BulkActionsToolbar({
                       value={option.value}
                       className={option.className}
                     >
-                      {option.label}
+                      {option.labelWithDescription}
                     </SelectItem>
                   ))}
                 </SelectContent>

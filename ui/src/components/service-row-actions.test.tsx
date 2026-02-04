@@ -220,7 +220,10 @@ describe('ServiceRowActions', () => {
       await waitFor(() => {
         expect(mockUpdateService).toHaveBeenCalledWith('test-service', { muted: 1 })
       })
-      expect(toast.success).toHaveBeenCalledWith('Test Service muted - alerts silenced')
+      expect(toast.success).toHaveBeenCalledWith(
+        'Service muted - alerts silenced',
+        { description: 'Test Service' }
+      )
     })
 
     it('unmutes service when Unmute is clicked', async () => {
@@ -238,7 +241,10 @@ describe('ServiceRowActions', () => {
       await waitFor(() => {
         expect(mockUpdateService).toHaveBeenCalledWith('test-service', { muted: 0 })
       })
-      expect(toast.success).toHaveBeenCalledWith('Test Service unmuted - alerts enabled')
+      expect(toast.success).toHaveBeenCalledWith(
+        'Service unmuted - alerts enabled',
+        { description: 'Test Service' }
+      )
     })
   })
 
@@ -287,7 +293,10 @@ describe('ServiceRowActions', () => {
       await waitFor(() => {
         expect(mockUpdateService).toHaveBeenCalledWith('test-service', { active: 1 })
       })
-      expect(toast.success).toHaveBeenCalledWith('Test Service activated - monitoring resumed')
+      expect(toast.success).toHaveBeenCalledWith(
+        'Service activated - monitoring resumed',
+        { description: 'Test Service' }
+      )
     })
 
     it('shows confirmation dialog when Deactivate is clicked', async () => {
@@ -329,7 +338,10 @@ describe('ServiceRowActions', () => {
       await waitFor(() => {
         expect(mockUpdateService).toHaveBeenCalledWith('test-service', { active: 0 })
       })
-      expect(toast.success).toHaveBeenCalledWith('Test Service deactivated - monitoring paused')
+      expect(toast.success).toHaveBeenCalledWith(
+        'Service deactivated - monitoring paused',
+        { description: 'Test Service' }
+      )
     })
 
     it('cancels deactivation when Cancel is clicked', async () => {
@@ -398,7 +410,10 @@ describe('ServiceRowActions', () => {
       await user.click(screen.getByRole('menuitem', { name: /^mute$/i }))
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Failed to update Test Service: Network error')
+        expect(toast.error).toHaveBeenCalledWith(
+          'Failed to update service',
+          { description: 'Test Service: Network error' }
+        )
       })
     })
 
@@ -415,7 +430,10 @@ describe('ServiceRowActions', () => {
       await user.click(screen.getByRole('menuitem', { name: /^activate$/i }))
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Failed to activate Test Service: Server error')
+        expect(toast.error).toHaveBeenCalledWith(
+          'Failed to activate service',
+          { description: 'Test Service: Server error' }
+        )
       })
     })
   })

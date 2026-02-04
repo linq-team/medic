@@ -95,13 +95,14 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
       {
         onSuccess: () => {
           toast.success(
-            newMuted === 1
-              ? `${service.service_name} muted - alerts silenced`
-              : `${service.service_name} unmuted - alerts enabled`
+            newMuted === 1 ? 'Service muted - alerts silenced' : 'Service unmuted - alerts enabled',
+            { description: service.service_name }
           )
         },
         onError: (error) => {
-          toast.error(`Failed to update ${service.service_name}: ${error.message}`)
+          toast.error('Failed to update service', {
+            description: `${service.service_name}: ${error.message}`
+          })
         },
       }
     )
@@ -118,10 +119,14 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
       },
       {
         onSuccess: () => {
-          toast.success(`${service.service_name} activated - monitoring resumed`)
+          toast.success('Service activated - monitoring resumed', {
+            description: service.service_name
+          })
         },
         onError: (error) => {
-          toast.error(`Failed to activate ${service.service_name}: ${error.message}`)
+          toast.error('Failed to activate service', {
+            description: `${service.service_name}: ${error.message}`
+          })
         },
       }
     )
@@ -138,11 +143,15 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
       },
       {
         onSuccess: () => {
-          toast.success(`${service.service_name} deactivated - monitoring paused`)
+          toast.success('Service deactivated - monitoring paused', {
+            description: service.service_name
+          })
           setIsDeactivateDialogOpen(false)
         },
         onError: (error) => {
-          toast.error(`Failed to deactivate ${service.service_name}: ${error.message}`)
+          toast.error('Failed to deactivate service', {
+            description: `${service.service_name}: ${error.message}`
+          })
         },
       }
     )

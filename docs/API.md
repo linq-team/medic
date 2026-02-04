@@ -394,6 +394,123 @@ medic_http_request_duration_seconds_bucket{endpoint="heartbeat",method="POST",le
 
 ---
 
+### Snapshots
+
+Snapshots provide backup/restore functionality for service configurations. A snapshot is automatically created before any destructive action (deactivate, edit, bulk operations).
+
+#### GET /v2/snapshots
+
+Query service snapshots with flexible filtering.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| service_id | integer | Filter by service ID |
+| action_type | string | Filter by action type (see values below) |
+| start_date | string | Filter snapshots on or after this date (ISO format) |
+| end_date | string | Filter snapshots on or before this date (ISO format) |
+| limit | integer | Maximum results (default: 50, max: 250) |
+| offset | integer | Number of entries to skip for pagination |
+
+**Action Types:**
+- `deactivate` - Before deactivating a service
+- `activate` - Before reactivating a service
+- `mute` - Before muting alerts
+- `unmute` - Before unmuting alerts
+- `edit` - Before editing service configuration
+- `bulk_edit` - Before bulk operations
+- `priority_change` - Before changing priority
+- `team_change` - Before changing team assignment
+- `delete` - Before deleting a service
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "",
+  "results": {
+    "entries": [
+      {
+        "snapshot_id": 1,
+        "service_id": 42,
+        "snapshot_data": {
+          "heartbeat_name": "my-service-hb",
+          "service_name": "my-service",
+          "active": 1,
+          "muted": 0,
+          "priority": "p2",
+          "team": "platform",
+          "alert_interval": 5,
+          "threshold": 1,
+          "runbook": "https://docs.example.com/runbook"
+        },
+        "action_type": "deactivate",
+        "actor": "user@example.com",
+        "created_at": "2026-01-15T10:30:00Z",
+        "restored_at": null
+      }
+    ],
+    "total_count": 1,
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
+  }
+}
+```
+
+---
+
+#### GET /v2/snapshots/{snapshot_id}
+
+Get a single snapshot by ID.
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "",
+  "results": {
+    "snapshot_id": 1,
+    "service_id": 42,
+    "snapshot_data": { ... },
+    "action_type": "deactivate",
+    "actor": "user@example.com",
+    "created_at": "2026-01-15T10:30:00Z",
+    "restored_at": null
+  }
+}
+```
+
+---
+
+#### POST /v2/snapshots/{snapshot_id}/restore
+
+Restore a service to its previous state from a snapshot.
+
+**Request Headers:**
+| Header | Type | Description |
+|--------|------|-------------|
+| X-Actor | string | Optional. Identifies who performed the restore |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Snapshot restored successfully",
+  "results": {
+    "snapshot_id": 1,
+    "service_id": 42,
+    "restored_at": "2026-01-15T11:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400` - Snapshot already restored
+- `404` - Snapshot not found or associated service deleted
+
+---
+
 ## Error Codes
 
 | Status Code | Description |
@@ -451,4 +568,24 @@ curl -X POST http://localhost:5000/service/my-app-heartbeat \
 curl -X POST http://localhost:5000/service/my-app-heartbeat \
   -H "Content-Type: application/json" \
   -d '{"muted": 0}'
+```
+
+### Backup and Restore Service Configuration
+
+```bash
+# 1. View snapshots for a service (after making changes)
+curl "http://localhost:5000/v2/snapshots?service_id=42"
+
+# 2. View a specific snapshot
+curl http://localhost:5000/v2/snapshots/1
+
+# 3. Restore to a previous state
+curl -X POST http://localhost:5000/v2/snapshots/1/restore \
+  -H "X-Actor: admin@example.com"
+
+# 4. Query snapshots by action type (e.g., find all deactivations)
+curl "http://localhost:5000/v2/snapshots?action_type=deactivate"
+
+# 5. Query snapshots with date range
+curl "http://localhost:5000/v2/snapshots?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z"
 ```

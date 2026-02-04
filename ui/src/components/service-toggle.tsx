@@ -45,13 +45,14 @@ export function MuteToggle({ service }: ServiceToggleProps) {
       {
         onSuccess: () => {
           toast.success(
-            checked
-              ? `${service.service_name} muted - alerts silenced`
-              : `${service.service_name} unmuted - alerts enabled`
+            checked ? 'Service muted - alerts silenced' : 'Service unmuted - alerts enabled',
+            { description: service.service_name }
           )
         },
         onError: (error) => {
-          toast.error(`Failed to update ${service.service_name}: ${error.message}`)
+          toast.error('Failed to update service', {
+            description: `${service.service_name}: ${error.message}`
+          })
         },
       }
     )
@@ -100,13 +101,16 @@ export function ActiveToggle({ service }: ServiceToggleProps) {
         onSuccess: () => {
           toast.success(
             newActive === 1
-              ? `${service.service_name} activated - monitoring resumed`
-              : `${service.service_name} deactivated - monitoring paused`
+              ? 'Service activated - monitoring resumed'
+              : 'Service deactivated - monitoring paused',
+            { description: service.service_name }
           )
           setShowConfirmDialog(false)
         },
         onError: (error) => {
-          toast.error(`Failed to update ${service.service_name}: ${error.message}`)
+          toast.error('Failed to update service', {
+            description: `${service.service_name}: ${error.message}`
+          })
           setShowConfirmDialog(false)
         },
       }

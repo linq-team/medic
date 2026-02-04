@@ -15,29 +15,11 @@ import {
 } from '@/components/ui/select'
 import { useUpdateService } from '@/hooks/use-service-mutations'
 import type { Service } from '@/lib/api'
+import { PRIORITY_OPTIONS, getPriorityClassName } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 interface PrioritySelectorProps {
   service: Service
-}
-
-/**
- * Priority options with color styling
- */
-const PRIORITY_OPTIONS = [
-  { value: 'P1', label: 'P1', className: 'text-status-error' },
-  { value: 'P2', label: 'P2', className: 'text-status-warning' },
-  { value: 'P3', label: 'P3', className: 'text-muted-foreground' },
-] as const
-
-/**
- * Get priority styling based on value
- */
-function getPriorityClassName(priority: string): string {
-  const option = PRIORITY_OPTIONS.find(
-    (opt) => opt.value.toLowerCase() === priority.toLowerCase()
-  )
-  return option?.className ?? 'text-muted-foreground'
 }
 
 /**
@@ -63,14 +45,14 @@ export function PrioritySelector({ service }: PrioritySelectorProps) {
       },
       {
         onSuccess: () => {
-          toast.success(
-            `${service.service_name} priority updated to ${newPriority}`
-          )
+          toast.success(`Priority updated to ${newPriority}`, {
+            description: service.service_name
+          })
         },
         onError: (error) => {
-          toast.error(
-            `Failed to update priority for ${service.service_name}: ${error.message}`
-          )
+          toast.error('Failed to update priority', {
+            description: `${service.service_name}: ${error.message}`
+          })
         },
       }
     )
@@ -96,7 +78,7 @@ export function PrioritySelector({ service }: PrioritySelectorProps) {
         {PRIORITY_OPTIONS.map((option) => (
           <SelectItem
             key={option.value}
-            value={option.value}
+            value={option.value.toUpperCase()}
             className={cn('font-medium', option.className)}
           >
             {option.label}

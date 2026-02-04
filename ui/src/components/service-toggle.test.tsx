@@ -125,7 +125,10 @@ describe('MuteToggle', () => {
       expect(mockUpdateService).toHaveBeenCalledWith('test-service', { muted: 1 })
     })
 
-    expect(toast.success).toHaveBeenCalledWith('Test Service muted - alerts silenced')
+    expect(toast.success).toHaveBeenCalledWith(
+      'Service muted - alerts silenced',
+      { description: 'Test Service' }
+    )
   })
 
   it('calls updateService when toggling mute off', async () => {
@@ -144,7 +147,10 @@ describe('MuteToggle', () => {
       expect(mockUpdateService).toHaveBeenCalledWith('test-service', { muted: 0 })
     })
 
-    expect(toast.success).toHaveBeenCalledWith('Test Service unmuted - alerts enabled')
+    expect(toast.success).toHaveBeenCalledWith(
+      'Service unmuted - alerts enabled',
+      { description: 'Test Service' }
+    )
   })
 
   it('shows error toast on failure', async () => {
@@ -160,7 +166,10 @@ describe('MuteToggle', () => {
     await user.click(switchElement)
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Failed to update Test Service: Network error')
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to update service',
+        { description: 'Test Service: Network error' }
+      )
     })
   })
 })
@@ -217,7 +226,10 @@ describe('ActiveToggle', () => {
       expect(mockUpdateService).toHaveBeenCalledWith('test-service', { active: 1 })
     })
 
-    expect(toast.success).toHaveBeenCalledWith('Test Service activated - monitoring resumed')
+    expect(toast.success).toHaveBeenCalledWith(
+      'Service activated - monitoring resumed',
+      { description: 'Test Service' }
+    )
   })
 
   it('shows confirmation dialog when deactivating', async () => {
@@ -261,7 +273,10 @@ describe('ActiveToggle', () => {
       expect(mockUpdateService).toHaveBeenCalledWith('test-service', { active: 0 })
     })
 
-    expect(toast.success).toHaveBeenCalledWith('Test Service deactivated - monitoring paused')
+    expect(toast.success).toHaveBeenCalledWith(
+      'Service deactivated - monitoring paused',
+      { description: 'Test Service' }
+    )
   })
 
   it('cancels deactivation when Cancel is clicked', async () => {
@@ -330,7 +345,10 @@ describe('ActiveToggle', () => {
     await user.click(confirmButton)
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Failed to update Test Service: Server error')
+      expect(toast.error).toHaveBeenCalledWith(
+        'Failed to update service',
+        { description: 'Test Service: Server error' }
+      )
     })
   })
 })

@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useCreateService } from '@/hooks/use-service-mutations'
+import { PRIORITY_OPTIONS } from '@/lib/constants'
 
 // ============================================================================
 // Types
@@ -61,13 +62,6 @@ interface FormData {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/** Priority options with labels */
-const PRIORITY_OPTIONS = [
-  { value: 'p1', label: 'P1 - Critical' },
-  { value: 'p2', label: 'P2 - High' },
-  { value: 'p3', label: 'P3 - Normal' },
-] as const
 
 /** Default form values for new service */
 const DEFAULT_FORM_DATA: FormData = {
@@ -314,7 +308,7 @@ function ServiceCreateForm({ onOpenChange }: ServiceCreateFormProps) {
           <SelectContent>
             {PRIORITY_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
-                {option.label}
+                {option.labelWithDescription}
               </SelectItem>
             ))}
           </SelectContent>
