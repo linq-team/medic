@@ -20,6 +20,41 @@
 - **Rate limiter factory: Use `MEDIC_RATE_LIMITER_TYPE` env var (redis/memory/auto) for selection, `get_rate_limiter()` returns cached singleton**
 - **Dockerfile: Multi-stage build (builder -> runtime), python:3.11-slim-bookworm base, port 8080, gunicorn WSGI server**
 - **Docker user: Non-root user `medic` with uid 1000 for Kubernetes compatibility**
+- **Docker Compose: Use `condition: service_healthy` for depends_on with healthchecks**
+
+---
+
+## 2026-02-04 - US-012 - Linear Issue: SRE-39
+- **What was implemented**: Docker Compose for local development with all dependencies
+  - Updated `docker-compose.yml` with production-ready service structure
+  - Service: postgres (postgres:15) with persistent volume and healthcheck
+  - Service: redis (redis:7) with persistent volume, healthcheck, and AOF persistence
+  - Service: medic-api (builds from Dockerfile, exposes port 8080, healthcheck)
+  - Service: medic-worker (builds from Dockerfile, runs Medic.Worker.monitor)
+  - All app services depend on postgres and redis with `condition: service_healthy`
+  - Environment variables use ${VAR:-default} syntax for flexibility
+  - Updated `.env.example` with all required environment variables including:
+    - Database config (DB_HOST, DB_PORT, DB_NAME, PG_USER, PG_PASS)
+    - Application config (PORT, DEBUG, MEDIC_BASE_URL, MEDIC_TIMEZONE, LOG_LEVEL)
+    - Worker settings (WORKER_INTERVAL_SECONDS, ALERT_AUTO_UNMUTE_HOURS)
+    - Redis config (REDIS_URL, MEDIC_RATE_LIMITER_TYPE, REDIS_POOL_SIZE)
+    - Slack/PagerDuty integration (optional)
+    - Security config (MEDIC_SECRETS_KEY, MEDIC_WEBHOOK_SECRET, MEDIC_ALLOWED_WEBHOOK_HOSTS)
+    - Rate limiting config (RATE_LIMIT_*_REQUESTS)
+  - Verified `docker-compose config` validates successfully
+
+- **Files changed**:
+  - `docker-compose.yml` (complete rewrite with 4 services, healthchecks, volumes)
+  - `.env.example` (updated with all environment variables)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `condition: service_healthy` in depends_on for reliable startup order
+  - Don't use `env_file: .env` if the file might not exist (causes validation failure)
+  - Use ${VAR:-default} syntax for environment variables with sensible defaults
+  - Redis `--appendonly yes` enables persistence via AOF (append-only file)
+  - Service names (postgres, redis) become DNS names for inter-container communication
+  - Worker command: `["python", "-m", "Medic.Worker.monitor"]` for module execution
 
 ---
 
