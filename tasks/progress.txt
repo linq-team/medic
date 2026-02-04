@@ -648,4 +648,22 @@
   - Context passed to playbook includes all variables plus trigger='api'
   - skip_approval=False so playbook's approval setting is respected
   - When testing rate-limited endpoints, use @patch decorator on verify_rate_limit returning None to bypass
+  - Webhook trigger API: POST /v2/webhooks/playbooks/:id/trigger authenticates via X-Webhook-Secret header against MEDIC_WEBHOOK_SECRET env var
+  - Use hmac.compare_digest() for constant-time comparison of webhook secrets to prevent timing attacks
+  - verify_rate_limit() supports key_override parameter for custom rate limit keys (e.g., webhook endpoints that don't use API keys)
+  - Webhook rate limiting uses IP-based keys: f"webhook:{remote_ip}" with 10 req/min limit
+
+---
+
+## 2026-02-03 - US-043 - Linear Issue: SRE-25
+- Implemented POST /v2/webhooks/playbooks/:id/trigger endpoint for external system playbook triggering
+- Files changed: Medic/Core/routes.py, Medic/Core/rate_limit_middleware.py, tests/integration/test_api.py
+- **Learnings for future iterations:**
+  - Webhook authentication uses X-Webhook-Secret header compared against MEDIC_WEBHOOK_SECRET env var
+  - Always use hmac.compare_digest() for secret comparison to prevent timing attacks
+  - verify_rate_limit() now accepts key_override parameter for custom rate limit keys
+  - For webhook endpoints without API keys, use IP-based rate limiting: f"webhook:{request.remote_addr}"
+  - When MEDIC_WEBHOOK_SECRET is not configured, return 503 (Service Unavailable) not 401
+  - Webhook context includes trigger='webhook' and source_ip for audit trail
+  - Pattern: import hmac within function to use compare_digest for one-time use
 ---
