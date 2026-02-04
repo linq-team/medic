@@ -66,8 +66,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Installed Tailwind CSS 4.x with @tailwindcss/postcss plugin. Build produces Tailwind utilities correctly."
     },
     {
       "id": "US-005",
@@ -80,8 +80,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Configured Linq brand colors in both tailwind.config.js and index.css @theme for Tailwind CSS 4."
     },
     {
       "id": "US-006",
