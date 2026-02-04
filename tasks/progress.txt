@@ -71,6 +71,27 @@
 - Detail row pattern: dt/dd pattern with label and value for consistent styling
 - Services link by heartbeat_name (encodeURIComponent) since API uses heartbeat_name for lookup
 
+- Alerts table pattern: similar to Services table but with Alert-specific columns (Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration)
+- Alert status badge: variant="destructive" for active alerts with animate-pulse, variant="secondary" for resolved
+- formatDuration() helper: converts seconds to human-readable (e.g., "1h 30m", "5m 20s", "45s")
+- formatDate() helper: uses toLocaleString() with month, day, year, hour, minute options
+- Alert icons: Bell for active alerts, CheckCircle for resolved, Clock for timestamps
+- useAlerts hook already exists in src/hooks/use-alerts.ts - no need to create new hooks
+
+---
+
+## 2026-02-04 - US-025 - Linear Issue: SRE-72
+- What was implemented: Created Alerts list page with table displaying all active and historical alerts
+- Files changed:
+  - ui/src/pages/Alerts.tsx (replaced placeholder with full table implementation)
+- **Learnings for future iterations:**
+  - Alert type from api.ts includes: alert_id, service_id, heartbeat_name, service_name, active, priority, team, created_date, closed_date, duration, runbook
+  - useAlerts() hook returns ApiResponse<Alert[]> - access data via data?.results ?? []
+  - formatDuration() converts seconds to human-readable format with hours/minutes/seconds
+  - Active alerts use variant="destructive" with animate-pulse for visual urgency
+  - Link to service detail page via heartbeat_name (same pattern as Services table)
+  - Clock icon from lucide-react for timestamp columns
+  - Bell icon for active alerts, CheckCircle for resolved
 ---
 
 ## 2026-02-04 - US-024 - Linear Issue: SRE-68
