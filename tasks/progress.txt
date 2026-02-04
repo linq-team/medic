@@ -15,6 +15,38 @@
 - **Playbook package: Import models and db ops from `Medic.Core.playbook` (not playbook_engine)**
 - **Test patches: Use `Medic.Core.playbook.db.db` for db operations moved to playbook package, `Medic.Core.playbook_engine.db` for functions remaining in engine**
 - **Executor patches: When testing executor functions directly, patch at `Medic.Core.playbook.executors.<executor_name>.<function>` (e.g., `Medic.Core.playbook.executors.webhook.create_step_result`)**
+- **Redis rate limiter: Use `REDIS_URL` env var for connection, `REDIS_POOL_SIZE` for pool (default 10), use `is_healthy()` to check connectivity**
+- **Redis testing: Use `fakeredis` package for testing Redis-dependent code**
+
+---
+
+## 2026-02-04 - US-009 - Linear Issue: SRE-36
+- **What was implemented**: Redis-backed distributed rate limiting for multi-replica deployments
+  - Replaced `NotImplementedError` with full `RedisRateLimiter` implementation
+  - Used Redis sorted sets (ZSET) for sliding window algorithm
+  - Each request stored with timestamp as score for efficient window-based counting
+  - Used Redis pipeline with MULTI/EXEC for atomic operations
+  - Added `_create_redis_client()` for automatic client creation from `REDIS_URL`
+  - Added `REDIS_POOL_SIZE` configuration (default: 10)
+  - Added `is_healthy()` method to check Redis connectivity
+  - Added key expiry (window_seconds + 1) for automatic cleanup
+  - Added 20 unit tests using `fakeredis` for Redis mocking
+
+- **Files changed**:
+  - `Medic/Core/rate_limiter.py` (implemented RedisRateLimiter class)
+  - `Medic/requirements.txt` (added redis>=5.0.0)
+  - `requirements-dev.txt` (added fakeredis>=2.21.0, types-redis>=4.6.0)
+  - `tests/unit/test_rate_limiter.py` (added 20 RedisRateLimiter tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Redis sorted sets (ZSET) are ideal for sliding window rate limiting
+  - Use `zadd()` with timestamp as score, `zremrangebyscore()` to remove old entries
+  - Use `zcard()` to count current entries, `zrange()` with `withscores=True` for oldest entry
+  - Always set key expiry with `expire()` for automatic cleanup
+  - Use `redis.ConnectionPool.from_url()` for connection pooling
+  - `fakeredis` package provides in-memory Redis for testing without real Redis server
+  - Test `is_healthy()` by mocking `ping()` to raise exceptions
 
 ---
 
