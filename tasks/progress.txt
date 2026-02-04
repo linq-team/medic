@@ -48,7 +48,29 @@
 - Priority badge styling: use custom className for P1 (error), P2 (warning), P3 (muted)
 - Empty state pattern: centered flex column with icon, heading, and description
 - Table loading state: use Skeleton components for entire rows
+- Pagination pattern: usePagination hook with useSearchParams for URL state management
+- TablePagination component: reusable pagination with Previous, Next, page numbers
+- Client-side pagination: allItems.slice(offset, offset + pageSize) for paging
+- Components exporting hooks: add ESLint override in eslint.config.js (e.g., *-pagination.tsx)
 
+---
+
+## 2026-02-04 - US-020 - Linear Issue: SRE-89
+- What was implemented: Added pagination to Services table with 25 items per page default
+- Files changed:
+  - ui/src/components/table-pagination.tsx (new - reusable TablePagination component with usePagination hook)
+  - ui/src/components/ui/pagination.tsx (new - shadcn/ui Pagination primitives)
+  - ui/src/pages/Services.tsx (updated to use TablePagination for client-side pagination)
+  - ui/eslint.config.js (added ESLint override for *-pagination.tsx files)
+- **Learnings for future iterations:**
+  - usePagination hook returns { currentPage, setPage, pageSize, offset } for managing pagination state
+  - Page state persists in URL via useSearchParams (e.g., ?page=2)
+  - When page=1, remove query param entirely for cleaner URLs
+  - Client-side pagination uses allItems.slice(offset, offset + pageSize)
+  - getPageRange() calculates which page numbers to display with ellipsis for large page counts
+  - Pagination component shows "Showing X to Y of Z services" for context
+  - linq-blue color class for active page button styling
+  - shadcn/ui PaginationLink uses anchor elements - use onClick handler for client-side nav
 ---
 
 ## 2026-02-04 - US-019 - Linear Issue: SRE-67
