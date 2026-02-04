@@ -625,7 +625,7 @@
         "Verify `terraform validate` passes in modules/secrets"
       ],
       "priority": 29,
-      "passes": false,
+      "passes": true,
       "notes": "IAM role ARN passed to Helm for ServiceAccount IRSA annotation"
     },
     {
