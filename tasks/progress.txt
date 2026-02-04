@@ -52,6 +52,57 @@
 - **ServiceMonitor: Use `monitoring.coreos.com/v1` API, target service with matchLabels and port name**
 - **PodMonitor: Use `monitoring.coreos.com/v1` API, target pods with matchLabels and podMetricsEndpoints**
 - **Metric relabelings: Always add environment label from global.environment for OTEL resource attribution**
+- **Grafana dashboard: Use ConfigMap with `grafana_dashboard: "1"` label for sidecar discovery**
+- **Dashboard exemplars: Enable `exemplar: true` in query targets for trace correlation**
+- **Dashboard variables: Use `datasource` type for Prometheus/Tempo/Loki selections**
+- **Helm template escaping: Use `{{` + "`{{ variable }}`" + `}}` syntax to escape Grafana template variables**
+
+---
+
+## 2026-02-04 - US-023 - Linear Issue: SRE-50
+- **What was implemented**: Grafana dashboard ConfigMap with trace and log correlation links
+  - Created `helm/medic/dashboards/medic-overview.json` with comprehensive dashboard:
+    - Service Overview row: Request Rate, Error Rate (5xx), p99 Latency, Active Alerts stats
+    - Request Metrics row: Request Rate by Endpoint, Request Rate by Status Code
+    - Latency row: Latency Percentiles (p50/p95/p99), p99 by Endpoint (both with exemplar support)
+    - Auth & Rate Limiting row: Auth Failures by Reason, Rate Limit Hits (429s)
+    - Playbook Executions row: Executions by Status, Execution Duration p95 (with exemplars)
+    - Webhooks & External Services row: PagerDuty Success Rate, Slack Success Rate, Circuit Breakers Open
+    - Health & Infrastructure row: Component Health, Database Query Duration p95 (with exemplars)
+  - Created `helm/medic/templates/grafana-dashboard.yaml` as ConfigMap:
+    - Conditional creation via `.Values.grafana.dashboard.enabled`
+    - `grafana_dashboard: "1"` label for Grafana sidecar auto-discovery
+    - Supports additional labels and annotations via values
+    - Dashboard JSON embedded inline with proper Helm template escaping
+  - Dashboard features:
+    - Exemplar display enabled for latency and duration histograms
+    - Data links from metrics to Tempo traces using `${__data.fields.trace_id}`
+    - Data links from metrics to Loki logs using time range and service labels
+    - Dashboard variables: datasource (Prometheus), tempo_datasource, loki_datasource, environment, service
+    - Variables populated from `medic_build_info` metric labels
+    - Auto-refresh every 30s
+  - Updated `helm/medic/values.yaml` with expanded grafana section:
+    - Added `annotations: {}` for ConfigMap annotations
+    - Added `datasources` section with prometheus, tempo, loki defaults
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds
+  - Verified dashboard JSON is valid (python json.load)
+
+- **Files changed**:
+  - `helm/medic/dashboards/medic-overview.json` (new, comprehensive dashboard JSON)
+  - `helm/medic/templates/grafana-dashboard.yaml` (new, ConfigMap template)
+  - `helm/medic/values.yaml` (expanded grafana section)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Grafana sidecar discovers dashboards via `grafana_dashboard: "1"` label on ConfigMaps
+  - Dashboard JSON in Helm templates needs Grafana template variables escaped as `{{` + "`{{ var }}`" + `}}`
+  - Exemplar display requires `exemplar: true` in Prometheus query targets
+  - Data links use Grafana variables like `${__data.fields.trace_id}` for exemplar correlation
+  - Use `datasource` variable type for user-selectable data sources
+  - Dashboard UID should be unique and descriptive (e.g., `medic-overview`)
+  - Store source dashboard JSON in separate file for easier editing/validation
 
 ---
 
