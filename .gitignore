@@ -76,6 +76,10 @@ node_modules/
 Medic/clients/typescript/dist/
 Medic/clients/typescript/node_modules/
 
+# UI
+ui/node_modules/
+ui/dist/
+
 # OS
 .DS_Store
 Thumbs.db
