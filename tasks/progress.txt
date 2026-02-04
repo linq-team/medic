@@ -12,6 +12,43 @@
 - Environment variable config: Use `int(os.environ.get("VAR_NAME", "default"))` pattern
 - **Datetime utilities: Import `from Medic.Core.utils.datetime_helpers import now as get_now, parse_datetime`**
 - **When local var shadows import name, alias the import (e.g., `now as get_now`) to avoid `now = now()` conflicts**
+- **Playbook package: Import models and db ops from `Medic.Core.playbook` (not playbook_engine)**
+- **Test patches: Use `Medic.Core.playbook.db.db` for db operations moved to playbook package, `Medic.Core.playbook_engine.db` for functions remaining in engine**
+
+---
+
+## 2026-02-04 - US-007 - Linear Issue: SRE-34
+- **What was implemented**: Created playbook package structure for maintainability
+  - Created `Medic/Core/playbook/` package directory
+  - Created `Medic/Core/playbook/models.py` with dataclasses:
+    - `ExecutionStatus`: Enum for playbook execution states
+    - `StepResultStatus`: Enum for step result states
+    - `StepResult`: Dataclass for step execution results
+    - `PlaybookExecution`: Dataclass for playbook execution instances
+    - `StepExecutor`: Type alias for step executor functions
+  - Created `Medic/Core/playbook/db.py` with all database operations:
+    - Execution: create_execution, get_execution, get_active_executions, etc.
+    - Step results: create_step_result, update_step_result, etc.
+    - Playbook loading: get_playbook_by_id
+  - Created `Medic/Core/playbook/__init__.py` with public API exports
+  - Updated `playbook_engine.py` to import from new package
+  - Updated test patches to use correct module paths
+
+- **Files changed**:
+  - `Medic/Core/playbook/__init__.py` (new)
+  - `Medic/Core/playbook/models.py` (new)
+  - `Medic/Core/playbook/db.py` (new)
+  - `Medic/Core/playbook_engine.py` (refactored imports, removed duplicated code)
+  - `tests/unit/test_playbook_engine.py` (updated mock patches)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - When moving database functions to a new module, tests need patches updated to new location
+  - Functions in playbook.db module need `@patch('Medic.Core.playbook.db.db')` for db mocking
+  - Functions remaining in playbook_engine need `@patch('Medic.Core.playbook_engine.db')` for db mocking
+  - TYPE_CHECKING imports help avoid circular imports for type hints
+  - Package __init__.py can re-export all public API for convenience imports
+  - Keep backwards compatibility by importing and re-exporting from old module location
 
 ---
 

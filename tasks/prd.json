@@ -149,7 +149,7 @@
         "Typecheck/lint passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Part 1 of playbook_engine.py refactor"
     },
     {
