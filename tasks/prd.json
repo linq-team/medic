@@ -95,7 +95,8 @@
         "Includes DialogTrigger, DialogContent, DialogHeader, DialogFooter",
         "Accessible (focus trap, escape to close)",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-004",

@@ -1897,3 +1897,34 @@
   - X-Actor header pattern: pass actor context for audit/logging purposes
 
 ---
+
+## 2026-02-04 - US-003 - Linear Issue: SRE-107
+- **What was implemented**: shadcn Dialog component for modal dialogs
+  - Installed Dialog component via `npx shadcn@latest add dialog`
+  - Component located at `ui/src/components/ui/dialog.tsx`
+  - Based on Radix UI Dialog primitive with full accessibility support:
+    - Focus trap (keeps focus within dialog)
+    - Escape key to close
+    - Proper ARIA attributes
+  - Exported components:
+    - Dialog (Root) - supports controlled open/close via `open` and `onOpenChange` props
+    - DialogTrigger - button to open dialog
+    - DialogPortal - renders dialog in portal
+    - DialogOverlay - backdrop overlay
+    - DialogClose - close button
+    - DialogContent - main dialog container
+    - DialogHeader - header section
+    - DialogFooter - footer section for actions
+    - DialogTitle - accessible title
+    - DialogDescription - accessible description
+
+- **Files changed**:
+  - `ui/src/components/ui/dialog.tsx` (new)
+  - `tasks/prd.json` (marked US-003 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn CLI creates files in literal `@/` directory - must move to `src/components/ui/`
+  - Radix UI primitives provide built-in accessibility (focus trap, escape to close, ARIA)
+  - Dialog supports controlled mode via `open` and `onOpenChange` props on Root component
+  - DialogContent automatically includes close button with X icon
+---
