@@ -13,6 +13,7 @@ Usage:
     if trigger:
         playbook = get_playbook_for_trigger(trigger)
 """
+
 import fnmatch
 import json
 import logging
@@ -82,9 +83,9 @@ class PlaybookTrigger:
             True if both conditions are met
         """
         return (
-            self.enabled and
-            self.matches_service(service_name) and
-            self.meets_failure_threshold(failure_count)
+            self.enabled
+            and self.matches_service(service_name)
+            and self.meets_failure_threshold(failure_count)
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -135,10 +136,10 @@ def get_enabled_triggers() -> List[PlaybookTrigger]:
         WHERE enabled = TRUE
         ORDER BY consecutive_failures DESC, trigger_id ASC
         """,
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
@@ -164,10 +165,10 @@ def get_triggers_for_playbook(playbook_id: int) -> List[PlaybookTrigger]:
         ORDER BY consecutive_failures DESC, trigger_id ASC
         """,
         (playbook_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
@@ -175,8 +176,7 @@ def get_triggers_for_playbook(playbook_id: int) -> List[PlaybookTrigger]:
 
 
 def find_matching_trigger(
-    service_name: str,
-    consecutive_failures: int
+    service_name: str, consecutive_failures: int
 ) -> Optional[PlaybookTrigger]:
     """
     Find a trigger that matches a service and failure count.
@@ -202,22 +202,21 @@ def find_matching_trigger(
             logger.log(
                 level=20,
                 msg=f"Trigger {trigger.trigger_id} matched service "
-                    f"'{service_name}' (pattern: '{trigger.service_pattern}', "
-                    f"failures: {consecutive_failures}/{trigger.consecutive_failures})"
+                f"'{service_name}' (pattern: '{trigger.service_pattern}', "
+                f"failures: {consecutive_failures}/{trigger.consecutive_failures})",
             )
             return trigger
 
     logger.log(
         level=10,
         msg=f"No trigger matched service '{service_name}' with "
-            f"{consecutive_failures} consecutive failures"
+        f"{consecutive_failures} consecutive failures",
     )
     return None
 
 
 def find_playbook_for_alert(
-    service_name: str,
-    consecutive_failures: int
+    service_name: str, consecutive_failures: int
 ) -> Optional[MatchedPlaybook]:
     """
     Find a playbook that should be triggered for an alert.
@@ -244,14 +243,14 @@ def find_playbook_for_alert(
         WHERE playbook_id = %s
         """,
         (trigger.playbook_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         logger.log(
             level=30,
             msg=f"Trigger {trigger.trigger_id} references non-existent "
-                f"playbook {trigger.playbook_id}"
+            f"playbook {trigger.playbook_id}",
         )
         return None
 
@@ -262,8 +261,8 @@ def find_playbook_for_alert(
     playbook_data = rows[0]
 
     matched = MatchedPlaybook(
-        playbook_id=playbook_data['playbook_id'],
-        playbook_name=playbook_data['name'],
+        playbook_id=playbook_data["playbook_id"],
+        playbook_name=playbook_data["name"],
         trigger_id=trigger.trigger_id,
         service_pattern=trigger.service_pattern,
         consecutive_failures=trigger.consecutive_failures,
@@ -272,8 +271,8 @@ def find_playbook_for_alert(
     logger.log(
         level=20,
         msg=f"Playbook '{matched.playbook_name}' (id: {matched.playbook_id}) "
-            f"matched for service '{service_name}' with "
-            f"{consecutive_failures} consecutive failures"
+        f"matched for service '{service_name}' with "
+        f"{consecutive_failures} consecutive failures",
     )
 
     return matched
@@ -299,16 +298,16 @@ def get_consecutive_failures_for_service(service_id: int) -> int:
         WHERE service_id = %s
         """,
         (service_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return 0
 
     try:
         rows = json.loads(str(result))
         if rows:
-            return int(rows[0].get('consecutive_failures', 0) or 0)
+            return int(rows[0].get("consecutive_failures", 0) or 0)
     except (json.JSONDecodeError, TypeError, ValueError):
         pass
 
@@ -332,16 +331,16 @@ def get_service_name_by_id(service_id: int) -> Optional[str]:
         WHERE service_id = %s
         """,
         (service_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     try:
         rows = json.loads(str(result))
         if rows:
-            return rows[0].get('name')
+            return rows[0].get("name")
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -366,8 +365,7 @@ def find_playbook_for_service_alert(service_id: int) -> Optional[MatchedPlaybook
     if not service_name:
         logger.log(
             level=30,
-            msg=f"Cannot find playbook for service {service_id}: "
-                "service not found"
+            msg=f"Cannot find playbook for service {service_id}: " "service not found",
         )
         return None
 
@@ -398,9 +396,9 @@ def matches_glob_pattern(pattern: str, value: str) -> bool:
 def _parse_trigger(data: Dict[str, Any]) -> PlaybookTrigger:
     """Parse a database row into a PlaybookTrigger object."""
     return PlaybookTrigger(
-        trigger_id=data['trigger_id'],
-        playbook_id=data['playbook_id'],
-        service_pattern=data['service_pattern'],
-        consecutive_failures=data.get('consecutive_failures', 1),
-        enabled=data.get('enabled', True),
+        trigger_id=data["trigger_id"],
+        playbook_id=data["playbook_id"],
+        service_pattern=data["service_pattern"],
+        consecutive_failures=data.get("consecutive_failures", 1),
+        enabled=data.get("enabled", True),
     )

@@ -27,6 +27,34 @@ kubectl logs -l app=medic-db -f
 
 ---
 
+## Local Development Issues
+
+### Problem: Migrations fail with "schema does not exist" or "relation does not exist"
+
+**Symptoms:**
+- `docker-compose up` shows migration errors
+- Error: `schema "medic" does not exist`
+- Error: `relation "services" does not exist`
+
+**Cause:** PostgreSQL's `/docker-entrypoint-initdb.d/` scripts (like `init.sql`) only run when the data volume is first created. If you have an existing `postgres_data` volume, init scripts are skipped.
+
+**Solution:**
+
+Remove the volume to force a fresh initialization:
+
+```bash
+docker-compose down -v && docker-compose up
+```
+
+The `-v` flag removes named volumes, allowing `init.sql` to run and create the base schema and tables.
+
+**Alternative:** If you need to preserve data, run the init script manually:
+```bash
+docker exec -i medic-postgres psql -U medic -d medic < docker/init.sql
+```
+
+---
+
 ## Common Problems
 
 ### Problem: "Connection refused" when sending heartbeats

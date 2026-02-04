@@ -1,4 +1,5 @@
 """API key generation, hashing, and verification module for Medic."""
+
 import secrets
 import logging
 from typing import Tuple

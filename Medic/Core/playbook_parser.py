@@ -15,6 +15,7 @@ Approval settings:
 - required: Require human approval before execution
 - timeout:Xm: Auto-approve after X minutes if no response
 """
+
 import logging
 import re
 from dataclasses import dataclass, field
@@ -213,8 +214,7 @@ class Playbook:
         """Convert to dictionary representation."""
         approval_str = self.approval.value
         has_timeout = (
-            self.approval == ApprovalMode.TIMEOUT and
-            self.approval_timeout_minutes
+            self.approval == ApprovalMode.TIMEOUT and self.approval_timeout_minutes
         )
         if has_timeout:
             approval_str = f"timeout:{self.approval_timeout_minutes}m"
@@ -235,9 +235,7 @@ class PlaybookParseError(Exception):
     def __init__(self, message: str, field: Optional[str] = None):
         self.field = field
         self.message = message
-        super().__init__(
-            f"{message}" if not field else f"Field '{field}': {message}"
-        )
+        super().__init__(f"{message}" if not field else f"Field '{field}': {message}")
 
 
 def _parse_duration(duration_str: str) -> int:
@@ -312,16 +310,14 @@ def _parse_webhook_step(step_data: Dict[str, Any]) -> WebhookStep:
     # Validate URL format (basic check)
     if not url.startswith(("http://", "https://", "${")):
         raise PlaybookParseError(
-            "URL must start with http://, https://, or be a variable",
-            "url"
+            "URL must start with http://, https://, or be a variable", "url"
         )
 
     method = step_data.get("method", "POST").upper()
     valid_methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
     if method not in valid_methods:
         raise PlaybookParseError(
-            f"Invalid HTTP method: {method}. Must be one of {valid_methods}",
-            "method"
+            f"Invalid HTTP method: {method}. Must be one of {valid_methods}", "method"
         )
 
     headers = step_data.get("headers", {})
@@ -335,8 +331,7 @@ def _parse_webhook_step(step_data: Dict[str, Any]) -> WebhookStep:
     success_codes = step_data.get("success_codes", [200, 201, 202])
     if not isinstance(success_codes, list):
         raise PlaybookParseError(
-            "success_codes must be a list of integers",
-            "success_codes"
+            "success_codes must be a list of integers", "success_codes"
         )
 
     timeout = step_data.get("timeout", "30s")
@@ -376,16 +371,12 @@ def _parse_script_step(step_data: Dict[str, Any]) -> ScriptStep:
     script_name = step_data.get("script") or step_data.get("script_name")
     if not script_name:
         raise PlaybookParseError(
-            "Script name is required (use 'script' field)",
-            "script"
+            "Script name is required (use 'script' field)", "script"
         )
 
     parameters = step_data.get("parameters", {})
     if not isinstance(parameters, dict):
-        raise PlaybookParseError(
-            "Parameters must be a dictionary",
-            "parameters"
-        )
+        raise PlaybookParseError("Parameters must be a dictionary", "parameters")
 
     timeout = step_data.get("timeout", "60s")
     try:
@@ -421,8 +412,7 @@ def _parse_wait_step(step_data: Dict[str, Any]) -> WaitStep:
     duration = step_data.get("duration")
     if not duration:
         raise PlaybookParseError(
-            "Wait duration is required (e.g., '30s', '5m')",
-            "duration"
+            "Wait duration is required (e.g., '30s', '5m')", "duration"
         )
 
     try:
@@ -431,10 +421,7 @@ def _parse_wait_step(step_data: Dict[str, Any]) -> WaitStep:
         raise PlaybookParseError(str(e), "duration")
 
     if duration_seconds <= 0:
-        raise PlaybookParseError(
-            "Wait duration must be positive",
-            "duration"
-        )
+        raise PlaybookParseError("Wait duration must be positive", "duration")
 
     return WaitStep(
         name=str(name),
@@ -462,8 +449,7 @@ def _parse_condition_step(step_data: Dict[str, Any]) -> ConditionStep:
     check = step_data.get("check")
     if not check:
         raise PlaybookParseError(
-            "Condition check type is required (e.g., 'heartbeat_received')",
-            "check"
+            "Condition check type is required (e.g., 'heartbeat_received')", "check"
         )
 
     try:
@@ -471,8 +457,7 @@ def _parse_condition_step(step_data: Dict[str, Any]) -> ConditionStep:
     except ValueError:
         valid_types = [ct.value for ct in ConditionType]
         raise PlaybookParseError(
-            f"Invalid condition type: {check}. Must be one of {valid_types}",
-            "check"
+            f"Invalid condition type: {check}. Must be one of {valid_types}", "check"
         )
 
     timeout = step_data.get("timeout", "5m")
@@ -489,15 +474,12 @@ def _parse_condition_step(step_data: Dict[str, Any]) -> ConditionStep:
         raise PlaybookParseError(
             f"Invalid on_failure action: {on_failure_str}. "
             f"Must be one of {valid_actions}",
-            "on_failure"
+            "on_failure",
         )
 
     parameters = step_data.get("parameters", {})
     if not isinstance(parameters, dict):
-        raise PlaybookParseError(
-            "Parameters must be a dictionary",
-            "parameters"
-        )
+        raise PlaybookParseError("Parameters must be a dictionary", "parameters")
 
     return ConditionStep(
         name=str(name),
@@ -531,9 +513,8 @@ def _parse_step(step_data: Dict[str, Any]) -> PlaybookStep:
     if not StepType.is_valid(str(step_type_str)):
         valid_types = [st.value for st in StepType]
         raise PlaybookParseError(
-            f"Invalid step type: {step_type_str}. "
-            f"Must be one of {valid_types}",
-            "type"
+            f"Invalid step type: {step_type_str}. " f"Must be one of {valid_types}",
+            "type",
         )
 
     step_type = StepType(str(step_type_str).lower())
@@ -604,10 +585,7 @@ def parse_playbook_yaml(yaml_content: str) -> Playbook:
     # Parse steps
     steps_data = data.get("steps", [])
     if not steps_data:
-        raise PlaybookParseError(
-            "Playbook must have at least one step",
-            "steps"
-        )
+        raise PlaybookParseError("Playbook must have at least one step", "steps")
 
     if not isinstance(steps_data, list):
         raise PlaybookParseError("Steps must be a list", "steps")
@@ -621,17 +599,13 @@ def parse_playbook_yaml(yaml_content: str) -> Playbook:
             # Check for duplicate step names
             if step.name in step_names:
                 raise PlaybookParseError(
-                    f"Duplicate step name: '{step.name}'",
-                    f"steps[{i}].name"
+                    f"Duplicate step name: '{step.name}'", f"steps[{i}].name"
                 )
             step_names.add(step.name)
             steps.append(step)
         except PlaybookParseError as e:
             # Add step index to error for context
-            raise PlaybookParseError(
-                f"Step {i + 1}: {e.message}",
-                e.field
-            )
+            raise PlaybookParseError(f"Step {i + 1}: {e.message}", e.field)
 
     # Parse approval setting
     approval_str = data.get("approval", "none")
@@ -645,10 +619,7 @@ def parse_playbook_yaml(yaml_content: str) -> Playbook:
     try:
         version = int(version)
     except (ValueError, TypeError):
-        raise PlaybookParseError(
-            "Version must be an integer",
-            "version"
-        )
+        raise PlaybookParseError("Version must be an integer", "version")
 
     # Collect any additional metadata
     reserved_keys = {"name", "description", "steps", "approval", "version"}

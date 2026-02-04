@@ -17,13 +17,14 @@ Usage:
     # Parse datetime string
     dt = parse_datetime("2024-01-15T10:30:00Z")
 """
+
 from datetime import datetime
 from typing import Optional
 
 import pytz
 
 # Timezone constant - America/Chicago is the standard for Medic
-TIMEZONE: pytz.BaseTzInfo = pytz.timezone('America/Chicago')
+TIMEZONE: pytz.BaseTzInfo = pytz.timezone("America/Chicago")
 
 
 def now() -> datetime:
@@ -53,7 +54,7 @@ def parse_datetime(dt_str: str) -> Optional[datetime]:
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%d %H:%M:%S %Z",
         "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S"
+        "%Y-%m-%d %H:%M:%S",
     ]
     for fmt in formats:
         try:

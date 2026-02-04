@@ -27,6 +27,7 @@ Usage:
     # In Slack interaction webhook handler
     response = handle_slack_interaction(payload)
 """
+
 import hashlib
 import hmac
 import json
@@ -60,6 +61,7 @@ try:
         log_approved,
         log_rejected,
     )
+
     AUDIT_LOG_AVAILABLE = True
 except ImportError:
     AUDIT_LOG_AVAILABLE = False
@@ -103,14 +105,10 @@ class ApprovalRequest:
             "requested_at": (
                 self.requested_at.isoformat() if self.requested_at else None
             ),
-            "expires_at": (
-                self.expires_at.isoformat() if self.expires_at else None
-            ),
+            "expires_at": (self.expires_at.isoformat() if self.expires_at else None),
             "status": self.status.value,
             "decided_by": self.decided_by,
-            "decided_at": (
-                self.decided_at.isoformat() if self.decided_at else None
-            ),
+            "decided_at": (self.decided_at.isoformat() if self.decided_at else None),
         }
 
 
@@ -146,11 +144,12 @@ def get_slack_signing_secret() -> Optional[str]:
 # Database Operations
 # ============================================================================
 
+
 def create_approval_request_record(
     execution_id: int,
     expires_at: Optional[datetime] = None,
     slack_message_ts: Optional[str] = None,
-    slack_channel_id: Optional[str] = None
+    slack_channel_id: Optional[str] = None,
 ) -> Optional[ApprovalRequest]:
     """
     Create an approval request record in the database.
@@ -174,13 +173,13 @@ def create_approval_request_record(
         RETURNING request_id
         """,
         (execution_id, now, expires_at, ApprovalStatus.PENDING.value, now, now),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         logger.log(
             level=40,
-            msg=f"Failed to create approval request for execution {execution_id}"
+            msg=f"Failed to create approval request for execution {execution_id}",
         )
         return None
 
@@ -188,11 +187,11 @@ def create_approval_request_record(
     if not rows:
         return None
 
-    request_id = rows[0].get('request_id')
+    request_id = rows[0].get("request_id")
 
     logger.log(
         level=20,
-        msg=f"Created approval request {request_id} for execution {execution_id}"
+        msg=f"Created approval request {request_id} for execution {execution_id}",
     )
 
     return ApprovalRequest(
@@ -210,9 +209,7 @@ def create_approval_request_record(
     )
 
 
-def get_approval_request_by_execution(
-    execution_id: int
-) -> Optional[ApprovalRequest]:
+def get_approval_request_by_execution(execution_id: int) -> Optional[ApprovalRequest]:
     """
     Get an approval request by execution ID.
 
@@ -230,10 +227,10 @@ def get_approval_request_by_execution(
         WHERE execution_id = %s
         """,
         (execution_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
@@ -261,10 +258,10 @@ def get_approval_request(request_id: int) -> Optional[ApprovalRequest]:
         WHERE request_id = %s
         """,
         (request_id,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
@@ -289,15 +286,16 @@ def get_pending_approval_requests() -> List[ApprovalRequest]:
         WHERE status = 'pending'
         ORDER BY requested_at ASC
         """,
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
     return [
-        req for req in (_parse_approval_request(r) for r in rows if r)
+        req
+        for req in (_parse_approval_request(r) for r in rows if r)
         if req is not None
     ]
 
@@ -306,7 +304,7 @@ def update_approval_request_status(
     request_id: int,
     status: ApprovalStatus,
     decided_by: Optional[str] = None,
-    decided_at: Optional[datetime] = None
+    decided_at: Optional[datetime] = None,
 ) -> bool:
     """
     Update an approval request status.
@@ -328,7 +326,7 @@ def update_approval_request_status(
             logger.log(
                 level=30,
                 msg=f"Cannot update request {request_id} to {status.value} "
-                    "without decided_by"
+                "without decided_by",
             )
             return False
         if not decided_at:
@@ -345,13 +343,12 @@ def update_approval_request_status(
         SET status = %s, decided_by = %s, decided_at = %s, updated_at = %s
         WHERE request_id = %s
         """,
-        (status.value, decided_by, decided_at, now, request_id)
+        (status.value, decided_by, decided_at, now, request_id),
     )
 
     if result:
         logger.log(
-            level=20,
-            msg=f"Updated approval request {request_id} to {status.value}"
+            level=20, msg=f"Updated approval request {request_id} to {status.value}"
         )
 
     return bool(result)
@@ -360,11 +357,11 @@ def update_approval_request_status(
 def _parse_approval_request(data: Dict[str, Any]) -> Optional[ApprovalRequest]:
     """Parse a database row into an ApprovalRequest object."""
     try:
-        requested_at = data.get('requested_at')
-        expires_at = data.get('expires_at')
-        decided_at = data.get('decided_at')
-        created_at = data.get('created_at')
-        updated_at = data.get('updated_at')
+        requested_at = data.get("requested_at")
+        expires_at = data.get("expires_at")
+        decided_at = data.get("decided_at")
+        created_at = data.get("created_at")
+        updated_at = data.get("updated_at")
 
         if isinstance(requested_at, str):
             requested_at = parse_datetime(requested_at)
@@ -382,12 +379,12 @@ def _parse_approval_request(data: Dict[str, Any]) -> Optional[ApprovalRequest]:
             requested_at = get_now()
 
         return ApprovalRequest(
-            request_id=data['request_id'],
-            execution_id=data['execution_id'],
+            request_id=data["request_id"],
+            execution_id=data["execution_id"],
             requested_at=requested_at,
             expires_at=expires_at,
-            status=ApprovalStatus(data['status']),
-            decided_by=data.get('decided_by'),
+            status=ApprovalStatus(data["status"]),
+            decided_by=data.get("decided_by"),
             decided_at=decided_at,
             created_at=created_at,
             updated_at=updated_at,
@@ -401,12 +398,13 @@ def _parse_approval_request(data: Dict[str, Any]) -> Optional[ApprovalRequest]:
 # Slack Interactive Message Functions
 # ============================================================================
 
+
 def build_approval_blocks(
     execution_id: int,
     playbook_name: str,
     service_name: str,
     expires_at: Optional[datetime] = None,
-    description: Optional[str] = None
+    description: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Build Slack Block Kit blocks for approval message.
@@ -424,14 +422,16 @@ def build_approval_blocks(
     blocks: List[Dict[str, Any]] = []
 
     # Header section
-    blocks.append({
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": ":hourglass: Playbook Approval Required",
-            "emoji": True
+    blocks.append(
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": ":hourglass: Playbook Approval Required",
+                "emoji": True,
+            },
         }
-    })
+    )
 
     # Main info section
     main_text = (
@@ -442,60 +442,50 @@ def build_approval_blocks(
     if description:
         main_text += f"\n*Description:* {description}"
 
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": main_text
-        }
-    })
+    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": main_text}})
 
     # Expiration warning if applicable
     if expires_at:
         # Format expiration time
         expires_str = expires_at.strftime("%Y-%m-%d %H:%M:%S %Z")
-        blocks.append({
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f":clock3: _This request expires at {expires_str}_"
-                }
-            ]
-        })
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f":clock3: _This request expires at {expires_str}_",
+                    }
+                ],
+            }
+        )
 
     # Divider before buttons
     blocks.append({"type": "divider"})
 
     # Action buttons
-    blocks.append({
-        "type": "actions",
-        "block_id": f"approval_actions_{execution_id}",
-        "elements": [
-            {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Approve",
-                    "emoji": True
+    blocks.append(
+        {
+            "type": "actions",
+            "block_id": f"approval_actions_{execution_id}",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Approve", "emoji": True},
+                    "style": "primary",
+                    "action_id": "approve_playbook",
+                    "value": str(execution_id),
                 },
-                "style": "primary",
-                "action_id": "approve_playbook",
-                "value": str(execution_id)
-            },
-            {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Decline",
-                    "emoji": True
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Decline", "emoji": True},
+                    "style": "danger",
+                    "action_id": "reject_playbook",
+                    "value": str(execution_id),
                 },
-                "style": "danger",
-                "action_id": "reject_playbook",
-                "value": str(execution_id)
-            }
-        ]
-    })
+            ],
+        }
+    )
 
     return blocks
 
@@ -506,7 +496,7 @@ def build_approval_result_blocks(
     service_name: str,
     approved: bool,
     decided_by: str,
-    decided_at: datetime
+    decided_at: datetime,
 ) -> List[Dict[str, Any]]:
     """
     Build Slack Block Kit blocks for approval result message (replaces buttons).
@@ -529,14 +519,12 @@ def build_approval_result_blocks(
     blocks: List[Dict[str, Any]] = []
 
     # Header section
-    blocks.append({
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": header_text,
-            "emoji": True
+    blocks.append(
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": header_text, "emoji": True},
         }
-    })
+    )
 
     # Main info section
     decided_str = decided_at.strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -547,13 +535,7 @@ def build_approval_result_blocks(
         f"*Decision:* {status_text} by <@{decided_by}> at {decided_str}"
     )
 
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": main_text
-        }
-    })
+    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": main_text}})
 
     return blocks
 
@@ -565,7 +547,7 @@ def send_approval_request(
     expires_at: Optional[datetime] = None,
     description: Optional[str] = None,
     channel_id: Optional[str] = None,
-    slack_client: Optional[WebClient] = None
+    slack_client: Optional[WebClient] = None,
 ) -> ApprovalResult:
     """
     Send a Slack message with approval buttons for a playbook execution.
@@ -592,12 +574,12 @@ def send_approval_request(
     if not channel:
         logger.log(
             level=40,
-            msg="SLACK_CHANNEL_ID not configured, cannot send approval request"
+            msg="SLACK_CHANNEL_ID not configured, cannot send approval request",
         )
         return ApprovalResult(
             success=False,
             message="Slack channel not configured",
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Build message blocks
@@ -606,7 +588,7 @@ def send_approval_request(
         playbook_name=playbook_name,
         service_name=service_name,
         expires_at=expires_at,
-        description=description
+        description=description,
     )
 
     # Fallback text for notifications
@@ -621,21 +603,16 @@ def send_approval_request(
     try:
         # Send the message
         response = client.chat_postMessage(
-            channel=channel,
-            text=fallback_text,
-            blocks=blocks
+            channel=channel, text=fallback_text, blocks=blocks
         )
 
         if not response.get("ok"):
             error_msg = response.get("error", "Unknown error")
-            logger.log(
-                level=40,
-                msg=f"Failed to send approval request: {error_msg}"
-            )
+            logger.log(level=40, msg=f"Failed to send approval request: {error_msg}")
             return ApprovalResult(
                 success=False,
                 message=f"Failed to send Slack message: {error_msg}",
-                execution_id=execution_id
+                execution_id=execution_id,
             )
 
         # Get message timestamp for later updates
@@ -646,25 +623,25 @@ def send_approval_request(
             execution_id=execution_id,
             expires_at=expires_at,
             slack_message_ts=message_ts,
-            slack_channel_id=channel
+            slack_channel_id=channel,
         )
 
         if not request:
             logger.log(
                 level=40,
                 msg=f"Failed to create approval request record for execution "
-                    f"{execution_id}"
+                f"{execution_id}",
             )
             return ApprovalResult(
                 success=False,
                 message="Failed to create approval request record",
-                execution_id=execution_id
+                execution_id=execution_id,
             )
 
         logger.log(
             level=20,
             msg=f"Sent approval request for execution {execution_id} "
-                f"(message_ts: {message_ts})"
+            f"(message_ts: {message_ts})",
         )
 
         # Log approval request to audit log
@@ -681,29 +658,23 @@ def send_approval_request(
             success=True,
             message="Approval request sent",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     except SlackApiError as e:
         error_msg = e.response.get("error", str(e))
         logger.log(
-            level=40,
-            msg=f"Slack API error sending approval request: {error_msg}"
+            level=40, msg=f"Slack API error sending approval request: {error_msg}"
         )
         return ApprovalResult(
             success=False,
             message=f"Slack API error: {error_msg}",
-            execution_id=execution_id
+            execution_id=execution_id,
         )
     except Exception as e:
-        logger.log(
-            level=40,
-            msg=f"Error sending approval request: {str(e)}"
-        )
+        logger.log(level=40, msg=f"Error sending approval request: {str(e)}")
         return ApprovalResult(
-            success=False,
-            message=f"Error: {str(e)}",
-            execution_id=execution_id
+            success=False, message=f"Error: {str(e)}", execution_id=execution_id
         )
 
 
@@ -716,7 +687,7 @@ def update_approval_message(
     approved: bool,
     decided_by: str,
     decided_at: datetime,
-    slack_client: Optional[WebClient] = None
+    slack_client: Optional[WebClient] = None,
 ) -> bool:
     """
     Update the Slack approval message to show the decision result.
@@ -744,7 +715,7 @@ def update_approval_message(
         service_name=service_name,
         approved=approved,
         decided_by=decided_by,
-        decided_at=decided_at
+        decided_at=decided_at,
     )
 
     status_text = "approved" if approved else "declined"
@@ -755,38 +726,28 @@ def update_approval_message(
 
     try:
         response = client.chat_update(
-            channel=channel_id,
-            ts=message_ts,
-            text=fallback_text,
-            blocks=blocks
+            channel=channel_id, ts=message_ts, text=fallback_text, blocks=blocks
         )
 
         if response.get("ok"):
             logger.log(
-                level=20,
-                msg=f"Updated approval message for execution {execution_id}"
+                level=20, msg=f"Updated approval message for execution {execution_id}"
             )
             return True
         else:
             error_msg = response.get("error", "Unknown error")
-            logger.log(
-                level=30,
-                msg=f"Failed to update approval message: {error_msg}"
-            )
+            logger.log(level=30, msg=f"Failed to update approval message: {error_msg}")
             return False
 
     except SlackApiError as e:
         logger.log(
             level=30,
             msg=f"Slack API error updating approval message: "
-                f"{e.response.get('error', str(e))}"
+            f"{e.response.get('error', str(e))}",
         )
         return False
     except Exception as e:
-        logger.log(
-            level=30,
-            msg=f"Error updating approval message: {str(e)}"
-        )
+        logger.log(level=30, msg=f"Error updating approval message: {str(e)}")
         return False
 
 
@@ -794,10 +755,9 @@ def update_approval_message(
 # Approval Action Handlers
 # ============================================================================
 
+
 def approve_request(
-    execution_id: int,
-    decided_by: str,
-    slack_client: Optional[WebClient] = None
+    execution_id: int, decided_by: str, slack_client: Optional[WebClient] = None
 ) -> ApprovalResult:
     """
     Approve a playbook execution request.
@@ -825,7 +785,7 @@ def approve_request(
         return ApprovalResult(
             success=False,
             message=f"No approval request found for execution {execution_id}",
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Validate status is pending
@@ -834,21 +794,18 @@ def approve_request(
             success=False,
             message=f"Request already {request.status.value}",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Check if expired
     if request.expires_at and now > request.expires_at:
         # Mark as expired
-        update_approval_request_status(
-            request.request_id or 0,
-            ApprovalStatus.EXPIRED
-        )
+        update_approval_request_status(request.request_id or 0, ApprovalStatus.EXPIRED)
         return ApprovalResult(
             success=False,
             message="Approval request has expired",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Update approval request status
@@ -856,13 +813,13 @@ def approve_request(
         request.request_id or 0,
         ApprovalStatus.APPROVED,
         decided_by=decided_by,
-        decided_at=now
+        decided_at=now,
     ):
         return ApprovalResult(
             success=False,
             message="Failed to update approval request status",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Approve and resume playbook execution
@@ -870,13 +827,12 @@ def approve_request(
         logger.log(
             level=30,
             msg=f"Failed to resume playbook execution {execution_id} "
-                "(may already be running)"
+            "(may already be running)",
         )
         # Don't fail - the approval was recorded
 
     logger.log(
-        level=20,
-        msg=f"Playbook execution {execution_id} approved by {decided_by}"
+        level=20, msg=f"Playbook execution {execution_id} approved by {decided_by}"
     )
 
     # Log approval to audit log
@@ -895,14 +851,12 @@ def approve_request(
         success=True,
         message=f"Playbook execution {execution_id} approved",
         request=request,
-        execution_id=execution_id
+        execution_id=execution_id,
     )
 
 
 def reject_request(
-    execution_id: int,
-    decided_by: str,
-    slack_client: Optional[WebClient] = None
+    execution_id: int, decided_by: str, slack_client: Optional[WebClient] = None
 ) -> ApprovalResult:
     """
     Reject a playbook execution request.
@@ -929,7 +883,7 @@ def reject_request(
         return ApprovalResult(
             success=False,
             message=f"No approval request found for execution {execution_id}",
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Validate status is pending
@@ -938,21 +892,18 @@ def reject_request(
             success=False,
             message=f"Request already {request.status.value}",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Check if expired
     if request.expires_at and now > request.expires_at:
         # Mark as expired
-        update_approval_request_status(
-            request.request_id or 0,
-            ApprovalStatus.EXPIRED
-        )
+        update_approval_request_status(request.request_id or 0, ApprovalStatus.EXPIRED)
         return ApprovalResult(
             success=False,
             message="Approval request has expired",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Update approval request status
@@ -960,13 +911,13 @@ def reject_request(
         request.request_id or 0,
         ApprovalStatus.REJECTED,
         decided_by=decided_by,
-        decided_at=now
+        decided_at=now,
     ):
         return ApprovalResult(
             success=False,
             message="Failed to update approval request status",
             request=request,
-            execution_id=execution_id
+            execution_id=execution_id,
         )
 
     # Cancel playbook execution
@@ -974,13 +925,12 @@ def reject_request(
         logger.log(
             level=30,
             msg=f"Failed to cancel playbook execution {execution_id} "
-                "(may already be terminal)"
+            "(may already be terminal)",
         )
         # Don't fail - the rejection was recorded
 
     logger.log(
-        level=20,
-        msg=f"Playbook execution {execution_id} rejected by {decided_by}"
+        level=20, msg=f"Playbook execution {execution_id} rejected by {decided_by}"
     )
 
     # Log rejection to audit log
@@ -999,7 +949,7 @@ def reject_request(
         success=True,
         message=f"Playbook execution {execution_id} rejected",
         request=request,
-        execution_id=execution_id
+        execution_id=execution_id,
     )
 
 
@@ -1007,11 +957,9 @@ def reject_request(
 # Slack Interaction Webhook Handler
 # ============================================================================
 
+
 def verify_slack_signature(
-    signing_secret: str,
-    timestamp: str,
-    body: str,
-    signature: str
+    signing_secret: str, timestamp: str, body: str, signature: str
 ) -> bool:
     """
     Verify the Slack request signature.
@@ -1038,11 +986,9 @@ def verify_slack_signature(
     # Compute expected signature
     sig_basestring = f"v0:{timestamp}:{body}"
     expected_sig = (
-        "v0=" +
-        hmac.new(
-            signing_secret.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
+        "v0="
+        + hmac.new(
+            signing_secret.encode(), sig_basestring.encode(), hashlib.sha256
         ).hexdigest()
     )
 
@@ -1065,8 +1011,7 @@ class SlackInteractionResult:
 
 
 def handle_slack_interaction(
-    payload: Dict[str, Any],
-    slack_client: Optional[WebClient] = None
+    payload: Dict[str, Any], slack_client: Optional[WebClient] = None
 ) -> SlackInteractionResult:
     """
     Handle a Slack interaction webhook callback.
@@ -1084,16 +1029,12 @@ def handle_slack_interaction(
     interaction_type = payload.get("type")
     if interaction_type != "block_actions":
         return SlackInteractionResult(
-            success=False,
-            message=f"Unsupported interaction type: {interaction_type}"
+            success=False, message=f"Unsupported interaction type: {interaction_type}"
         )
 
     actions = payload.get("actions", [])
     if not actions:
-        return SlackInteractionResult(
-            success=False,
-            message="No actions in payload"
-        )
+        return SlackInteractionResult(success=False, message="No actions in payload")
 
     action = actions[0]
     action_id = action.get("action_id")
@@ -1102,8 +1043,7 @@ def handle_slack_interaction(
     # Validate action
     if action_id not in ("approve_playbook", "reject_playbook"):
         return SlackInteractionResult(
-            success=False,
-            message=f"Unknown action: {action_id}"
+            success=False, message=f"Unknown action: {action_id}"
         )
 
     # Parse execution ID
@@ -1111,8 +1051,7 @@ def handle_slack_interaction(
         execution_id = int(execution_id_str)
     except (ValueError, TypeError):
         return SlackInteractionResult(
-            success=False,
-            message=f"Invalid execution ID: {execution_id_str}"
+            success=False, message=f"Invalid execution ID: {execution_id_str}"
         )
 
     # Get user info
@@ -1135,24 +1074,24 @@ def handle_slack_interaction(
         playbook_result = db.query_db(
             "SELECT name FROM medic.playbooks WHERE playbook_id = %s",
             (execution.playbook_id,),
-            show_columns=True
+            show_columns=True,
         )
-        if playbook_result and playbook_result != '[]':
+        if playbook_result and playbook_result != "[]":
             rows = json.loads(str(playbook_result))
             if rows:
-                playbook_name = rows[0].get('name', 'Unknown')
+                playbook_name = rows[0].get("name", "Unknown")
 
         # Try to get service name
         if execution.service_id:
             service_result = db.query_db(
                 "SELECT name FROM services WHERE service_id = %s",
                 (execution.service_id,),
-                show_columns=True
+                show_columns=True,
             )
-            if service_result and service_result != '[]':
+            if service_result and service_result != "[]":
                 rows = json.loads(str(service_result))
                 if rows:
-                    service_name = rows[0].get('name', 'Unknown')
+                    service_name = rows[0].get("name", "Unknown")
 
     # Process the action
     if action_id == "approve_playbook":
@@ -1166,17 +1105,15 @@ def handle_slack_interaction(
         logger.log(
             level=30,
             msg=f"Failed to process {action_id} for execution {execution_id}: "
-                f"{result.message}"
+            f"{result.message}",
         )
-        return SlackInteractionResult(
-            success=False,
-            message=result.message
-        )
+        return SlackInteractionResult(success=False, message=result.message)
 
     # Update the Slack message to show result
     if message_ts and channel_id:
         decided_at = (
-            result.request.decided_at if result.request and result.request.decided_at
+            result.request.decided_at
+            if result.request and result.request.decided_at
             else get_now()
         )
         update_approval_message(
@@ -1188,13 +1125,11 @@ def handle_slack_interaction(
             approved=approved,
             decided_by=user_id,
             decided_at=decided_at,
-            slack_client=slack_client
+            slack_client=slack_client,
         )
 
     return SlackInteractionResult(
-        success=True,
-        message=result.message,
-        response_action="update"
+        success=True, message=result.message, response_action="update"
     )
 
 
@@ -1220,18 +1155,18 @@ def expire_pending_requests() -> int:
           AND expires_at < %s
         """,
         (now,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return 0
 
     rows = json.loads(str(result))
     expired_count = 0
 
     for row in rows:
-        request_id = row.get('request_id')
-        execution_id = row.get('execution_id')
+        request_id = row.get("request_id")
+        execution_id = row.get("execution_id")
 
         # Update request status to expired
         if update_approval_request_status(request_id, ApprovalStatus.EXPIRED):
@@ -1242,7 +1177,7 @@ def expire_pending_requests() -> int:
             logger.log(
                 level=20,
                 msg=f"Expired approval request {request_id} "
-                    f"(execution: {execution_id})"
+                f"(execution: {execution_id})",
             )
 
     return expired_count

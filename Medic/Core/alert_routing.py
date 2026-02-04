@@ -15,6 +15,7 @@ Working hours support:
 - Use route_alert_with_schedule() for working hours-aware routing
 - The current period is determined by the service's schedule (if any)
 """
+
 import os
 import json
 import logging
@@ -88,9 +89,7 @@ def get_slack_channel_for_service(service_id: int) -> str:
             f"using default for service {service_id}"
         )
     else:
-        logger.debug(
-            f"No team for service {service_id}, using default channel"
-        )
+        logger.debug(f"No team for service {service_id}, using default channel")
 
     return default_channel
 
@@ -126,9 +125,7 @@ def get_slack_channel_for_team(team_id: int) -> str:
     if team.get("slack_channel_id"):
         return team["slack_channel_id"]
 
-    logger.debug(
-        f"Team '{team['name']}' has no Slack channel, using default"
-    )
+    logger.debug(f"Team '{team['name']}' has no Slack channel, using default")
     return default_channel
 
 
@@ -276,7 +273,7 @@ def route_alert(
     service_id: int,
     payload: Dict[str, Any],
     mode: NotificationMode = NotificationMode.NOTIFY_ALL,
-    sender: Optional[Callable[[NotificationTarget, Dict[str, Any]], bool]] = None
+    sender: Optional[Callable[[NotificationTarget, Dict[str, Any]], bool]] = None,
 ) -> List[NotificationResult]:
     """
     Route an alert to notification targets for a service.
@@ -294,9 +291,7 @@ def route_alert(
     targets = get_notification_targets_for_service(service_id)
 
     if not targets:
-        logger.debug(
-            f"No notification targets found for service {service_id}"
-        )
+        logger.debug(f"No notification targets found for service {service_id}")
         return []
 
     if sender is None:
@@ -366,9 +361,7 @@ def _route_notify_all(
                     f"({target.target_type.value})"
                 )
         except Exception as e:
-            logger.error(
-                f"Error sending alert to target {target.target_id}: {e}"
-            )
+            logger.error(f"Error sending alert to target {target.target_id}: {e}")
             results.append(
                 NotificationResult(
                     target_id=target.target_id,
@@ -436,9 +429,7 @@ def _route_notify_until_success(
                 )
 
         except Exception as e:
-            logger.error(
-                f"Error sending alert to target {target.target_id}: {e}"
-            )
+            logger.error(f"Error sending alert to target {target.target_id}: {e}")
             results.append(
                 NotificationResult(
                     target_id=target.target_id,
@@ -558,8 +549,7 @@ def _send_webhook_notification(
         return False
 
     logger.debug(
-        f"Sending webhook notification to {url} "
-        f"for target {target.target_id}"
+        f"Sending webhook notification to {url} " f"for target {target.target_id}"
     )
     # Placeholder - actual webhook sending would be implemented here
     # or delegated to webhook_delivery service
@@ -581,7 +571,7 @@ def has_notification_targets(service_id: int) -> bool:
 
 
 def get_successful_results(
-    results: List[NotificationResult]
+    results: List[NotificationResult],
 ) -> List[NotificationResult]:
     """
     Filter notification results to only successful ones.
@@ -595,9 +585,7 @@ def get_successful_results(
     return [r for r in results if r.success]
 
 
-def get_failed_results(
-    results: List[NotificationResult]
-) -> List[NotificationResult]:
+def get_failed_results(results: List[NotificationResult]) -> List[NotificationResult]:
     """
     Filter notification results to only failed ones.
 
@@ -729,9 +717,7 @@ def route_alert_with_schedule(
     elif mode == NotificationMode.NOTIFY_UNTIL_SUCCESS:
         results = _route_notify_until_success(targets, payload, sender)
     else:
-        logger.warning(
-            f"Unknown routing mode: {mode}, defaulting to notify_all"
-        )
+        logger.warning(f"Unknown routing mode: {mode}, defaulting to notify_all")
         results = _route_notify_all(targets, payload, sender)
 
     return results

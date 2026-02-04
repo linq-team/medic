@@ -19,6 +19,7 @@ Usage in playbooks:
         headers:
           Authorization: "Bearer ${secrets.API_TOKEN}"
 """
+
 import base64
 import json
 import logging
@@ -41,15 +42,16 @@ ENCRYPTION_KEY_ENV_VAR = "MEDIC_SECRETS_KEY"
 
 # AES-256-GCM constants
 NONCE_SIZE = 12  # 96 bits for GCM
-TAG_SIZE = 16    # 128 bits authentication tag
-KEY_SIZE = 32    # 256 bits for AES-256
+TAG_SIZE = 16  # 128 bits authentication tag
+KEY_SIZE = 32  # 256 bits for AES-256
 
 # Pattern for secret references: ${secrets.SECRET_NAME}
-SECRET_PATTERN = re.compile(r'\$\{secrets\.([A-Za-z_][A-Za-z0-9_]*)\}')
+SECRET_PATTERN = re.compile(r"\$\{secrets\.([A-Za-z_][A-Za-z0-9_]*)\}")
 
 # Try to import cryptography, but allow graceful degradation
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
@@ -61,21 +63,25 @@ except ImportError:
 
 class SecretsError(Exception):
     """Base exception for secrets-related errors."""
+
     pass
 
 
 class EncryptionKeyError(SecretsError):
     """Raised when the encryption key is missing or invalid."""
+
     pass
 
 
 class SecretNotFoundError(SecretsError):
     """Raised when a secret is not found."""
+
     pass
 
 
 class DecryptionError(SecretsError):
     """Raised when decryption fails."""
+
     pass
 
 
@@ -96,12 +102,8 @@ class Secret:
             "secret_id": self.secret_id,
             "name": self.name,
             "description": self.description,
-            "created_at": (
-                self.created_at.isoformat() if self.created_at else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat() if self.updated_at else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
             "created_by": self.created_by,
         }
 
@@ -130,8 +132,7 @@ def _get_encryption_key() -> bytes:
         key = base64.b64decode(key_b64)
     except Exception as e:
         raise EncryptionKeyError(
-            f"Invalid encryption key format: {e}. "
-            "Key must be base64-encoded."
+            f"Invalid encryption key format: {e}. " "Key must be base64-encoded."
         )
 
     if len(key) != KEY_SIZE:
@@ -155,7 +156,7 @@ def generate_encryption_key() -> str:
         The generated key should be stored securely.
     """
     key = os.urandom(KEY_SIZE)
-    return base64.b64encode(key).decode('utf-8')
+    return base64.b64encode(key).decode("utf-8")
 
 
 def encrypt_secret(plaintext: str) -> tuple[bytes, bytes, bytes]:
@@ -187,9 +188,7 @@ def encrypt_secret(plaintext: str) -> tuple[bytes, bytes, bytes]:
         aesgcm = AESGCM(key)
         # Encrypt and get ciphertext with appended tag
         ciphertext_with_tag = aesgcm.encrypt(
-            nonce,
-            plaintext.encode('utf-8'),
-            None  # No additional authenticated data
+            nonce, plaintext.encode("utf-8"), None  # No additional authenticated data
         )
 
         # Split ciphertext and tag (tag is last 16 bytes)
@@ -202,11 +201,7 @@ def encrypt_secret(plaintext: str) -> tuple[bytes, bytes, bytes]:
         raise SecretsError(f"Encryption failed: {e}")
 
 
-def decrypt_secret(
-    ciphertext: bytes,
-    nonce: bytes,
-    tag: bytes
-) -> str:
+def decrypt_secret(ciphertext: bytes, nonce: bytes, tag: bytes) -> str:
     """
     Decrypt a secret value using AES-256-GCM.
 
@@ -235,7 +230,7 @@ def decrypt_secret(
         # Reconstruct ciphertext with tag appended
         ciphertext_with_tag = ciphertext + tag
         plaintext_bytes = aesgcm.decrypt(nonce, ciphertext_with_tag, None)
-        return plaintext_bytes.decode('utf-8')
+        return plaintext_bytes.decode("utf-8")
 
     except Exception as e:
         raise DecryptionError(
@@ -248,11 +243,12 @@ def decrypt_secret(
 # Database Operations
 # ============================================================================
 
+
 def create_secret(
     name: str,
     value: str,
     description: Optional[str] = None,
-    created_by: Optional[str] = None
+    created_by: Optional[str] = None,
 ) -> Optional[Secret]:
     """
     Create a new secret in the database.
@@ -271,7 +267,7 @@ def create_secret(
         SecretsError: If encryption fails
     """
     # Validate name format
-    if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', name):
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
         logger.error(
             f"Invalid secret name format: '{name}'. "
             "Must match [A-Za-z_][A-Za-z0-9_]*"
@@ -292,10 +288,10 @@ def create_secret(
         RETURNING secret_id
         """,
         (name, ciphertext, nonce, tag, description, created_by, now, now),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         logger.error(f"Failed to create secret '{name}'")
         return None
 
@@ -303,7 +299,7 @@ def create_secret(
     if not rows:
         return None
 
-    secret_id = rows[0].get('secret_id')
+    secret_id = rows[0].get("secret_id")
 
     logger.info(f"Created secret '{name}' (id: {secret_id})")
 
@@ -317,11 +313,7 @@ def create_secret(
     )
 
 
-def update_secret(
-    name: str,
-    value: str,
-    description: Optional[str] = None
-) -> bool:
+def update_secret(name: str, value: str, description: Optional[str] = None) -> bool:
     """
     Update an existing secret's value.
 
@@ -351,7 +343,7 @@ def update_secret(
                 description = %s, updated_at = %s
             WHERE name = %s
             """,
-            (ciphertext, nonce, tag, description, now, name)
+            (ciphertext, nonce, tag, description, now, name),
         )
     else:
         result = db.insert_db(
@@ -360,7 +352,7 @@ def update_secret(
             SET encrypted_value = %s, nonce = %s, tag = %s, updated_at = %s
             WHERE name = %s
             """,
-            (ciphertext, nonce, tag, now, name)
+            (ciphertext, nonce, tag, now, name),
         )
 
     if result:
@@ -379,10 +371,7 @@ def delete_secret(name: str) -> bool:
     Returns:
         True if deleted, False otherwise
     """
-    result = db.insert_db(
-        "DELETE FROM medic.secrets WHERE name = %s",
-        (name,)
-    )
+    result = db.insert_db("DELETE FROM medic.secrets WHERE name = %s", (name,))
 
     if result:
         logger.info(f"Deleted secret '{name}'")
@@ -407,10 +396,10 @@ def get_secret(name: str) -> Optional[Secret]:
         WHERE name = %s
         """,
         (name,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return None
 
     rows = json.loads(str(result))
@@ -443,10 +432,10 @@ def get_secret_value(name: str) -> str:
         WHERE name = %s
         """,
         (name,),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         raise SecretNotFoundError(f"Secret '{name}' not found")
 
     rows = json.loads(str(result))
@@ -456,26 +445,26 @@ def get_secret_value(name: str) -> str:
     row = rows[0]
 
     # Handle bytes that may have been JSON-serialized
-    encrypted_value = row['encrypted_value']
-    nonce = row['nonce']
-    tag = row['tag']
+    encrypted_value = row["encrypted_value"]
+    nonce = row["nonce"]
+    tag = row["tag"]
 
     # If stored as memoryview or string, convert to bytes
     if isinstance(encrypted_value, memoryview):
         encrypted_value = bytes(encrypted_value)
     elif isinstance(encrypted_value, str):
         # Handle hex-encoded bytes from JSON serialization
-        encrypted_value = bytes.fromhex(encrypted_value.replace('\\x', ''))
+        encrypted_value = bytes.fromhex(encrypted_value.replace("\\x", ""))
 
     if isinstance(nonce, memoryview):
         nonce = bytes(nonce)
     elif isinstance(nonce, str):
-        nonce = bytes.fromhex(nonce.replace('\\x', ''))
+        nonce = bytes.fromhex(nonce.replace("\\x", ""))
 
     if isinstance(tag, memoryview):
         tag = bytes(tag)
     elif isinstance(tag, str):
-        tag = bytes.fromhex(tag.replace('\\x', ''))
+        tag = bytes.fromhex(tag.replace("\\x", ""))
 
     return decrypt_secret(encrypted_value, nonce, tag)
 
@@ -493,16 +482,14 @@ def list_secrets() -> List[Secret]:
         FROM medic.secrets
         ORDER BY name ASC
         """,
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     rows = json.loads(str(result))
-    return [
-        sec for sec in (_parse_secret(r) for r in rows if r) if sec is not None
-    ]
+    return [sec for sec in (_parse_secret(r) for r in rows if r) if sec is not None]
 
 
 def secret_exists(name: str) -> bool:
@@ -516,12 +503,10 @@ def secret_exists(name: str) -> bool:
         True if the secret exists, False otherwise
     """
     result = db.query_db(
-        "SELECT 1 FROM medic.secrets WHERE name = %s",
-        (name,),
-        show_columns=True
+        "SELECT 1 FROM medic.secrets WHERE name = %s", (name,), show_columns=True
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return False
 
     rows = json.loads(str(result))
@@ -531,8 +516,8 @@ def secret_exists(name: str) -> bool:
 def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
     """Parse a database row into a Secret object."""
     try:
-        created_at_raw = data.get('created_at')
-        updated_at_raw = data.get('updated_at')
+        created_at_raw = data.get("created_at")
+        updated_at_raw = data.get("updated_at")
 
         # Parse datetime strings if needed
         created_at: datetime
@@ -540,7 +525,7 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
 
         if isinstance(created_at_raw, str):
             created_at = datetime.fromisoformat(
-                created_at_raw.replace(' ', 'T').replace(' CST', '-06:00')
+                created_at_raw.replace(" ", "T").replace(" CST", "-06:00")
             )
         elif isinstance(created_at_raw, datetime):
             created_at = created_at_raw
@@ -549,7 +534,7 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
 
         if isinstance(updated_at_raw, str):
             updated_at = datetime.fromisoformat(
-                updated_at_raw.replace(' ', 'T').replace(' CST', '-06:00')
+                updated_at_raw.replace(" ", "T").replace(" CST", "-06:00")
             )
         elif isinstance(updated_at_raw, datetime):
             updated_at = updated_at_raw
@@ -557,12 +542,12 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
             updated_at = get_now()
 
         return Secret(
-            secret_id=data['secret_id'],
-            name=data['name'],
-            description=data.get('description'),
+            secret_id=data["secret_id"],
+            name=data["name"],
+            description=data.get("description"),
             created_at=created_at,
             updated_at=updated_at,
-            created_by=data.get('created_by'),
+            created_by=data.get("created_by"),
         )
     except (KeyError, ValueError, TypeError) as e:
         logger.error(f"Failed to parse secret data: {e}")
@@ -573,10 +558,8 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
 # Secret Substitution for Playbooks
 # ============================================================================
 
-def substitute_secrets(
-    value: Any,
-    context: Optional[Dict[str, str]] = None
-) -> Any:
+
+def substitute_secrets(value: Any, context: Optional[Dict[str, str]] = None) -> Any:
     """
     Substitute secret references in a value.
 
@@ -598,6 +581,7 @@ def substitute_secrets(
     secrets_cache = context if context is not None else {}
 
     if isinstance(value, str):
+
         def replace_secret(match: re.Match) -> str:
             secret_name = match.group(1)
 
@@ -617,10 +601,7 @@ def substitute_secrets(
         return SECRET_PATTERN.sub(replace_secret, value)
 
     elif isinstance(value, dict):
-        return {
-            k: substitute_secrets(v, secrets_cache)
-            for k, v in value.items()
-        }
+        return {k: substitute_secrets(v, secrets_cache) for k, v in value.items()}
 
     elif isinstance(value, list):
         return [substitute_secrets(item, secrets_cache) for item in value]

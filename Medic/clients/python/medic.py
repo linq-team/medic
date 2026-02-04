@@ -16,7 +16,9 @@ def get_base_url() -> str:
     return os.environ.get("MEDIC_BASE_URL", DEFAULT_BASE_URL)
 
 
-def SendHeartbeat(heartbeat_name: str, service_name: str, status: str, base_url: Optional[str] = None) -> bool:
+def SendHeartbeat(
+    heartbeat_name: str, service_name: str, status: str, base_url: Optional[str] = None
+) -> bool:
     """
     Send a heartbeat to the Medic service.
 
@@ -34,7 +36,7 @@ def SendHeartbeat(heartbeat_name: str, service_name: str, status: str, base_url:
         payload = {
             "heartbeat_name": heartbeat_name,
             "service_name": service_name,
-            "status": status
+            "status": status,
         }
         headers = {
             "Content-Type": "application/json",

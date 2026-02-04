@@ -2,15 +2,63 @@
 
 This guide covers how to set up the Medic Slack app for receiving heartbeat failure notifications.
 
-## App Icon
+## App Icons
 
-Use this icon when creating your Slack app:
+Use these icons when creating your Slack apps:
 
-![Medic App Icon](assets/medic-icon-all-green.png)
+| Environment | Icon | File |
+|-------------|------|------|
+| Production | ![Medic](assets/medic-icon-all-green.png) | `docs/assets/medic-icon-all-green.png` |
+| Development | ![Dev-Medic](assets/medic-icon-dev.png) | `docs/assets/medic-icon-dev.png` |
+
+The dev icon has a red "DEV" banner to make it easy to distinguish from production.
 
 ---
 
-## Creating the Slack App
+## Quick Setup (Recommended)
+
+The fastest way to create the Medic Slack app is using the app manifest.
+
+### Using the App Manifest
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps)
+2. Click **Create New App**
+3. Select **From an app manifest**
+4. Select your workspace
+5. Copy the contents of one of these manifest files:
+   - **Production:** `slack-manifest.yml` (in the repo root)
+   - **Development:** `slack-manifest-dev.yml` (for local dev/testing)
+6. Paste the YAML content and click **Next**
+7. Review the app configuration and click **Create**
+8. Click **Install to Workspace** and authorize
+
+After installation:
+- Go to **Basic Information** → **Display Information** → Upload the appropriate icon:
+  - Production: `docs/assets/medic-icon-all-green.png`
+  - Development: `docs/assets/medic-icon-dev.png` (has red "DEV" banner)
+- Go to **OAuth & Permissions** → Copy **Bot User OAuth Token**
+- Go to **Basic Information** → **App Credentials** → Copy **Signing Secret**
+- Update the **Interactivity Request URL** in app settings to your Medic instance URL
+
+Then add these to your `.env` file:
+```bash
+# "Bot User OAuth Token" from Slack (starts with xoxb-)
+SLACK_API_TOKEN=xoxb-your-copied-bot-token
+
+# "Signing Secret" from Basic Information -> App Credentials
+SLACK_SIGNING_SECRET=your-copied-signing-secret
+
+# See "Finding the Channel ID" below
+SLACK_CHANNEL_ID=C0123456789
+```
+
+Skip to [Finding the Channel ID](#finding-the-channel-id) to complete setup.
+
+---
+
+## Manual Setup
+
+If you prefer to create the app manually or need to customize it:
 
 ### Step 1: Create a New App
 
@@ -48,7 +96,18 @@ Use this icon when creating your Slack app:
 3. Review permissions and click **Allow**
 4. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
 
-### Step 5: Invite Bot to Channel
+### Step 5: Get the Signing Secret (For Interactive Features)
+
+If you plan to use Slack interactive features (buttons, approvals, slash commands):
+
+1. Go to **Basic Information** in your app settings
+2. Scroll to **App Credentials**
+3. Find **Signing Secret** and click **Show**
+4. Copy the signing secret value
+
+> **Note:** The signing secret is used to verify that incoming requests to your webhook endpoints actually come from Slack.
+
+### Step 6: Invite Bot to Channel
 
 1. In Slack, go to the channel where you want alerts
 2. Type `/invite @Medic` or click the channel name → **Integrations** → **Add apps**
@@ -58,15 +117,25 @@ Use this icon when creating your Slack app:
 
 ## Environment Configuration
 
-Set these environment variables in your Medic deployment:
+Set these environment variables in your Medic deployment (in your `.env` file):
 
 ```bash
-# Bot token from Step 4
+# Bot token - for sending messages to Slack
 SLACK_API_TOKEN=xoxb-your-token-here
 
-# Channel ID from Step 5
+# Channel ID - where alerts are sent
 SLACK_CHANNEL_ID=C0123456789
+
+# Signing secret - verifies incoming webhook requests from Slack
+# Required for interactive features (approve/decline buttons)
+SLACK_SIGNING_SECRET=your-signing-secret-here
 ```
+
+| Variable | Slack Name | Purpose |
+|----------|------------|---------|
+| `SLACK_API_TOKEN` | "Bot User OAuth Token" (starts with `xoxb-`) | Authenticate API calls to send messages |
+| `SLACK_CHANNEL_ID` | Channel ID (starts with `C`) | Target channel for alerts |
+| `SLACK_SIGNING_SECRET` | "Signing Secret" | Verify button clicks came from Slack |
 
 ### Finding the Channel ID
 
@@ -79,6 +148,44 @@ SLACK_CHANNEL_ID=C0123456789
 1. Open the channel in Slack web
 2. URL format: `https://app.slack.com/client/TXXXXXX/CXXXXXX`
 3. The `CXXXXXX` part is your Channel ID
+
+---
+
+## Enabling Interactivity (For Playbook Approvals)
+
+Medic supports interactive approval workflows where users can approve or decline playbook executions directly from Slack using buttons.
+
+### Configure Interactivity
+
+1. Go to your app settings at [api.slack.com/apps](https://api.slack.com/apps)
+2. Select your Medic app
+3. Go to **Interactivity & Shortcuts** in the sidebar
+4. Toggle **Interactivity** to **On**
+5. Set the **Request URL** to your Medic instance:
+   ```
+   https://your-medic-instance.example.com/api/v1/slack/interactions
+   ```
+6. Click **Save Changes**
+
+### Local Development with Interactivity
+
+For local development, Slack needs to reach your local server. Use a tunnel service:
+
+**Using ngrok:**
+```bash
+# Start ngrok tunnel to your local Medic API
+ngrok http 8080
+
+# Note the https URL, e.g., https://abc123.ngrok.io
+# Set the Request URL to: https://abc123.ngrok.io/api/v1/slack/interactions
+```
+
+**Using Cloudflare Tunnel:**
+```bash
+cloudflared tunnel --url http://localhost:8080
+```
+
+> **Important:** The signing secret (`SLACK_SIGNING_SECRET`) must be set in your `.env` file for Medic to verify that incoming button clicks actually came from Slack. Without it, the interactivity endpoint will reject all requests.
 
 ---
 

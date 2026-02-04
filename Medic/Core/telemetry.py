@@ -27,6 +27,7 @@ Usage:
     # Get trace ID for logging
     trace_id = get_current_trace_id()
 """
+
 import logging
 import os
 from typing import Optional
@@ -71,9 +72,7 @@ def get_otel_config() -> dict:
     Returns:
         Dictionary with OTEL configuration values
     """
-    endpoint = os.environ.get(
-        "OTEL_EXPORTER_OTLP_ENDPOINT", DEFAULT_OTLP_ENDPOINT
-    )
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", DEFAULT_OTLP_ENDPOINT)
     service_name = os.environ.get("OTEL_SERVICE_NAME", DEFAULT_SERVICE_NAME)
     environment = os.environ.get("MEDIC_ENVIRONMENT", DEFAULT_ENVIRONMENT)
     version = os.environ.get("MEDIC_VERSION", DEFAULT_VERSION)
@@ -214,17 +213,11 @@ def init_telemetry(app: Flask, enable: bool = True) -> bool:
     global _initialized, _tracer_provider
 
     if _initialized:
-        logger.log(
-            level=10,
-            msg="Telemetry already initialized, skipping"
-        )
+        logger.log(level=10, msg="Telemetry already initialized, skipping")
         return True
 
     if not enable:
-        logger.log(
-            level=20,
-            msg="Telemetry disabled via enable=False"
-        )
+        logger.log(level=20, msg="Telemetry disabled via enable=False")
         _initialized = True
         return True
 
@@ -235,8 +228,8 @@ def init_telemetry(app: Flask, enable: bool = True) -> bool:
         logger.log(
             level=20,
             msg=f"Initializing OpenTelemetry: service={config['service_name']}"
-                f", endpoint={config['endpoint']}"
-                f", environment={config['environment']}"
+            f", endpoint={config['endpoint']}"
+            f", environment={config['environment']}",
         )
 
         # Create resource and tracer provider
@@ -259,18 +252,72 @@ def init_telemetry(app: Flask, enable: bool = True) -> bool:
 
         _initialized = True
 
-        logger.log(
-            level=20,
-            msg="OpenTelemetry initialization complete"
-        )
+        logger.log(level=20, msg="OpenTelemetry initialization complete")
 
         return True
 
     except Exception as e:
+        logger.log(level=40, msg=f"Failed to initialize OpenTelemetry: {e}")
+        return False
+
+
+def init_worker_telemetry(
+    service_name: str = "medic-worker", enable: bool = True
+) -> bool:
+    """
+    Initialize OpenTelemetry instrumentation for background workers.
+
+    This function initializes telemetry without Flask dependencies,
+    suitable for background processes like the monitoring worker.
+
+    Args:
+        service_name: Service name for traces (default: medic-worker)
+        enable: Whether to enable telemetry (default: True)
+
+    Returns:
+        True if initialization succeeded, False otherwise
+    """
+    global _initialized, _tracer_provider
+
+    if _initialized:
+        logger.log(level=10, msg="Telemetry already initialized, skipping")
+        return True
+
+    if not enable:
+        logger.log(level=20, msg="Worker telemetry disabled via enable=False")
+        _initialized = True
+        return True
+
+    try:
+        # Get configuration and override service name
+        config = get_otel_config()
+        config["service_name"] = service_name
+
         logger.log(
-            level=40,
-            msg=f"Failed to initialize OpenTelemetry: {e}"
+            level=20,
+            msg=f"Initializing worker OpenTelemetry: service={config['service_name']}"
+            f", endpoint={config['endpoint']}"
+            f", environment={config['environment']}",
         )
+
+        # Create resource and tracer provider
+        resource = create_resource(config)
+        _tracer_provider = create_tracer_provider(resource, config["endpoint"])
+
+        # Set as global tracer provider
+        trace.set_tracer_provider(_tracer_provider)
+
+        # Setup W3C trace context propagation
+        setup_propagators()
+
+        _initialized = True
+
+        logger.log(level=20, msg="Worker OpenTelemetry initialization complete")
+
+        return True
+
+    except Exception as e:
+        logger.log(level=40, msg=f"Failed to initialize worker OpenTelemetry: {e}")
         return False
 
 
@@ -285,15 +332,9 @@ def shutdown_telemetry() -> None:
     if _tracer_provider is not None:
         try:
             _tracer_provider.shutdown()
-            logger.log(
-                level=20,
-                msg="OpenTelemetry shutdown complete"
-            )
+            logger.log(level=20, msg="OpenTelemetry shutdown complete")
         except Exception as e:
-            logger.log(
-                level=30,
-                msg=f"Error during OpenTelemetry shutdown: {e}"
-            )
+            logger.log(level=30, msg=f"Error during OpenTelemetry shutdown: {e}")
 
     _initialized = False
     _tracer_provider = None

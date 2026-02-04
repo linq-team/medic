@@ -32,6 +32,7 @@ Usage:
         trace_id="abc123def456"
     )
 """
+
 import logging
 import os
 import time
@@ -87,168 +88,141 @@ _config = _get_config()
 
 # Application info - OTEL semantic: service.* attributes
 # Using Info metric for static service metadata
-APP_INFO = Info('medic_app', 'Medic application information')
-APP_INFO.info({
-    'version': '2.0.0',
-    'description': 'Heartbeat monitoring service'
-})
+APP_INFO = Info("medic_app", "Medic application information")
+APP_INFO.info({"version": "2.0.0", "description": "Heartbeat monitoring service"})
 
 # Service info gauge with OTEL resource attributes
 # This provides dynamic resource labels for Grafana
 # Named 'medic_build_info' to follow Prometheus conventions
 MEDIC_BUILD_INFO = Gauge(
-    'medic_build_info',
-    'Medic service information with OTEL resource attributes',
-    ['service_name', 'service_version', 'deployment_environment']
+    "medic_build_info",
+    "Medic service information with OTEL resource attributes",
+    ["service_name", "service_version", "deployment_environment"],
 )
 # Set the gauge to 1 with resource attribute labels
 MEDIC_BUILD_INFO.labels(
     service_name=_config["service_name"],
     service_version=_config["version"],
-    deployment_environment=_config["environment"]
+    deployment_environment=_config["environment"],
 ).set(1)
 
 # Request metrics - OTEL semantic: http.server.* namespace
 REQUEST_COUNT = Counter(
-    'medic_http_server_request_total',
-    'Total HTTP requests (OTEL: http.server.request.total)',
-    ['method', 'route', 'status_code', 'service_name']
+    "medic_http_server_request_total",
+    "Total HTTP requests (OTEL: http.server.request.total)",
+    ["method", "route", "status_code", "service_name"],
 )
 
 REQUEST_LATENCY = Histogram(
-    'medic_http_server_request_duration_seconds',
-    'HTTP request latency in seconds (OTEL: http.server.request.duration)',
-    ['method', 'route', 'service_name'],
-    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    "medic_http_server_request_duration_seconds",
+    "HTTP request latency in seconds (OTEL: http.server.request.duration)",
+    ["method", "route", "service_name"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
 )
 
 # Heartbeat metrics - application specific
 HEARTBEAT_COUNT = Counter(
-    'medic_heartbeats_total',
-    'Total heartbeats received',
-    ['heartbeat_name', 'status']
+    "medic_heartbeats_total", "Total heartbeats received", ["heartbeat_name", "status"]
 )
 
 HEARTBEAT_REGISTERED = Gauge(
-    'medic_registered_services',
-    'Number of registered heartbeat services'
+    "medic_registered_services", "Number of registered heartbeat services"
 )
 
-HEARTBEAT_ACTIVE = Gauge(
-    'medic_active_services',
-    'Number of active heartbeat services'
-)
+HEARTBEAT_ACTIVE = Gauge("medic_active_services", "Number of active heartbeat services")
 
 # Alert metrics
 ALERT_COUNT = Counter(
-    'medic_alerts_total',
-    'Total alerts triggered',
-    ['priority', 'team']
+    "medic_alerts_total", "Total alerts triggered", ["priority", "team"]
 )
 
-ALERT_ACTIVE = Gauge(
-    'medic_alerts_active',
-    'Number of currently active alerts'
-)
+ALERT_ACTIVE = Gauge("medic_alerts_active", "Number of currently active alerts")
 
-ALERT_RESOLVED = Counter(
-    'medic_alerts_resolved_total',
-    'Total alerts resolved'
-)
+ALERT_RESOLVED = Counter("medic_alerts_resolved_total", "Total alerts resolved")
 
 # Worker metrics
 WORKER_CYCLE_DURATION = Histogram(
-    'medic_worker_cycle_duration_seconds',
-    'Duration of worker monitoring cycle',
-    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0]
+    "medic_worker_cycle_duration_seconds",
+    "Duration of worker monitoring cycle",
+    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
 )
 
 WORKER_SERVICES_CHECKED = Counter(
-    'medic_worker_services_checked_total',
-    'Total services checked by worker'
+    "medic_worker_services_checked_total", "Total services checked by worker"
 )
 
 # Database metrics - OTEL semantic: db.client.* namespace
 DB_QUERY_DURATION = Histogram(
-    'medic_db_client_operation_duration_seconds',
-    'Database query duration (OTEL: db.client.operation.duration)',
-    ['operation', 'service_name'],
-    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
+    "medic_db_client_operation_duration_seconds",
+    "Database query duration (OTEL: db.client.operation.duration)",
+    ["operation", "service_name"],
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
 )
 
 DB_CONNECTION_ERRORS = Counter(
-    'medic_db_connection_errors_total',
-    'Total database connection errors'
+    "medic_db_connection_errors_total", "Total database connection errors"
 )
 
 # Authentication metrics
 AUTH_FAILURES = Counter(
-    'medic_auth_failures_total',
-    'Total authentication failures',
-    ['reason']
+    "medic_auth_failures_total", "Total authentication failures", ["reason"]
 )
 
 # External service metrics
 PAGERDUTY_REQUESTS = Counter(
-    'medic_pagerduty_requests_total',
-    'Total PagerDuty API requests',
-    ['action', 'status']
+    "medic_pagerduty_requests_total",
+    "Total PagerDuty API requests",
+    ["action", "status"],
 )
 
 SLACK_REQUESTS = Counter(
-    'medic_slack_requests_total',
-    'Total Slack API requests',
-    ['status']
+    "medic_slack_requests_total", "Total Slack API requests", ["status"]
 )
 
 # Health status
 HEALTH_STATUS = Gauge(
-    'medic_health_status',
-    'Health status of Medic components',
-    ['component']
+    "medic_health_status", "Health status of Medic components", ["component"]
 )
 
 # Duration threshold alerts
 DURATION_ALERTS = Counter(
-    'medic_duration_alerts_total',
-    'Total duration threshold alerts triggered',
-    ['alert_type']  # exceeded, stale
+    "medic_duration_alerts_total",
+    "Total duration threshold alerts triggered",
+    ["alert_type"],  # exceeded, stale
 )
 
 STALE_JOBS = Gauge(
-    'medic_stale_jobs_current',
-    'Number of currently stale jobs exceeding max duration'
+    "medic_stale_jobs_current", "Number of currently stale jobs exceeding max duration"
 )
 
 # Circuit breaker metrics
 CIRCUIT_BREAKER_TRIPS = Counter(
-    'medic_circuit_breaker_trips_total',
-    'Total circuit breaker trips (blocked playbook executions)',
-    ['service_id']
+    "medic_circuit_breaker_trips_total",
+    "Total circuit breaker trips (blocked playbook executions)",
+    ["service_id"],
 )
 
 CIRCUIT_BREAKER_OPEN = Gauge(
-    'medic_circuit_breaker_open',
-    'Number of services with open circuit breakers'
+    "medic_circuit_breaker_open", "Number of services with open circuit breakers"
 )
 
 # Playbook execution metrics
 PLAYBOOK_EXECUTIONS = Counter(
-    'medic_playbook_executions_total',
-    'Total playbook executions',
-    ['playbook', 'status', 'service_name']
+    "medic_playbook_executions_total",
+    "Total playbook executions",
+    ["playbook", "status", "service_name"],
 )
 
 PLAYBOOK_EXECUTION_DURATION = Histogram(
-    'medic_playbook_execution_duration_seconds',
-    'Playbook execution duration in seconds',
-    ['playbook', 'service_name'],
-    buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0]
+    "medic_playbook_execution_duration_seconds",
+    "Playbook execution duration in seconds",
+    ["playbook", "service_name"],
+    buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0],
 )
 
 PLAYBOOK_EXECUTIONS_PENDING_APPROVAL = Gauge(
-    'medic_playbook_executions_pending_approval',
-    'Number of playbook executions pending approval'
+    "medic_playbook_executions_pending_approval",
+    "Number of playbook executions pending approval",
 )
 
 
@@ -274,10 +248,7 @@ def _build_exemplar(trace_id: Optional[str]) -> Optional[Dict[str, str]]:
 
 
 def record_request_duration_with_exemplar(
-    method: str,
-    endpoint: str,
-    duration: float,
-    trace_id: Optional[str] = None
+    method: str, endpoint: str, duration: float, trace_id: Optional[str] = None
 ) -> None:
     """
     Record request duration with an optional trace exemplar.
@@ -293,16 +264,12 @@ def record_request_duration_with_exemplar(
     """
     exemplar = _build_exemplar(trace_id)
     REQUEST_LATENCY.labels(
-        method=method,
-        route=endpoint,
-        service_name=_config["service_name"]
+        method=method, route=endpoint, service_name=_config["service_name"]
     ).observe(duration, exemplar=exemplar)
 
 
 def record_playbook_execution_duration_with_exemplar(
-    playbook_name: str,
-    duration_seconds: float,
-    trace_id: Optional[str] = None
+    playbook_name: str, duration_seconds: float, trace_id: Optional[str] = None
 ) -> None:
     """
     Record playbook execution duration with an optional trace exemplar.
@@ -314,15 +281,12 @@ def record_playbook_execution_duration_with_exemplar(
     """
     exemplar = _build_exemplar(trace_id)
     PLAYBOOK_EXECUTION_DURATION.labels(
-        playbook=playbook_name,
-        service_name=_config["service_name"]
+        playbook=playbook_name, service_name=_config["service_name"]
     ).observe(duration_seconds, exemplar=exemplar)
 
 
 def record_db_query_duration_with_exemplar(
-    operation: str,
-    duration: float,
-    trace_id: Optional[str] = None
+    operation: str, duration: float, trace_id: Optional[str] = None
 ) -> None:
     """
     Record database query duration with an optional trace exemplar.
@@ -334,8 +298,7 @@ def record_db_query_duration_with_exemplar(
     """
     exemplar = _build_exemplar(trace_id)
     DB_QUERY_DURATION.labels(
-        operation=operation,
-        service_name=_config["service_name"]
+        operation=operation, service_name=_config["service_name"]
     ).observe(duration, exemplar=exemplar)
 
 
@@ -345,9 +308,11 @@ def track_request_metrics(func: Callable) -> Callable:
 
     Automatically extracts trace_id from Flask g context for exemplar.
     """
+
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         from flask import request, g
+
         start_time = time.time()
 
         try:
@@ -355,17 +320,17 @@ def track_request_metrics(func: Callable) -> Callable:
             status = result[1] if isinstance(result, tuple) else 200
             REQUEST_COUNT.labels(
                 method=request.method,
-                route=request.endpoint or 'unknown',
+                route=request.endpoint or "unknown",
                 status_code=str(status),
-                service_name=_config["service_name"]
+                service_name=_config["service_name"],
             ).inc()
             return result
         except Exception:
             REQUEST_COUNT.labels(
                 method=request.method,
-                route=request.endpoint or 'unknown',
-                status_code='500',
-                service_name=_config["service_name"]
+                route=request.endpoint or "unknown",
+                status_code="500",
+                service_name=_config["service_name"],
             ).inc()
             raise
         finally:
@@ -374,9 +339,9 @@ def track_request_metrics(func: Callable) -> Callable:
             trace_id = getattr(g, "trace_id", None)
             record_request_duration_with_exemplar(
                 method=request.method,
-                endpoint=request.endpoint or 'unknown',
+                endpoint=request.endpoint or "unknown",
                 duration=duration,
-                trace_id=trace_id
+                trace_id=trace_id,
             )
 
     return wrapper
@@ -389,10 +354,12 @@ def track_db_query(operation: str) -> Callable:
     Args:
         operation: Database operation type (select, insert, update, etc.)
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             from flask import g, has_request_context
+
             start_time = time.time()
             try:
                 return func(*args, **kwargs)
@@ -403,11 +370,11 @@ def track_db_query(operation: str) -> Callable:
                 if has_request_context():
                     trace_id = getattr(g, "trace_id", None)
                 record_db_query_duration_with_exemplar(
-                    operation=operation,
-                    duration=duration,
-                    trace_id=trace_id
+                    operation=operation, duration=duration, trace_id=trace_id
                 )
+
         return wrapper
+
     return decorator
 
 
@@ -431,14 +398,13 @@ def record_alert_resolved() -> None:
 def record_pagerduty_request(action: str, success: bool) -> None:
     """Record PagerDuty request metric."""
     PAGERDUTY_REQUESTS.labels(
-        action=action,
-        status='success' if success else 'failure'
+        action=action, status="success" if success else "failure"
     ).inc()
 
 
 def record_slack_request(success: bool) -> None:
     """Record Slack request metric."""
-    SLACK_REQUESTS.labels(status='success' if success else 'failure').inc()
+    SLACK_REQUESTS.labels(status="success" if success else "failure").inc()
 
 
 def record_auth_failure(reason: str) -> None:
@@ -511,15 +477,12 @@ def record_playbook_execution(playbook_name: str, status: str) -> None:
         status: Final status of the execution (completed, failed, cancelled)
     """
     PLAYBOOK_EXECUTIONS.labels(
-        playbook=playbook_name,
-        status=status,
-        service_name=_config["service_name"]
+        playbook=playbook_name, status=status, service_name=_config["service_name"]
     ).inc()
 
 
 def record_playbook_execution_duration(
-    playbook_name: str,
-    duration_seconds: float
+    playbook_name: str, duration_seconds: float
 ) -> None:
     """
     Record the duration of a playbook execution.
@@ -534,9 +497,7 @@ def record_playbook_execution_duration(
         duration_seconds: Duration of the execution in seconds
     """
     record_playbook_execution_duration_with_exemplar(
-        playbook_name=playbook_name,
-        duration_seconds=duration_seconds,
-        trace_id=None
+        playbook_name=playbook_name, duration_seconds=duration_seconds, trace_id=None
     )
 
 
@@ -596,5 +557,5 @@ def refresh_config() -> None:
     MEDIC_BUILD_INFO.labels(
         service_name=_config["service_name"],
         service_version=_config["version"],
-        deployment_environment=_config["environment"]
+        deployment_environment=_config["environment"],
     ).set(1)

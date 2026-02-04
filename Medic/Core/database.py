@@ -1,4 +1,5 @@
 """Database connection and query module for Medic."""
+
 import psycopg2
 import psycopg2.extras
 import os
@@ -21,30 +22,24 @@ def connect_db():
     dbhost = os.environ["DB_HOST"]
     try:
         conn = psycopg2.connect(
-            user=user,
-            password=password,
-            host=dbhost,
-            port="5432",
-            database=dbname
+            user=user, password=password, host=dbhost, port="5432", database=dbname
         )
         logger.log(
             level=10,
-            msg=f"Connected to {dbhost}:5432\\{dbname} with user: {user} successfully."
+            msg=f"Connected to {dbhost}:5432\\{dbname} with user: {user} successfully.",
         )
         return conn
     except psycopg2.Error as e:
         logger.log(
             level=50,
             msg=f"Failed to connect to {dbname} with supplied credentials. "
-                f"Is it running and do you have access? Error: {str(e)}"
+            f"Is it running and do you have access? Error: {str(e)}",
         )
         raise ConnectionError(str(e))
 
 
 def query_db(
-    query: str,
-    params: Optional[Tuple] = None,
-    show_columns: bool = True
+    query: str, params: Optional[Tuple] = None, show_columns: bool = True
 ) -> Optional[Union[str, List]]:
     """
     Execute a SELECT query and return results.
@@ -73,7 +68,7 @@ def query_db(
                 for c in range(len(col_names)):
                     val = r[c]
                     # Handle datetime serialization
-                    if hasattr(val, 'isoformat'):
+                    if hasattr(val, "isoformat"):
                         val = val.isoformat()
                     d[col_names[c]] = val
                 data.append(d)
@@ -81,7 +76,9 @@ def query_db(
         else:
             return rows
     except psycopg2.Error as e:
-        logger.log(level=30, msg=f"Unable to perform query. An Error has occurred: {str(e)}")
+        logger.log(
+            level=30, msg=f"Unable to perform query. An Error has occurred: {str(e)}"
+        )
         return None
     finally:
         if cur:

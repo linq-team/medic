@@ -28,6 +28,7 @@ Usage:
     logger = get_logger(__name__)
     logger.info("Request processed", extra={"user_id": "123"})
 """
+
 import json
 import logging
 import os
@@ -48,10 +49,10 @@ OTEL_SEVERITY_TEXT: Dict[int, str] = {
 }
 
 OTEL_SEVERITY_NUMBER: Dict[int, int] = {
-    logging.DEBUG: 5,      # DEBUG
-    logging.INFO: 9,       # INFO
-    logging.WARNING: 13,   # WARN
-    logging.ERROR: 17,     # ERROR
+    logging.DEBUG: 5,  # DEBUG
+    logging.INFO: 9,  # INFO
+    logging.WARNING: 13,  # WARN
+    logging.ERROR: 17,  # ERROR
     logging.CRITICAL: 21,  # FATAL
 }
 
@@ -219,18 +220,35 @@ class JSONFormatter(logging.Formatter):
                 record.exc_info[0].__name__ if record.exc_info[0] else None
             )
             log_entry["Attributes"]["exception.message"] = str(record.exc_info[1])
-            log_entry["Attributes"]["exception.stacktrace"] = (
-                self.formatException(record.exc_info)
+            log_entry["Attributes"]["exception.stacktrace"] = self.formatException(
+                record.exc_info
             )
 
         # Add any extra fields from the log call
         for key, value in record.__dict__.items():
             if key not in (
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "stack_info", "exc_info", "exc_text", "thread", "threadName",
-                "message", "asctime",
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "message",
+                "asctime",
             ):
                 # Add custom extra fields to Attributes
                 log_entry["Attributes"][key] = value

@@ -28,6 +28,7 @@ Usage:
     # Record execution when it starts
     record_execution(service_id)
 """
+
 import json
 import logging
 from dataclasses import dataclass
@@ -102,7 +103,7 @@ def set_config(config: CircuitBreakerConfig) -> None:
     logger.log(
         level=20,
         msg=f"Circuit breaker config updated: window={config.window_seconds}s, "
-            f"max_executions={config.max_executions}"
+        f"max_executions={config.max_executions}",
     )
 
 
@@ -113,8 +114,7 @@ def reset_config() -> None:
 
 
 def get_execution_count_in_window(
-    service_id: int,
-    window_seconds: Optional[int] = None
+    service_id: int, window_seconds: Optional[int] = None
 ) -> int:
     """
     Get the number of playbook executions for a service within the time window.
@@ -145,28 +145,26 @@ def get_execution_count_in_window(
           AND created_at >= %s
         """,
         (service_id, window_start),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return 0
 
     try:
         rows = json.loads(str(result))
         if rows:
-            return int(rows[0].get('count', 0))
+            return int(rows[0].get("count", 0))
     except (json.JSONDecodeError, TypeError, KeyError, ValueError):
         logger.log(
-            level=30,
-            msg=f"Error parsing execution count for service {service_id}"
+            level=30, msg=f"Error parsing execution count for service {service_id}"
         )
 
     return 0
 
 
 def is_circuit_open(
-    service_id: int,
-    config: Optional[CircuitBreakerConfig] = None
+    service_id: int, config: Optional[CircuitBreakerConfig] = None
 ) -> bool:
     """
     Check if the circuit breaker is open (blocking) for a service.
@@ -191,16 +189,15 @@ def is_circuit_open(
         logger.log(
             level=30,
             msg=f"Circuit breaker OPEN for service {service_id}: "
-                f"{count} executions in last {cfg.window_seconds}s "
-                f"(threshold: {cfg.max_executions})"
+            f"{count} executions in last {cfg.window_seconds}s "
+            f"(threshold: {cfg.max_executions})",
         )
 
     return is_open
 
 
 def check_circuit_breaker(
-    service_id: int,
-    config: Optional[CircuitBreakerConfig] = None
+    service_id: int, config: Optional[CircuitBreakerConfig] = None
 ) -> CircuitBreakerStatus:
     """
     Check the full circuit breaker status for a service.
@@ -232,8 +229,10 @@ def check_circuit_breaker(
         )
     else:
         remaining = cfg.max_executions - count
-        message = f"Circuit closed: {count}/{cfg.max_executions} executions. " \
-                  f"{remaining} more allowed."
+        message = (
+            f"Circuit closed: {count}/{cfg.max_executions} executions. "
+            f"{remaining} more allowed."
+        )
 
     return CircuitBreakerStatus(
         service_id=service_id,
@@ -247,9 +246,7 @@ def check_circuit_breaker(
 
 
 def record_circuit_breaker_trip(
-    service_id: int,
-    execution_count: int,
-    playbook_name: Optional[str] = None
+    service_id: int, execution_count: int, playbook_name: Optional[str] = None
 ) -> None:
     """
     Record a circuit breaker trip event.
@@ -264,6 +261,7 @@ def record_circuit_breaker_trip(
     # Import here to avoid circular imports
     try:
         from Medic.Core.metrics import record_circuit_breaker_trip as record_metric
+
         record_metric(service_id)
     except ImportError:
         pass
@@ -272,14 +270,14 @@ def record_circuit_breaker_trip(
         logger.log(
             level=40,
             msg=f"CIRCUIT BREAKER TRIPPED: Service {service_id} blocked from "
-                f"executing playbook '{playbook_name}'. "
-                f"Execution count: {execution_count}"
+            f"executing playbook '{playbook_name}'. "
+            f"Execution count: {execution_count}",
         )
     else:
         logger.log(
             level=40,
             msg=f"CIRCUIT BREAKER TRIPPED: Service {service_id} blocked. "
-                f"Execution count: {execution_count}"
+            f"Execution count: {execution_count}",
         )
 
 
@@ -308,10 +306,10 @@ def get_services_with_open_circuit() -> List[CircuitBreakerStatus]:
         ORDER BY count DESC
         """,
         (window_start, config.max_executions),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     try:
@@ -319,33 +317,31 @@ def get_services_with_open_circuit() -> List[CircuitBreakerStatus]:
         statuses = []
 
         for row in rows:
-            service_id = row.get('service_id')
-            count = row.get('count', 0)
+            service_id = row.get("service_id")
+            count = row.get("count", 0)
 
             if service_id is not None:
-                statuses.append(CircuitBreakerStatus(
-                    service_id=service_id,
-                    is_open=True,
-                    execution_count=count,
-                    window_start=window_start,
-                    window_end=now,
-                    threshold=config.max_executions,
-                    message=f"Circuit open: {count} executions in window",
-                ))
+                statuses.append(
+                    CircuitBreakerStatus(
+                        service_id=service_id,
+                        is_open=True,
+                        execution_count=count,
+                        window_start=window_start,
+                        window_end=now,
+                        threshold=config.max_executions,
+                        message=f"Circuit open: {count} executions in window",
+                    )
+                )
 
         return statuses
 
     except (json.JSONDecodeError, TypeError, KeyError):
-        logger.log(
-            level=30,
-            msg="Error parsing services with open circuits"
-        )
+        logger.log(level=30, msg="Error parsing services with open circuits")
         return []
 
 
 def get_execution_history_for_service(
-    service_id: int,
-    limit: int = 20
+    service_id: int, limit: int = 20
 ) -> List[Dict[str, Any]]:
     """
     Get recent playbook execution history for a service.
@@ -370,10 +366,10 @@ def get_execution_history_for_service(
         LIMIT %s
         """,
         (service_id, limit),
-        show_columns=True
+        show_columns=True,
     )
 
-    if not result or result == '[]':
+    if not result or result == "[]":
         return []
 
     try:

@@ -15,6 +15,7 @@ Usage:
 
     result = execute_webhook_step(step, execution)
 """
+
 import json
 import logging
 import re
@@ -49,20 +50,18 @@ MAX_RESPONSE_BODY_SIZE = 4096
 DEFAULT_WEBHOOK_TIMEOUT = 30
 
 # Variable pattern for substitution: ${VAR_NAME}
-VARIABLE_PATTERN = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+VARIABLE_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 # Import secrets module - use try/except for graceful degradation
 try:
     from Medic.Core.secrets import substitute_secrets
+
     SECRETS_AVAILABLE = True
 except ImportError:
     SECRETS_AVAILABLE = False
 
 
-def substitute_variables(
-    value: Any,
-    context: Dict[str, Any]
-) -> Any:
+def substitute_variables(value: Any, context: Dict[str, Any]) -> Any:
     """
     Substitute variables in a value using execution context.
 
@@ -83,6 +82,7 @@ def substitute_variables(
         Value with variables substituted
     """
     if isinstance(value, str):
+
         def replace_var(match: re.Match) -> str:
             var_name = match.group(1)
             replacement = context.get(var_name)
@@ -107,9 +107,7 @@ def substitute_variables(
 
 
 def substitute_all(
-    value: Any,
-    context: Dict[str, Any],
-    secrets_cache: Optional[Dict[str, str]] = None
+    value: Any, context: Dict[str, Any], secrets_cache: Optional[Dict[str, str]] = None
 ) -> Any:
     """
     Substitute both variables and secrets in a value.
@@ -140,9 +138,7 @@ def substitute_all(
     return result
 
 
-def _build_webhook_context(
-    execution: PlaybookExecution
-) -> Dict[str, Any]:
+def _build_webhook_context(execution: PlaybookExecution) -> Dict[str, Any]:
     """
     Build the variable context for webhook substitution.
 
@@ -155,26 +151,26 @@ def _build_webhook_context(
     context = dict(execution.context)  # Copy execution context
 
     # Add standard variables
-    context['EXECUTION_ID'] = execution.execution_id
-    context['PLAYBOOK_ID'] = execution.playbook_id
-    context['SERVICE_ID'] = execution.service_id
+    context["EXECUTION_ID"] = execution.execution_id
+    context["PLAYBOOK_ID"] = execution.playbook_id
+    context["SERVICE_ID"] = execution.service_id
 
     # Add playbook name if available
     if execution.playbook:
-        context['PLAYBOOK_NAME'] = execution.playbook.name
+        context["PLAYBOOK_NAME"] = execution.playbook.name
 
     # Get service name from database if we have service_id
     if execution.service_id:
         service_result = db.query_db(
             "SELECT name FROM services WHERE service_id = %s",
             (execution.service_id,),
-            show_columns=True
+            show_columns=True,
         )
-        if service_result and service_result != '[]':
+        if service_result and service_result != "[]":
             try:
                 rows = json.loads(str(service_result))
                 if rows:
-                    context['SERVICE_NAME'] = rows[0].get('name', '')
+                    context["SERVICE_NAME"] = rows[0].get("name", "")
             except (json.JSONDecodeError, TypeError, KeyError):
                 pass
 
@@ -184,7 +180,7 @@ def _build_webhook_context(
 def execute_webhook_step(
     step: WebhookStep,
     execution: PlaybookExecution,
-    http_client: Optional[Callable[..., requests.Response]] = None
+    http_client: Optional[Callable[..., requests.Response]] = None,
 ) -> StepResult:
     """
     Execute a webhook step by making an HTTP request.
@@ -217,7 +213,7 @@ def execute_webhook_step(
         execution_id=execution.execution_id or 0,
         step_name=step.name,
         step_index=step_index,
-        status=StepResultStatus.RUNNING
+        status=StepResultStatus.RUNNING,
     )
 
     if not result:
@@ -252,10 +248,7 @@ def execute_webhook_step(
         # Handle secret substitution errors
         completed_at = get_now()
         error_msg = f"Variable/secret substitution failed: {e}"
-        logger.log(
-            level=30,
-            msg=f"Webhook step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Webhook step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -282,8 +275,7 @@ def execute_webhook_step(
         completed_at = get_now()
         error_msg = "Invalid webhook URL"
         logger.log(
-            level=30,
-            msg=f"Webhook step '{step.name}' failed: URL validation failed"
+            level=30, msg=f"Webhook step '{step.name}' failed: URL validation failed"
         )
 
         update_step_result(
@@ -304,10 +296,7 @@ def execute_webhook_step(
             completed_at=completed_at,
         )
 
-    logger.log(
-        level=20,
-        msg=f"Webhook step '{step.name}': {step.method} {url}"
-    )
+    logger.log(level=20, msg=f"Webhook step '{step.name}': {step.method} {url}")
 
     # Prepare request headers
     request_headers = {"Content-Type": "application/json"}
@@ -327,7 +316,7 @@ def execute_webhook_step(
             url=url,
             headers=request_headers,
             json=body,
-            timeout=timeout
+            timeout=timeout,
         )
 
         # Truncate response body if too large
@@ -352,7 +341,7 @@ def execute_webhook_step(
             logger.log(
                 level=20,
                 msg=f"Webhook step '{step.name}' completed successfully "
-                    f"(status: {response.status_code})"
+                f"(status: {response.status_code})",
             )
 
             update_step_result(
@@ -377,10 +366,7 @@ def execute_webhook_step(
                 f"Unexpected status code {response.status_code}. "
                 f"Expected one of {step.success_codes}"
             )
-            logger.log(
-                level=30,
-                msg=f"Webhook step '{step.name}' failed: {error_msg}"
-            )
+            logger.log(level=30, msg=f"Webhook step '{step.name}' failed: {error_msg}")
 
             update_step_result(
                 result_id=result.result_id or 0,
@@ -405,10 +391,7 @@ def execute_webhook_step(
     except requests.Timeout:
         completed_at = get_now()
         error_msg = f"Request timed out after {timeout}s"
-        logger.log(
-            level=30,
-            msg=f"Webhook step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Webhook step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -431,10 +414,7 @@ def execute_webhook_step(
     except requests.ConnectionError as e:
         completed_at = get_now()
         error_msg = f"Connection error: {str(e)}"
-        logger.log(
-            level=30,
-            msg=f"Webhook step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Webhook step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,
@@ -457,10 +437,7 @@ def execute_webhook_step(
     except requests.RequestException as e:
         completed_at = get_now()
         error_msg = f"Request failed: {str(e)}"
-        logger.log(
-            level=30,
-            msg=f"Webhook step '{step.name}' failed: {error_msg}"
-        )
+        logger.log(level=30, msg=f"Webhook step '{step.name}' failed: {error_msg}")
 
         update_step_result(
             result_id=result.result_id or 0,

@@ -27,6 +27,7 @@ Step result statuses:
 - failed: Step failed
 - skipped: Step was skipped
 """
+
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -95,6 +96,7 @@ try:
         log_execution_completed,
         log_execution_failed,
     )
+
     AUDIT_LOG_AVAILABLE = True
 except ImportError:
     AUDIT_LOG_AVAILABLE = False
@@ -125,6 +127,7 @@ def _update_pending_approval_metric():
 # ============================================================================
 # Execution Engine
 # ============================================================================
+
 
 class PlaybookExecutionEngine:
     """
@@ -157,7 +160,7 @@ class PlaybookExecutionEngine:
         playbook_id: int,
         service_id: Optional[int] = None,
         context: Optional[Dict[str, Any]] = None,
-        skip_approval: bool = False
+        skip_approval: bool = False,
     ) -> Optional[PlaybookExecution]:
         """
         Start a new playbook execution.
@@ -176,7 +179,7 @@ class PlaybookExecutionEngine:
         if not playbook:
             logger.log(
                 level=40,
-                msg=f"Cannot start execution: playbook {playbook_id} not found"
+                msg=f"Cannot start execution: playbook {playbook_id} not found",
             )
             return None
 
@@ -203,7 +206,7 @@ class PlaybookExecutionEngine:
         logger.log(
             level=20,
             msg=f"Started playbook execution {execution.execution_id} "
-                f"for '{playbook.name}' (status: {initial_status.value})"
+            f"for '{playbook.name}' (status: {initial_status.value})",
         )
 
         # Log execution started to audit log
@@ -214,13 +217,13 @@ class PlaybookExecutionEngine:
                 svc_result = db.query_db(
                     "SELECT name FROM services WHERE service_id = %s",
                     (service_id,),
-                    show_columns=True
+                    show_columns=True,
                 )
-                if svc_result and svc_result != '[]':
+                if svc_result and svc_result != "[]":
                     try:
                         rows = json.loads(str(svc_result))
                         if rows:
-                            service_name = rows[0].get('name')
+                            service_name = rows[0].get("name")
                     except (json.JSONDecodeError, TypeError, KeyError):
                         pass
 
@@ -230,7 +233,7 @@ class PlaybookExecutionEngine:
                 playbook_name=playbook.name,
                 service_id=service_id,
                 service_name=service_name,
-                trigger=context.get('trigger') if context else None,
+                trigger=context.get("trigger") if context else None,
                 context=context,
             )
 
@@ -244,10 +247,7 @@ class PlaybookExecutionEngine:
 
         return execution
 
-    def resume_execution(
-        self,
-        execution_id: int
-    ) -> Optional[PlaybookExecution]:
+    def resume_execution(self, execution_id: int) -> Optional[PlaybookExecution]:
         """
         Resume an existing execution from its current state.
 
@@ -262,8 +262,7 @@ class PlaybookExecutionEngine:
         execution = get_execution(execution_id)
         if not execution:
             logger.log(
-                level=30,
-                msg=f"Cannot resume execution {execution_id}: not found"
+                level=30, msg=f"Cannot resume execution {execution_id}: not found"
             )
             return None
 
@@ -271,7 +270,7 @@ class PlaybookExecutionEngine:
             logger.log(
                 level=30,
                 msg=f"Cannot resume execution {execution_id}: "
-                    f"already in terminal state {execution.status.value}"
+                f"already in terminal state {execution.status.value}",
             )
             return execution
 
@@ -281,12 +280,9 @@ class PlaybookExecutionEngine:
             logger.log(
                 level=40,
                 msg=f"Cannot resume execution {execution_id}: "
-                    f"playbook {execution.playbook_id} not found"
+                f"playbook {execution.playbook_id} not found",
             )
-            self._fail_execution(
-                execution,
-                "Playbook not found during resume"
-            )
+            self._fail_execution(execution, "Playbook not found during resume")
             return execution
 
         execution.playbook = playbook
@@ -297,7 +293,7 @@ class PlaybookExecutionEngine:
         logger.log(
             level=20,
             msg=f"Resuming execution {execution_id} at step "
-                f"{execution.current_step}"
+            f"{execution.current_step}",
         )
 
         # Continue execution
@@ -327,7 +323,7 @@ class PlaybookExecutionEngine:
             logger.log(
                 level=30,
                 msg=f"Cannot approve execution {execution_id}: "
-                    f"status is {execution.status.value}, not pending_approval"
+                f"status is {execution.status.value}, not pending_approval",
             )
             return False
 
@@ -336,8 +332,7 @@ class PlaybookExecutionEngine:
             return False
 
         logger.log(
-            level=20,
-            msg=f"Execution {execution_id} approved, starting execution"
+            level=20, msg=f"Execution {execution_id} approved, starting execution"
         )
 
         # Update pending approval metric
@@ -365,22 +360,17 @@ class PlaybookExecutionEngine:
             logger.log(
                 level=30,
                 msg=f"Cannot cancel execution {execution_id}: "
-                    f"already in terminal state {execution.status.value}"
+                f"already in terminal state {execution.status.value}",
             )
             return False
 
         now = get_now()
         success = update_execution_status(
-            execution_id,
-            ExecutionStatus.CANCELLED,
-            completed_at=now
+            execution_id, ExecutionStatus.CANCELLED, completed_at=now
         )
 
         if success:
-            logger.log(
-                level=20,
-                msg=f"Execution {execution_id} cancelled"
-            )
+            logger.log(level=20, msg=f"Execution {execution_id} cancelled")
 
             # Load playbook to get name for metrics
             playbook = get_playbook_by_id(execution.playbook_id)
@@ -418,7 +408,7 @@ class PlaybookExecutionEngine:
             logger.log(
                 level=20,
                 msg=f"Executing step {execution.current_step + 1}/"
-                    f"{total_steps}: {step_name}"
+                f"{total_steps}: {step_name}",
             )
 
             # Execute the step
@@ -429,8 +419,7 @@ class PlaybookExecutionEngine:
             step_duration_ms = None
             if result.started_at and result.completed_at:
                 step_duration_ms = int(
-                    (result.completed_at - result.started_at).total_seconds()
-                    * 1000
+                    (result.completed_at - result.started_at).total_seconds() * 1000
                 )
 
             # Get step type for audit log
@@ -451,8 +440,7 @@ class PlaybookExecutionEngine:
                     )
 
                 self._fail_execution(
-                    execution,
-                    f"Step '{step_name}' failed: {result.error_message}"
+                    execution, f"Step '{step_name}' failed: {result.error_message}"
                 )
                 return
 
@@ -471,13 +459,12 @@ class PlaybookExecutionEngine:
             if result.status == StepResultStatus.PENDING:
                 # Step needs external completion (e.g., callback pending)
                 logger.log(
-                    level=20,
-                    msg=f"Step '{step_name}' pending external completion"
+                    level=20, msg=f"Step '{step_name}' pending external completion"
                 )
                 update_execution_status(
                     execution.execution_id or 0,
                     ExecutionStatus.WAITING,
-                    current_step=execution.current_step
+                    current_step=execution.current_step,
                 )
                 return
 
@@ -486,16 +473,14 @@ class PlaybookExecutionEngine:
             update_execution_status(
                 execution.execution_id or 0,
                 ExecutionStatus.RUNNING,
-                current_step=execution.current_step
+                current_step=execution.current_step,
             )
 
         # All steps completed
         self._complete_execution(execution)
 
     def _execute_step(
-        self,
-        step: PlaybookStep,
-        execution: PlaybookExecution
+        self, step: PlaybookStep, execution: PlaybookExecution
     ) -> StepResult:
         """
         Execute a single step based on its type.
@@ -539,9 +524,7 @@ class PlaybookExecutionEngine:
             raise ValueError(f"Unknown step type: {type(step)}")
 
     def _execute_wait(
-        self,
-        step: PlaybookStep,
-        execution: PlaybookExecution
+        self, step: PlaybookStep, execution: PlaybookExecution
     ) -> StepResult:
         """Execute a wait step."""
         if not isinstance(step, WaitStep):
@@ -549,9 +532,7 @@ class PlaybookExecutionEngine:
         return execute_wait_step(step, execution)
 
     def _execute_webhook(
-        self,
-        step: PlaybookStep,
-        execution: PlaybookExecution
+        self, step: PlaybookStep, execution: PlaybookExecution
     ) -> StepResult:
         """Execute a webhook step."""
         if not isinstance(step, WebhookStep):
@@ -559,9 +540,7 @@ class PlaybookExecutionEngine:
         return execute_webhook_step(step, execution)
 
     def _execute_script(
-        self,
-        step: PlaybookStep,
-        execution: PlaybookExecution
+        self, step: PlaybookStep, execution: PlaybookExecution
     ) -> StepResult:
         """Execute a script step."""
         if not isinstance(step, ScriptStep):
@@ -569,40 +548,29 @@ class PlaybookExecutionEngine:
         return execute_script_step(step, execution)
 
     def _execute_condition(
-        self,
-        step: PlaybookStep,
-        execution: PlaybookExecution
+        self, step: PlaybookStep, execution: PlaybookExecution
     ) -> StepResult:
         """Execute a condition step."""
         if not isinstance(step, ConditionStep):
             raise TypeError(f"Expected ConditionStep, got {type(step)}")
         return execute_condition_step(step, execution)
 
-    def _fail_execution(
-        self,
-        execution: PlaybookExecution,
-        error_message: str
-    ) -> None:
+    def _fail_execution(self, execution: PlaybookExecution, error_message: str) -> None:
         """Mark execution as failed."""
         now = get_now()
         execution.status = ExecutionStatus.FAILED
         execution.completed_at = now
 
         update_execution_status(
-            execution.execution_id or 0,
-            ExecutionStatus.FAILED,
-            completed_at=now
+            execution.execution_id or 0, ExecutionStatus.FAILED, completed_at=now
         )
 
         logger.log(
-            level=40,
-            msg=f"Execution {execution.execution_id} failed: {error_message}"
+            level=40, msg=f"Execution {execution.execution_id} failed: {error_message}"
         )
 
         # Record metrics
-        playbook_name = (
-            execution.playbook.name if execution.playbook else "unknown"
-        )
+        playbook_name = execution.playbook.name if execution.playbook else "unknown"
         record_playbook_execution(playbook_name, "failed")
 
         # Record duration if we have a start time
@@ -620,13 +588,13 @@ class PlaybookExecutionEngine:
                 svc_result = db.query_db(
                     "SELECT name FROM services WHERE service_id = %s",
                     (execution.service_id,),
-                    show_columns=True
+                    show_columns=True,
                 )
-                if svc_result and svc_result != '[]':
+                if svc_result and svc_result != "[]":
                     try:
                         rows = json.loads(str(svc_result))
                         if rows:
-                            service_name = rows[0].get('name')
+                            service_name = rows[0].get("name")
                     except (json.JSONDecodeError, TypeError, KeyError):
                         pass
 
@@ -661,20 +629,15 @@ class PlaybookExecutionEngine:
         execution.completed_at = now
 
         update_execution_status(
-            execution.execution_id or 0,
-            ExecutionStatus.COMPLETED,
-            completed_at=now
+            execution.execution_id or 0, ExecutionStatus.COMPLETED, completed_at=now
         )
 
         logger.log(
-            level=20,
-            msg=f"Execution {execution.execution_id} completed successfully"
+            level=20, msg=f"Execution {execution.execution_id} completed successfully"
         )
 
         # Record metrics
-        playbook_name = (
-            execution.playbook.name if execution.playbook else "unknown"
-        )
+        playbook_name = execution.playbook.name if execution.playbook else "unknown"
         record_playbook_execution(playbook_name, "completed")
 
         # Record duration if we have a start time
@@ -692,13 +655,13 @@ class PlaybookExecutionEngine:
                 svc_result = db.query_db(
                     "SELECT name FROM services WHERE service_id = %s",
                     (execution.service_id,),
-                    show_columns=True
+                    show_columns=True,
                 )
-                if svc_result and svc_result != '[]':
+                if svc_result and svc_result != "[]":
                     try:
                         rows = json.loads(str(svc_result))
                         if rows:
-                            service_name = rows[0].get('name')
+                            service_name = rows[0].get("name")
                     except (json.JSONDecodeError, TypeError, KeyError):
                         pass
 
@@ -734,7 +697,7 @@ def start_playbook_execution(
     playbook_id: int,
     service_id: Optional[int] = None,
     context: Optional[Dict[str, Any]] = None,
-    skip_approval: bool = False
+    skip_approval: bool = False,
 ) -> Optional[PlaybookExecution]:
     """
     Convenience function to start a playbook execution.
@@ -752,13 +715,11 @@ def start_playbook_execution(
         playbook_id=playbook_id,
         service_id=service_id,
         context=context,
-        skip_approval=skip_approval
+        skip_approval=skip_approval,
     )
 
 
-def resume_playbook_execution(
-    execution_id: int
-) -> Optional[PlaybookExecution]:
+def resume_playbook_execution(execution_id: int) -> Optional[PlaybookExecution]:
     """
     Convenience function to resume a playbook execution.
 

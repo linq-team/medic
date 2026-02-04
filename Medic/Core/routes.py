@@ -1,4 +1,5 @@
 """Flask routes for Medic API."""
+
 from flask import request, send_file, Response
 from flask_swagger_ui import get_swaggerui_blueprint
 from datetime import datetime
@@ -23,125 +24,168 @@ logger.setLevel(logLevel.logSetup())
 def exposeRoutes(app):
     """Register all routes with the Flask app."""
     ### swagger config ###
-    SWAGGER_URL = '/docs'
-    API_URL = '/docs/swagger.json'
+    SWAGGER_URL = "/docs"
+    API_URL = "/docs/swagger.json"
     SWAGGERUI_BLUEPRINT = get_swaggerui_blueprint(
-        SWAGGER_URL,
-        API_URL,
-        config={
-            'app_name': "Medic"
-        }
+        SWAGGER_URL, API_URL, config={"app_name": "Medic"}
     )
     app.register_blueprint(SWAGGERUI_BLUEPRINT, url_prefix=SWAGGER_URL)
     ### end swagger config ###
 
-    @app.route('/v1/healthcheck/network')
+    @app.route("/v1/healthcheck/network")
     def healthcheck():
         return '{"success":true,"message":"","results":""}', 204
 
-    @app.route('/health')
+    @app.route("/health")
     def health_check():
         """Comprehensive health check endpoint."""
         status = health.get_full_health_status()
         http_status = 200 if status["status"] == "healthy" else 503
         return json.dumps(status), http_status
 
-    @app.route('/health/live')
+    @app.route("/health/live")
     def liveness():
         """Kubernetes liveness probe endpoint."""
         return json.dumps(health.get_liveness_status()), 200
 
-    @app.route('/health/ready')
+    @app.route("/health/ready")
     def readiness():
         """Kubernetes readiness probe endpoint."""
         status = health.get_readiness_status()
         http_status = 200 if status["status"] == "ready" else 503
         return json.dumps(status), http_status
 
-    @app.route('/metrics')
+    @app.route("/metrics")
     def prometheus_metrics():
         """Prometheus metrics endpoint."""
         return Response(
-            metrics.get_metrics(),
-            mimetype=metrics.get_metrics_content_type()
+            metrics.get_metrics(), mimetype=metrics.get_metrics_content_type()
         )
 
-    @app.route('/heartbeat', methods=['POST', 'GET'])
+    @app.route("/heartbeat", methods=["POST", "GET"])
     def heartbeat():
-        if request.method == 'POST':
+        if request.method == "POST":
             data = request.data
             jData = json.loads(data)
             request_schema = {
-                'heartbeat_name': {'type': 'string', 'required': True},
-                'service_name': {'type': 'string', 'required': False},
-                'status': {'type': 'string', 'required': True}
+                "heartbeat_name": {"type": "string", "required": True},
+                "service_name": {"type": "string", "required": False},
+                "status": {"type": "string", "required": True},
             }
             if validateRequestData(request_schema, jData):
-                heartbeat_name = jData['heartbeat_name']
-                status = jData['status']
+                heartbeat_name = jData["heartbeat_name"]
+                status = jData["status"]
 
                 # Use parameterized query
                 heartbeat_check = db.query_db(
                     "SELECT * FROM services WHERE LOWER(heartbeat_name) = LOWER(%s) LIMIT 1",
                     (heartbeat_name,),
-                    show_columns=True
+                    show_columns=True,
                 )
-                if heartbeat_check and heartbeat_check != '[]':
+                if heartbeat_check and heartbeat_check != "[]":
                     heartbeats = json.loads(heartbeat_check)
                     for h in heartbeats:
-                        active = h['active']
-                        s_id = h['service_id']
+                        active = h["active"]
+                        s_id = h["service_id"]
                         if not h:
-                            logger.log(level=30, msg=f"Unable to locate heartbeat: {heartbeat_name}. Does it exist?")
-                            return json.dumps({
-                                "success": False,
-                                "message": f"{heartbeat_name} is not listed as a registered heartbeat.",
-                                "results": ""
-                            }), 404
+                            logger.log(
+                                level=30,
+                                msg=f"Unable to locate heartbeat: {heartbeat_name}. Does it exist?",
+                            )
+                            return (
+                                json.dumps(
+                                    {
+                                        "success": False,
+                                        "message": f"{heartbeat_name} is not listed as a registered heartbeat.",
+                                        "results": "",
+                                    }
+                                ),
+                                404,
+                            )
                         else:
                             if int(active) == 0:
-                                logger.log(level=30, msg=f"{heartbeat_name} was located, but is marked inactive. Unable to post heartbeat.")
-                                return json.dumps({
-                                    "success": False,
-                                    "message": f"{heartbeat_name} was located, but is marked inactive. Does this need to be re-enabled?",
-                                    "results": ""
-                                }), 400
+                                logger.log(
+                                    level=30,
+                                    msg=f"{heartbeat_name} was located, but is marked inactive. Unable to post heartbeat.",
+                                )
+                                return (
+                                    json.dumps(
+                                        {
+                                            "success": False,
+                                            "message": f"{heartbeat_name} was located, but is marked inactive. Does this need to be re-enabled?",
+                                            "results": "",
+                                        }
+                                    ),
+                                    400,
+                                )
                             else:
-                                my_heartbeat = hbeat.Heartbeat(s_id, heartbeat_name, status)
+                                my_heartbeat = hbeat.Heartbeat(
+                                    s_id, heartbeat_name, status
+                                )
                                 res = hbeat.addHeartbeat(my_heartbeat)
                                 if res:
-                                    logger.log(level=10, msg=f"{heartbeat_name} was posted successfully.")
-                                    return json.dumps({
-                                        "success": True,
-                                        "message": "Heartbeat Posted Successfully.",
-                                        "results": ""
-                                    }), 201
+                                    logger.log(
+                                        level=10,
+                                        msg=f"{heartbeat_name} was posted successfully.",
+                                    )
+                                    return (
+                                        json.dumps(
+                                            {
+                                                "success": True,
+                                                "message": "Heartbeat Posted Successfully.",
+                                                "results": "",
+                                            }
+                                        ),
+                                        201,
+                                    )
                                 else:
-                                    logger.log(level=40, msg=f"{heartbeat_name} Failed to post heartbeat.")
-                                    return json.dumps({
-                                        "success": False,
-                                        "message": "Failed to post heartbeat.",
-                                        "results": ""
-                                    }), 400
+                                    logger.log(
+                                        level=40,
+                                        msg=f"{heartbeat_name} Failed to post heartbeat.",
+                                    )
+                                    return (
+                                        json.dumps(
+                                            {
+                                                "success": False,
+                                                "message": "Failed to post heartbeat.",
+                                                "results": "",
+                                            }
+                                        ),
+                                        400,
+                                    )
                 else:
-                    logger.log(level=30, msg=f"No matches found for service {heartbeat_name}")
-                    return json.dumps({
-                        "success": False,
-                        "message": f"{heartbeat_name} is not listed as a registered service.",
-                        "results": ""
-                    }), 404
+                    logger.log(
+                        level=30, msg=f"No matches found for service {heartbeat_name}"
+                    )
+                    return (
+                        json.dumps(
+                            {
+                                "success": False,
+                                "message": f"{heartbeat_name} is not listed as a registered service.",
+                                "results": "",
+                            }
+                        ),
+                        404,
+                    )
             else:
-                logger.log(level=30, msg="Submitted invalid parameters. Aborting request.")
-                return json.dumps({
-                    "success": False,
-                    "message": "You have provided invalid request data. Please ensure your request contains data in both `heartbeat_name` and `status` JSON fields.",
-                    "results": ""
-                }), 400
+                logger.log(
+                    level=30, msg="Submitted invalid parameters. Aborting request."
+                )
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "You have provided invalid request data. Please ensure your request contains data in both `heartbeat_name` and `status` JSON fields.",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
         else:
             # GET request for targeted lookup
-            heartbeat_name = request.args.get('heartbeat_name')
-            service_name = request.args.get('service_name')
-            max_count = request.args.get('maxCount')
+            heartbeat_name = request.args.get("heartbeat_name")
+            service_name = request.args.get("service_name")
+            max_count = request.args.get("maxCount")
 
             # Validate and set maxCount
             if max_count:
@@ -160,39 +204,59 @@ def exposeRoutes(app):
             """
 
             if service_name and heartbeat_name:
-                query = base_query + " WHERE services.heartbeat_name = %s AND services.service_name = %s ORDER BY h.time DESC LIMIT %s"
-                results = db.query_db(query, (heartbeat_name, service_name, max_count), show_columns=True)
+                query = (
+                    base_query
+                    + " WHERE services.heartbeat_name = %s AND services.service_name = %s ORDER BY h.time DESC LIMIT %s"
+                )
+                results = db.query_db(
+                    query, (heartbeat_name, service_name, max_count), show_columns=True
+                )
             elif heartbeat_name:
-                query = base_query + " WHERE services.heartbeat_name = %s ORDER BY h.time DESC LIMIT %s"
-                results = db.query_db(query, (heartbeat_name, max_count), show_columns=True)
+                query = (
+                    base_query
+                    + " WHERE services.heartbeat_name = %s ORDER BY h.time DESC LIMIT %s"
+                )
+                results = db.query_db(
+                    query, (heartbeat_name, max_count), show_columns=True
+                )
             elif service_name:
-                query = base_query + " WHERE services.service_name = %s ORDER BY h.time DESC LIMIT %s"
-                results = db.query_db(query, (service_name, max_count), show_columns=True)
+                query = (
+                    base_query
+                    + " WHERE services.service_name = %s ORDER BY h.time DESC LIMIT %s"
+                )
+                results = db.query_db(
+                    query, (service_name, max_count), show_columns=True
+                )
             else:
                 query = base_query + " ORDER BY h.time DESC LIMIT %s"
                 results = db.query_db(query, (max_count,), show_columns=True)
 
             logger.log(level=10, msg=f"Heartbeat query results: {results}")
-            return json.dumps({
-                "success": True,
-                "message": "",
-                "results": json.loads(results) if results else []
-            }), 200
+            return (
+                json.dumps(
+                    {
+                        "success": True,
+                        "message": "",
+                        "results": json.loads(results) if results else [],
+                    }
+                ),
+                200,
+            )
 
-    @app.route('/service', methods=['POST', 'GET'])
+    @app.route("/service", methods=["POST", "GET"])
     def service():
-        if request.method == 'POST':
+        if request.method == "POST":
             data = request.data
             jData = json.loads(data)
             r_schema = {
-                'heartbeat_name': {'type': 'string', 'required': True},
-                'service_name': {'type': 'string', 'required': True},
-                'environment': {'type': 'string', 'required': False},
-                'alert_interval': {'type': 'integer', 'required': True},
-                'threshold': {'type': 'integer', 'required': False},
-                'team': {'type': 'string', 'required': False},
-                'priority': {'type': 'string', 'required': False},
-                'runbook': {'type': 'string', 'required': False}
+                "heartbeat_name": {"type": "string", "required": True},
+                "service_name": {"type": "string", "required": True},
+                "environment": {"type": "string", "required": False},
+                "alert_interval": {"type": "integer", "required": True},
+                "threshold": {"type": "integer", "required": False},
+                "team": {"type": "string", "required": False},
+                "priority": {"type": "string", "required": False},
+                "runbook": {"type": "string", "required": False},
             }
             if validateRequestData(r_schema, jData):
                 environment = jData.get("environment", "")
@@ -212,50 +276,83 @@ def exposeRoutes(app):
                 check_result = db.query_db(
                     "SELECT COUNT(heartbeat_name) FROM services WHERE heartbeat_name = %s",
                     (heartbeat_name,),
-                    show_columns=False
+                    show_columns=False,
                 )
                 if check_result and int(check_result[0][0]) < 1:
                     # Service is not registered, register it
-                    now = datetime.now(pytz.timezone('America/Chicago')).strftime("%Y-%m-%d %H:%M:%S %Z")
+                    now = datetime.now(pytz.timezone("America/Chicago")).strftime(
+                        "%Y-%m-%d %H:%M:%S %Z"
+                    )
                     db.insert_db(
                         """INSERT INTO services(heartbeat_name, service_name, active, alert_interval,
                            threshold, team, priority, runbook, date_added)
                            VALUES(%s, %s, 1, %s, %s, %s, %s, %s, %s)""",
-                        (heartbeat_name, service_name, alert_interval, threshold, team, priority, runbook, now)
+                        (
+                            heartbeat_name,
+                            service_name,
+                            alert_interval,
+                            threshold,
+                            team,
+                            priority,
+                            runbook,
+                            now,
+                        ),
                     )
-                    return json.dumps({
-                        "success": True,
-                        "message": "Heartbeat successfully registered.",
-                        "results": ""
-                    }), 201
+                    return (
+                        json.dumps(
+                            {
+                                "success": True,
+                                "message": "Heartbeat successfully registered.",
+                                "results": "",
+                            }
+                        ),
+                        201,
+                    )
                 else:
-                    return json.dumps({
-                        "success": True,
-                        "message": "Heartbeat is already registered.",
-                        "results": ""
-                    }), 200
+                    return (
+                        json.dumps(
+                            {
+                                "success": True,
+                                "message": "Heartbeat is already registered.",
+                                "results": "",
+                            }
+                        ),
+                        200,
+                    )
             else:
-                logger.log(level=30, msg="Submitted invalid parameters. Aborting request.")
-                return json.dumps({
-                    "success": False,
-                    "message": "You have provided invalid request data. Please ensure your request contains the following required JSON fields - `heartbeat_name`, `service_name`, `alert_interval` & `environment`",
-                    "results": ""
-                }), 400
+                logger.log(
+                    level=30, msg="Submitted invalid parameters. Aborting request."
+                )
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "You have provided invalid request data. Please ensure your request contains the following required JSON fields - `heartbeat_name`, `service_name`, `alert_interval` & `environment`",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
         else:
             # GET request
-            service_name = request.args.get('service_name')
-            active = request.args.get('active')
+            service_name = request.args.get("service_name")
+            active = request.args.get("active")
 
             if service_name and active is not None:
                 # Validate active is integer
                 try:
                     active_int = int(active)
                 except ValueError:
-                    return json.dumps({
-                        "success": False,
-                        "message": "Invalid 'active' parameter",
-                        "results": ""
-                    }), 400
+                    return (
+                        json.dumps(
+                            {
+                                "success": False,
+                                "message": "Invalid 'active' parameter",
+                                "results": "",
+                            }
+                        ),
+                        400,
+                    )
                 query = "SELECT * FROM services WHERE service_name = %s AND active = %s"
                 res = db.query_db(query, (service_name, active_int), show_columns=True)
             elif service_name:
@@ -265,104 +362,127 @@ def exposeRoutes(app):
                 try:
                     active_int = int(active)
                 except ValueError:
-                    return json.dumps({
-                        "success": False,
-                        "message": "Invalid 'active' parameter",
-                        "results": ""
-                    }), 400
+                    return (
+                        json.dumps(
+                            {
+                                "success": False,
+                                "message": "Invalid 'active' parameter",
+                                "results": "",
+                            }
+                        ),
+                        400,
+                    )
                 query = "SELECT * FROM services WHERE active = %s"
                 res = db.query_db(query, (active_int,), show_columns=True)
             else:
                 query = "SELECT * FROM services"
                 res = db.query_db(query, show_columns=True)
 
-            return json.dumps({
-                "success": True,
-                "message": "",
-                "results": json.loads(res) if res else []
-            }), 200
+            return (
+                json.dumps(
+                    {
+                        "success": True,
+                        "message": "",
+                        "results": json.loads(res) if res else [],
+                    }
+                ),
+                200,
+            )
 
-    @app.route('/service/<string:heartbeat_name>', methods=['GET', 'POST'])
+    @app.route("/service/<string:heartbeat_name>", methods=["GET", "POST"])
     def serviceByHeartbeatName(heartbeat_name):
-        if request.method == 'POST':
+        if request.method == "POST":
             # Verify Service Name
             s = db.query_db(
                 "SELECT service_id FROM services WHERE LOWER(heartbeat_name) = LOWER(%s) LIMIT 1",
                 (heartbeat_name,),
-                show_columns=True
+                show_columns=True,
             )
-            if not s or s == '[]':
-                return json.dumps({
-                    "success": False,
-                    "message": f"The heartbeat registration specified: {heartbeat_name} was not located. Does it exist?",
-                    "results": ""
-                }), 200
+            if not s or s == "[]":
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": f"The heartbeat registration specified: {heartbeat_name} was not located. Does it exist?",
+                            "results": "",
+                        }
+                    ),
+                    200,
+                )
 
             service_result = json.loads(s)
-            service_id = service_result[0]['service_id']
+            service_id = service_result[0]["service_id"]
 
             data = request.data
             jData = json.loads(data)
             s_schema = {
-                'service_name': {'type': 'string', 'required': False},
-                'muted': {'type': 'integer', 'required': False},
-                'active': {'type': 'integer', 'required': False},
-                'alert_interval': {'type': 'float', 'required': False},
-                'threshold': {'type': 'integer', 'required': False},
-                'team': {'type': 'string', 'required': False},
-                'priority': {'type': 'string', 'required': False},
-                'runbook': {'type': 'string', 'required': False},
-                'down': {'type': 'integer', 'required': False}
+                "service_name": {"type": "string", "required": False},
+                "muted": {"type": "integer", "required": False},
+                "active": {"type": "integer", "required": False},
+                "alert_interval": {"type": "float", "required": False},
+                "threshold": {"type": "integer", "required": False},
+                "team": {"type": "string", "required": False},
+                "priority": {"type": "string", "required": False},
+                "runbook": {"type": "string", "required": False},
+                "down": {"type": "integer", "required": False},
             }
             if validateRequestData(s_schema, jData):
                 # Build update dynamically using parameterized queries
                 updates = []
                 params = []
 
-                if 'service_name' in jData:
+                if "service_name" in jData:
                     updates.append("service_name = %s")
-                    params.append(jData['service_name'])
+                    params.append(jData["service_name"])
 
-                if 'muted' in jData:
+                if "muted" in jData:
                     updates.append("muted = %s")
-                    params.append(jData['muted'])
-                    if jData['muted'] == 0:
+                    params.append(jData["muted"])
+                    if jData["muted"] == 0:
                         updates.append("date_muted = NULL")
                     else:
                         updates.append("date_muted = %s")
-                        params.append(datetime.now(pytz.timezone('America/Chicago')).strftime("%Y-%m-%d %H:%M:%S %Z"))
+                        params.append(
+                            datetime.now(pytz.timezone("America/Chicago")).strftime(
+                                "%Y-%m-%d %H:%M:%S %Z"
+                            )
+                        )
 
-                if 'active' in jData:
+                if "active" in jData:
                     updates.append("active = %s")
-                    params.append(jData['active'])
+                    params.append(jData["active"])
 
-                if 'alert_interval' in jData:
+                if "alert_interval" in jData:
                     updates.append("alert_interval = %s")
-                    params.append(jData['alert_interval'])
+                    params.append(jData["alert_interval"])
 
-                if 'threshold' in jData:
+                if "threshold" in jData:
                     updates.append("threshold = %s")
-                    params.append(jData['threshold'])
+                    params.append(jData["threshold"])
 
-                if 'team' in jData:
+                if "team" in jData:
                     updates.append("team = %s")
-                    params.append(jData['team'])
+                    params.append(jData["team"])
 
-                if 'priority' in jData:
+                if "priority" in jData:
                     updates.append("priority = %s")
-                    params.append(jData['priority'])
+                    params.append(jData["priority"])
 
-                if 'runbook' in jData:
+                if "runbook" in jData:
                     updates.append("runbook = %s")
-                    params.append(jData['runbook'])
+                    params.append(jData["runbook"])
 
-                if 'down' in jData:
+                if "down" in jData:
                     updates.append("down = %s")
-                    params.append(jData['down'])
+                    params.append(jData["down"])
 
                 # Always update date_modified
                 updates.append("date_modified = %s")
-                params.append(datetime.now(pytz.timezone('America/Chicago')).strftime("%Y-%m-%d %H:%M:%S %Z"))
+                params.append(
+                    datetime.now(pytz.timezone("America/Chicago")).strftime(
+                        "%Y-%m-%d %H:%M:%S %Z"
+                    )
+                )
 
                 # Add service_id to params
                 params.append(service_id)
@@ -372,94 +492,117 @@ def exposeRoutes(app):
                     logger.log(level=10, msg=f"Update query: {query}")
                     db.insert_db(query, tuple(params))
 
-                return json.dumps({
-                    "success": True,
-                    "message": "Successfully posted update",
-                    "results": ""
-                }), 200
+                return (
+                    json.dumps(
+                        {
+                            "success": True,
+                            "message": "Successfully posted update",
+                            "results": "",
+                        }
+                    ),
+                    200,
+                )
             else:
-                logger.log(level=30, msg="Submitted invalid parameters. Aborting request.")
-                return json.dumps({
-                    "success": False,
-                    "message": "You have provided invalid request data. Please ensure your request contains data in the correct JSON fields.",
-                    "results": ""
-                }), 400
+                logger.log(
+                    level=30, msg="Submitted invalid parameters. Aborting request."
+                )
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "You have provided invalid request data. Please ensure your request contains data in the correct JSON fields.",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
         else:
             # GET
             res = db.query_db(
                 "SELECT * FROM services WHERE LOWER(heartbeat_name) = LOWER(%s)",
                 (heartbeat_name,),
-                show_columns=True
+                show_columns=True,
             )
             logger.log(level=10, msg=f"Service query results: {res}")
-            return json.dumps({
-                "success": True,
-                "message": "",
-                "results": json.loads(res) if res else []
-            }), 200
+            return (
+                json.dumps(
+                    {
+                        "success": True,
+                        "message": "",
+                        "results": json.loads(res) if res else [],
+                    }
+                ),
+                200,
+            )
 
-    @app.route('/alerts', methods=['GET'])
+    @app.route("/alerts", methods=["GET"])
     def alerts():
-        a_query = request.args.get('active')
+        a_query = request.args.get("active")
         if a_query is not None:
             try:
                 active_int = int(a_query)
             except ValueError:
-                return json.dumps({
-                    "success": False,
-                    "message": "Invalid 'active' parameter",
-                    "results": ""
-                }), 400
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid 'active' parameter",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
             query = "SELECT * FROM alerts WHERE active = %s ORDER BY alert_id DESC"
             res = db.query_db(query, (active_int,), show_columns=True)
         else:
             query = "SELECT * FROM alerts ORDER BY alert_id DESC LIMIT 100"
             res = db.query_db(query, show_columns=True)
 
-        return json.dumps({
-            "success": True,
-            "message": "",
-            "results": json.loads(res) if res else []
-        }), 200
+        return (
+            json.dumps(
+                {
+                    "success": True,
+                    "message": "",
+                    "results": json.loads(res) if res else [],
+                }
+            ),
+            200,
+        )
 
-    @app.route('/docs/swagger.json')
+    @app.route("/docs/swagger.json")
     def swaggerDocs():
         try:
-            return send_file(os.path.abspath('Medic/Docs/swagger.json'))
+            return send_file(os.path.abspath("Medic/Docs/swagger.json"))
         except Exception as e:
             logger.log(level=40, msg=f"Unable to load swagger file: {str(e)}")
-            return json.dumps({
-                "success": False,
-                "message": "Unable to load swagger file",
-                "results": ""
-            }), 500
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Unable to load swagger file",
+                        "results": "",
+                    }
+                ),
+                500,
+            )
 
     # V2 API Endpoints for Start/Complete/Fail Signals
-    @app.route('/v2/heartbeat/<int:service_id>/start', methods=['POST'])
+    @app.route("/v2/heartbeat/<int:service_id>/start", methods=["POST"])
     def heartbeat_start(service_id):
         """Record a STARTED status for a service with optional run_id."""
-        return _record_job_signal(
-            service_id,
-            hbeat.HeartbeatStatus.STARTED.value
-        )
+        return _record_job_signal(service_id, hbeat.HeartbeatStatus.STARTED.value)
 
-    @app.route('/v2/heartbeat/<int:service_id>/complete', methods=['POST'])
+    @app.route("/v2/heartbeat/<int:service_id>/complete", methods=["POST"])
     def heartbeat_complete(service_id):
         """Record a COMPLETED status for a service with optional run_id."""
-        return _record_job_signal(
-            service_id,
-            hbeat.HeartbeatStatus.COMPLETED.value
-        )
+        return _record_job_signal(service_id, hbeat.HeartbeatStatus.COMPLETED.value)
 
-    @app.route('/v2/heartbeat/<int:service_id>/fail', methods=['POST'])
+    @app.route("/v2/heartbeat/<int:service_id>/fail", methods=["POST"])
     def heartbeat_fail(service_id):
         """Record a FAILED status for a service with optional run_id."""
-        return _record_job_signal(
-            service_id,
-            hbeat.HeartbeatStatus.FAILED.value
-        )
+        return _record_job_signal(service_id, hbeat.HeartbeatStatus.FAILED.value)
 
-    @app.route('/v2/services/<int:service_id>/stats', methods=['GET'])
+    @app.route("/v2/services/<int:service_id>/stats", methods=["GET"])
     def service_duration_stats(service_id):
         """
         Get duration statistics for a service's job runs.
@@ -472,34 +615,36 @@ def exposeRoutes(app):
             "SELECT service_id, heartbeat_name FROM services "
             "WHERE service_id = %s LIMIT 1",
             (service_id,),
-            show_columns=True
+            show_columns=True,
         )
 
-        if not service_check or service_check == '[]':
+        if not service_check or service_check == "[]":
             logger.log(
-                level=30,
-                msg=f"Service ID {service_id} not found for stats request"
+                level=30, msg=f"Service ID {service_id} not found for stats request"
             )
-            return json.dumps({
-                "success": False,
-                "message": f"Service ID {service_id} not found.",
-                "results": ""
-            }), 404
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Service ID {service_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
 
         # Get duration statistics
         stats = job_runs.get_duration_statistics(service_id)
 
         logger.log(
             level=10,
-            msg=f"Duration stats for service {service_id}: "
-                f"count={stats.run_count}"
+            msg=f"Duration stats for service {service_id}: " f"count={stats.run_count}",
         )
 
-        return json.dumps({
-            "success": True,
-            "message": "",
-            "results": stats.to_dict()
-        }), 200
+        return (
+            json.dumps({"success": True, "message": "", "results": stats.to_dict()}),
+            200,
+        )
 
     def _record_job_signal(service_id, status):
         """
@@ -517,58 +662,68 @@ def exposeRoutes(app):
             "SELECT service_id, heartbeat_name, active FROM services "
             "WHERE service_id = %s LIMIT 1",
             (service_id,),
-            show_columns=True
+            show_columns=True,
         )
 
-        if not service_check or service_check == '[]':
+        if not service_check or service_check == "[]":
             logger.log(
-                level=30,
-                msg=f"Service ID {service_id} not found for job signal"
+                level=30, msg=f"Service ID {service_id} not found for job signal"
             )
-            return json.dumps({
-                "success": False,
-                "message": f"Service ID {service_id} not found.",
-                "results": ""
-            }), 404
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Service ID {service_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
 
         service_data = json.loads(service_check)
         if not service_data:
-            return json.dumps({
-                "success": False,
-                "message": f"Service ID {service_id} not found.",
-                "results": ""
-            }), 404
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Service ID {service_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
 
         service = service_data[0]
-        heartbeat_name = service['heartbeat_name']
-        active = service['active']
+        heartbeat_name = service["heartbeat_name"]
+        active = service["active"]
 
         if int(active) == 0:
             logger.log(
-                level=30,
-                msg=f"Service {heartbeat_name} (ID: {service_id}) is inactive"
+                level=30, msg=f"Service {heartbeat_name} (ID: {service_id}) is inactive"
             )
-            return json.dumps({
-                "success": False,
-                "message": f"Service {heartbeat_name} is inactive.",
-                "results": ""
-            }), 400
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Service {heartbeat_name} is inactive.",
+                        "results": "",
+                    }
+                ),
+                400,
+            )
 
         # Parse optional run_id from request body
         run_id = None
         if request.data:
             try:
                 jData = json.loads(request.data)
-                run_id = jData.get('run_id')
+                run_id = jData.get("run_id")
             except (json.JSONDecodeError, ValueError):
                 pass  # run_id is optional, ignore parse errors
 
         # Create and save heartbeat
         my_heartbeat = hbeat.Heartbeat(
-            service_id,
-            heartbeat_name,
-            status,
-            run_id=run_id
+            service_id, heartbeat_name, status, run_id=run_id
         )
         res = hbeat.addHeartbeat(my_heartbeat)
 
@@ -578,12 +733,10 @@ def exposeRoutes(app):
             duration_alert = None
             if run_id:
                 if status == hbeat.HeartbeatStatus.STARTED.value:
-                    job_run_result = job_runs.record_job_start(
-                        service_id, run_id
-                    )
+                    job_run_result = job_runs.record_job_start(service_id, run_id)
                 elif status in (
                     hbeat.HeartbeatStatus.COMPLETED.value,
-                    hbeat.HeartbeatStatus.FAILED.value
+                    hbeat.HeartbeatStatus.FAILED.value,
                 ):
                     job_run_result = job_runs.record_job_completion(
                         service_id, run_id, status
@@ -600,7 +753,7 @@ def exposeRoutes(app):
             logger.log(
                 level=10,
                 msg=f"Job signal {status} recorded for {heartbeat_name}"
-                    f" (run_id: {run_id})"
+                f" (run_id: {run_id})",
             )
 
             # Build response with optional duration info
@@ -608,7 +761,7 @@ def exposeRoutes(app):
                 "service_id": service_id,
                 "heartbeat_name": heartbeat_name,
                 "status": status,
-                "run_id": run_id
+                "run_id": run_id,
             }
             if job_run_result and job_run_result.duration_ms is not None:
                 results["duration_ms"] = job_run_result.duration_ms
@@ -617,32 +770,42 @@ def exposeRoutes(app):
                     "alert_type": duration_alert.alert_type,
                     "max_duration_ms": duration_alert.max_duration_ms,
                     "exceeded_by_ms": (
-                        (duration_alert.duration_ms or 0) -
-                        duration_alert.max_duration_ms
-                    )
+                        (duration_alert.duration_ms or 0)
+                        - duration_alert.max_duration_ms
+                    ),
                 }
 
-            return json.dumps({
-                "success": True,
-                "message": f"Job signal {status} recorded successfully.",
-                "results": results
-            }), 201
+            return (
+                json.dumps(
+                    {
+                        "success": True,
+                        "message": f"Job signal {status} recorded successfully.",
+                        "results": results,
+                    }
+                ),
+                201,
+            )
         else:
             logger.log(
                 level=40,
-                msg=f"Failed to record job signal {status} for {heartbeat_name}"
+                msg=f"Failed to record job signal {status} for {heartbeat_name}",
             )
-            return json.dumps({
-                "success": False,
-                "message": f"Failed to record job signal {status}.",
-                "results": ""
-            }), 500
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Failed to record job signal {status}.",
+                        "results": "",
+                    }
+                ),
+                500,
+            )
 
     # =========================================================================
     # Audit Log Query API
     # =========================================================================
 
-    @app.route('/v2/audit-logs', methods=['GET'])
+    @app.route("/v2/audit-logs", methods=["GET"])
     def audit_logs():
         """
         Query and export audit logs with flexible filtering.
@@ -671,24 +834,29 @@ def exposeRoutes(app):
         )
 
         # Parse query parameters
-        execution_id = request.args.get('execution_id', type=int)
-        service_id = request.args.get('service_id', type=int)
-        action_type = request.args.get('action_type')
-        actor = request.args.get('actor')
-        start_date_str = request.args.get('start_date')
-        end_date_str = request.args.get('end_date')
-        limit = request.args.get('limit', default=50, type=int)
-        offset = request.args.get('offset', default=0, type=int)
+        execution_id = request.args.get("execution_id", type=int)
+        service_id = request.args.get("service_id", type=int)
+        action_type = request.args.get("action_type")
+        actor = request.args.get("actor")
+        start_date_str = request.args.get("start_date")
+        end_date_str = request.args.get("end_date")
+        limit = request.args.get("limit", default=50, type=int)
+        offset = request.args.get("offset", default=0, type=int)
 
         # Validate action_type if provided
         if action_type and not AuditActionType.is_valid(action_type):
             valid_types = [t.value for t in AuditActionType]
-            return json.dumps({
-                "success": False,
-                "message": f"Invalid action_type. Must be one of: "
-                           f"{', '.join(valid_types)}",
-                "results": ""
-            }), 400
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Invalid action_type. Must be one of: "
+                        f"{', '.join(valid_types)}",
+                        "results": "",
+                    }
+                ),
+                400,
+            )
 
         # Parse date parameters
         start_date = None
@@ -697,28 +865,36 @@ def exposeRoutes(app):
         if start_date_str:
             try:
                 start_date = datetime.fromisoformat(
-                    start_date_str.replace('Z', '+00:00')
+                    start_date_str.replace("Z", "+00:00")
                 )
             except ValueError:
-                return json.dumps({
-                    "success": False,
-                    "message": "Invalid start_date format. Use ISO format "
-                               "(e.g., 2026-01-01T00:00:00Z)",
-                    "results": ""
-                }), 400
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid start_date format. Use ISO format "
+                            "(e.g., 2026-01-01T00:00:00Z)",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
 
         if end_date_str:
             try:
-                end_date = datetime.fromisoformat(
-                    end_date_str.replace('Z', '+00:00')
-                )
+                end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
             except ValueError:
-                return json.dumps({
-                    "success": False,
-                    "message": "Invalid end_date format. Use ISO format "
-                               "(e.g., 2026-01-31T23:59:59Z)",
-                    "results": ""
-                }), 400
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid end_date format. Use ISO format "
+                            "(e.g., 2026-01-31T23:59:59Z)",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
 
         # Query audit logs
         result = query_audit_logs(
@@ -735,40 +911,38 @@ def exposeRoutes(app):
         logger.log(
             level=10,
             msg=f"Audit log query: count={len(result.entries)}, "
-                f"total={result.total_count}"
+            f"total={result.total_count}",
         )
 
         # Check Accept header for export format
-        accept_header = request.headers.get('Accept', 'application/json')
+        accept_header = request.headers.get("Accept", "application/json")
 
-        if 'text/csv' in accept_header:
+        if "text/csv" in accept_header:
             # Return CSV format
             csv_content = audit_logs_to_csv(result.entries)
             return Response(
                 csv_content,
-                mimetype='text/csv',
+                mimetype="text/csv",
                 headers={
-                    'Content-Disposition': 'attachment; '
-                                           'filename=audit_logs.csv',
-                    'X-Total-Count': str(result.total_count),
-                    'X-Limit': str(result.limit),
-                    'X-Offset': str(result.offset),
-                    'X-Has-More': str(result.has_more).lower(),
-                }
+                    "Content-Disposition": "attachment; " "filename=audit_logs.csv",
+                    "X-Total-Count": str(result.total_count),
+                    "X-Limit": str(result.limit),
+                    "X-Offset": str(result.offset),
+                    "X-Has-More": str(result.has_more).lower(),
+                },
             )
 
         # Return JSON format (default)
-        return json.dumps({
-            "success": True,
-            "message": "",
-            "results": result.to_dict()
-        }), 200
+        return (
+            json.dumps({"success": True, "message": "", "results": result.to_dict()}),
+            200,
+        )
 
     # =========================================================================
     # Playbook Execution API
     # =========================================================================
 
-    @app.route('/v2/playbooks/<int:playbook_id>/execute', methods=['POST'])
+    @app.route("/v2/playbooks/<int:playbook_id>/execute", methods=["POST"])
     def execute_playbook(playbook_id):
         """
         Trigger a playbook execution via API.
@@ -808,14 +982,18 @@ def exposeRoutes(app):
         playbook = get_playbook_by_id(playbook_id)
         if not playbook:
             logger.log(
-                level=30,
-                msg=f"Playbook ID {playbook_id} not found for API execution"
+                level=30, msg=f"Playbook ID {playbook_id} not found for API execution"
             )
-            return json.dumps({
-                "success": False,
-                "message": f"Playbook ID {playbook_id} not found.",
-                "results": ""
-            }), 404
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Playbook ID {playbook_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
 
         # Parse request body
         service_id = None
@@ -824,8 +1002,8 @@ def exposeRoutes(app):
         if request.data:
             try:
                 jData = json.loads(request.data)
-                service_id = jData.get('service_id')
-                variables = jData.get('variables', {})
+                service_id = jData.get("service_id")
+                variables = jData.get("variables", {})
 
                 # Validate service_id if provided
                 if service_id is not None:
@@ -833,48 +1011,67 @@ def exposeRoutes(app):
                         try:
                             service_id = int(service_id)
                         except (ValueError, TypeError):
-                            return json.dumps({
-                                "success": False,
-                                "message": "service_id must be an integer.",
-                                "results": ""
-                            }), 400
+                            return (
+                                json.dumps(
+                                    {
+                                        "success": False,
+                                        "message": "service_id must be an integer.",
+                                        "results": "",
+                                    }
+                                ),
+                                400,
+                            )
 
                     # Verify service exists if provided
                     service_check = db.query_db(
                         "SELECT service_id, heartbeat_name FROM services "
                         "WHERE service_id = %s LIMIT 1",
                         (service_id,),
-                        show_columns=True
+                        show_columns=True,
                     )
-                    if not service_check or service_check == '[]':
-                        return json.dumps({
-                            "success": False,
-                            "message": f"Service ID {service_id} not found.",
-                            "results": ""
-                        }), 404
+                    if not service_check or service_check == "[]":
+                        return (
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "message": f"Service ID {service_id} not found.",
+                                    "results": "",
+                                }
+                            ),
+                            404,
+                        )
 
                 # Validate variables is a dictionary
                 if variables and not isinstance(variables, dict):
-                    return json.dumps({
-                        "success": False,
-                        "message": "variables must be a dictionary.",
-                        "results": ""
-                    }), 400
+                    return (
+                        json.dumps(
+                            {
+                                "success": False,
+                                "message": "variables must be a dictionary.",
+                                "results": "",
+                            }
+                        ),
+                        400,
+                    )
 
             except (json.JSONDecodeError, ValueError) as e:
                 logger.log(
-                    level=30,
-                    msg=f"Invalid JSON in playbook execute request: {e}"
+                    level=30, msg=f"Invalid JSON in playbook execute request: {e}"
                 )
-                return json.dumps({
-                    "success": False,
-                    "message": "Invalid JSON in request body.",
-                    "results": ""
-                }), 400
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid JSON in request body.",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
 
         # Build execution context from variables
         context = dict(variables) if variables else {}
-        context['trigger'] = 'api'
+        context["trigger"] = "api"
 
         # Start playbook execution
         # Note: skip_approval=False so approval settings in playbook are respected
@@ -889,18 +1086,23 @@ def exposeRoutes(app):
             logger.log(
                 level=40,
                 msg=f"Failed to start playbook execution for playbook "
-                    f"{playbook_id}"
+                f"{playbook_id}",
             )
-            return json.dumps({
-                "success": False,
-                "message": "Failed to start playbook execution.",
-                "results": ""
-            }), 500
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Failed to start playbook execution.",
+                        "results": "",
+                    }
+                ),
+                500,
+            )
 
         logger.log(
             level=20,
             msg=f"Started playbook execution {execution.execution_id} for "
-                f"playbook '{playbook.name}' via API"
+            f"playbook '{playbook.name}' via API",
         )
 
         # Build response
@@ -919,11 +1121,16 @@ def exposeRoutes(app):
                 "Approve via Slack or API."
             )
 
-        return json.dumps({
-            "success": True,
-            "message": "Playbook execution started successfully.",
-            "results": response_data
-        }), 201
+        return (
+            json.dumps(
+                {
+                    "success": True,
+                    "message": "Playbook execution started successfully.",
+                    "results": response_data,
+                }
+            ),
+            201,
+        )
 
     # =========================================================================
     # Slack Interaction Webhook Endpoint
@@ -933,7 +1140,7 @@ def exposeRoutes(app):
     # Webhook Playbook Trigger Endpoint
     # =========================================================================
 
-    @app.route('/v2/webhooks/playbooks/<int:playbook_id>/trigger', methods=['POST'])
+    @app.route("/v2/webhooks/playbooks/<int:playbook_id>/trigger", methods=["POST"])
     def webhook_trigger_playbook(playbook_id):
         """
         Trigger a playbook execution via webhook from external systems.
@@ -964,40 +1171,51 @@ def exposeRoutes(app):
         webhook_secret = os.environ.get("MEDIC_WEBHOOK_SECRET")
         if not webhook_secret:
             logger.log(
-                level=40,
-                msg="MEDIC_WEBHOOK_SECRET not configured for webhook endpoint"
+                level=40, msg="MEDIC_WEBHOOK_SECRET not configured for webhook endpoint"
             )
-            return json.dumps({
-                "success": False,
-                "message": "Webhook endpoint not configured",
-                "results": ""
-            }), 503
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Webhook endpoint not configured",
+                        "results": "",
+                    }
+                ),
+                503,
+            )
 
         # Get secret from header
         provided_secret = request.headers.get("X-Webhook-Secret")
         if not provided_secret:
             logger.log(
-                level=30,
-                msg="Webhook trigger request missing X-Webhook-Secret header"
+                level=30, msg="Webhook trigger request missing X-Webhook-Secret header"
             )
-            return json.dumps({
-                "success": False,
-                "message": "Missing X-Webhook-Secret header",
-                "results": ""
-            }), 401
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Missing X-Webhook-Secret header",
+                        "results": "",
+                    }
+                ),
+                401,
+            )
 
         # Use constant-time comparison to prevent timing attacks
         import hmac
+
         if not hmac.compare_digest(webhook_secret, provided_secret):
-            logger.log(
-                level=30,
-                msg="Webhook trigger request with invalid secret"
+            logger.log(level=30, msg="Webhook trigger request with invalid secret")
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Invalid webhook secret",
+                        "results": "",
+                    }
+                ),
+                401,
             )
-            return json.dumps({
-                "success": False,
-                "message": "Invalid webhook secret",
-                "results": ""
-            }), 401
 
         # =====================================================================
         # Apply rate limiting: 10 req/min per IP for webhooks
@@ -1027,14 +1245,18 @@ def exposeRoutes(app):
         playbook = get_playbook_by_id(playbook_id)
         if not playbook:
             logger.log(
-                level=30,
-                msg=f"Playbook ID {playbook_id} not found for webhook trigger"
+                level=30, msg=f"Playbook ID {playbook_id} not found for webhook trigger"
             )
-            return json.dumps({
-                "success": False,
-                "message": f"Playbook ID {playbook_id} not found.",
-                "results": ""
-            }), 404
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Playbook ID {playbook_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
 
         # =====================================================================
         # Parse request body
@@ -1045,8 +1267,8 @@ def exposeRoutes(app):
         if request.data:
             try:
                 jData = json.loads(request.data)
-                service_id = jData.get('service_id')
-                variables = jData.get('variables', {})
+                service_id = jData.get("service_id")
+                variables = jData.get("variables", {})
 
                 # Validate service_id if provided
                 if service_id is not None:
@@ -1054,51 +1276,70 @@ def exposeRoutes(app):
                         try:
                             service_id = int(service_id)
                         except (ValueError, TypeError):
-                            return json.dumps({
-                                "success": False,
-                                "message": "service_id must be an integer.",
-                                "results": ""
-                            }), 400
+                            return (
+                                json.dumps(
+                                    {
+                                        "success": False,
+                                        "message": "service_id must be an integer.",
+                                        "results": "",
+                                    }
+                                ),
+                                400,
+                            )
 
                     # Verify service exists if provided
                     service_check = db.query_db(
                         "SELECT service_id, heartbeat_name FROM services "
                         "WHERE service_id = %s LIMIT 1",
                         (service_id,),
-                        show_columns=True
+                        show_columns=True,
                     )
-                    if not service_check or service_check == '[]':
-                        return json.dumps({
-                            "success": False,
-                            "message": f"Service ID {service_id} not found.",
-                            "results": ""
-                        }), 404
+                    if not service_check or service_check == "[]":
+                        return (
+                            json.dumps(
+                                {
+                                    "success": False,
+                                    "message": f"Service ID {service_id} not found.",
+                                    "results": "",
+                                }
+                            ),
+                            404,
+                        )
 
                 # Validate variables is a dictionary
                 if variables and not isinstance(variables, dict):
-                    return json.dumps({
-                        "success": False,
-                        "message": "variables must be a dictionary.",
-                        "results": ""
-                    }), 400
+                    return (
+                        json.dumps(
+                            {
+                                "success": False,
+                                "message": "variables must be a dictionary.",
+                                "results": "",
+                            }
+                        ),
+                        400,
+                    )
 
             except (json.JSONDecodeError, ValueError) as e:
                 logger.log(
-                    level=30,
-                    msg=f"Invalid JSON in webhook trigger request: {e}"
+                    level=30, msg=f"Invalid JSON in webhook trigger request: {e}"
                 )
-                return json.dumps({
-                    "success": False,
-                    "message": "Invalid JSON in request body.",
-                    "results": ""
-                }), 400
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid JSON in request body.",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
 
         # =====================================================================
         # Build execution context and start playbook
         # =====================================================================
         context = dict(variables) if variables else {}
-        context['trigger'] = 'webhook'
-        context['source_ip'] = remote_ip
+        context["trigger"] = "webhook"
+        context["source_ip"] = remote_ip
 
         # Note: skip_approval=False so approval settings are respected
         execution = start_playbook_execution(
@@ -1112,18 +1353,23 @@ def exposeRoutes(app):
             logger.log(
                 level=40,
                 msg=f"Failed to start playbook execution via webhook for "
-                    f"playbook {playbook_id}"
+                f"playbook {playbook_id}",
             )
-            return json.dumps({
-                "success": False,
-                "message": "Failed to start playbook execution.",
-                "results": ""
-            }), 500
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Failed to start playbook execution.",
+                        "results": "",
+                    }
+                ),
+                500,
+            )
 
         logger.log(
             level=20,
             msg=f"Started playbook execution {execution.execution_id} for "
-                f"playbook '{playbook.name}' via webhook from {remote_ip}"
+            f"playbook '{playbook.name}' via webhook from {remote_ip}",
         )
 
         # Build response
@@ -1142,13 +1388,18 @@ def exposeRoutes(app):
                 "Approve via Slack or API."
             )
 
-        return json.dumps({
-            "success": True,
-            "message": "Playbook execution started successfully.",
-            "results": response_data
-        }), 201
+        return (
+            json.dumps(
+                {
+                    "success": True,
+                    "message": "Playbook execution started successfully.",
+                    "results": response_data,
+                }
+            ),
+            201,
+        )
 
-    @app.route('/v2/slack/interactions', methods=['POST'])
+    @app.route("/v2/slack/interactions", methods=["POST"])
     def slack_interactions():
         """
         Handle Slack interactive component callbacks.
@@ -1176,45 +1427,33 @@ def exposeRoutes(app):
         # Verify Slack signature if signing secret is configured
         signing_secret = get_slack_signing_secret()
         if signing_secret:
-            timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-            signature = request.headers.get('X-Slack-Signature', '')
+            timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+            signature = request.headers.get("X-Slack-Signature", "")
 
             if not verify_slack_signature(
                 signing_secret, timestamp, raw_body, signature
             ):
-                logger.log(
-                    level=30,
-                    msg="Slack signature verification failed"
+                logger.log(level=30, msg="Slack signature verification failed")
+                return (
+                    json.dumps({"success": False, "message": "Invalid signature"}),
+                    401,
                 )
-                return json.dumps({
-                    "success": False,
-                    "message": "Invalid signature"
-                }), 401
 
         # Parse the payload
         try:
             # Slack sends the payload as form-urlencoded with a 'payload' field
-            payload_str = request.form.get('payload')
+            payload_str = request.form.get("payload")
             if not payload_str:
-                logger.log(
-                    level=30,
-                    msg="No payload in Slack interaction request"
-                )
-                return json.dumps({
-                    "success": False,
-                    "message": "Missing payload"
-                }), 400
+                logger.log(level=30, msg="No payload in Slack interaction request")
+                return json.dumps({"success": False, "message": "Missing payload"}), 400
 
             payload = json.loads(payload_str)
         except (json.JSONDecodeError, ValueError) as e:
-            logger.log(
-                level=30,
-                msg=f"Failed to parse Slack interaction payload: {e}"
+            logger.log(level=30, msg=f"Failed to parse Slack interaction payload: {e}")
+            return (
+                json.dumps({"success": False, "message": "Invalid payload format"}),
+                400,
             )
-            return json.dumps({
-                "success": False,
-                "message": "Invalid payload format"
-            }), 400
 
         # Handle the interaction
         result = handle_slack_interaction(payload)
@@ -1222,17 +1461,18 @@ def exposeRoutes(app):
         if result.success:
             # Slack expects an empty 200 response for successful actions
             # when we update the message ourselves
-            return '', 200
+            return "", 200
         else:
             logger.log(
-                level=30,
-                msg=f"Slack interaction handling failed: {result.message}"
+                level=30, msg=f"Slack interaction handling failed: {result.message}"
             )
             # Return error message that will be shown to user
-            return json.dumps({
-                "response_type": "ephemeral",
-                "text": f"Error: {result.message}"
-            }), 200  # Slack expects 200 even for errors
+            return (
+                json.dumps(
+                    {"response_type": "ephemeral", "text": f"Error: {result.message}"}
+                ),
+                200,
+            )  # Slack expects 200 even for errors
 
 
 def validateRequestData(schema, jData):

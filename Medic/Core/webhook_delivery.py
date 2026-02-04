@@ -2,6 +2,7 @@
 
 Sends webhook notifications with retry logic and delivery tracking.
 """
+
 import json
 import logging
 import threading
@@ -253,9 +254,7 @@ class WebhookDeliveryService:
                 response_body = %s
             WHERE delivery_id = %s
         """
-        params = (
-            status.value, attempts, response_code, response_body, delivery_id
-        )
+        params = (status.value, attempts, response_code, response_body, delivery_id)
 
         return insert_db(query, params)
 
@@ -351,9 +350,11 @@ class WebhookDeliveryService:
                     DeliveryStatus.RETRYING,
                     attempt_num,
                     last_result.status_code if last_result else None,
-                    last_result.response_body or last_result.error_message
-                    if last_result
-                    else None,
+                    (
+                        last_result.response_body or last_result.error_message
+                        if last_result
+                        else None
+                    ),
                 )
 
             # Attempt delivery
@@ -396,14 +397,20 @@ class WebhookDeliveryService:
             DeliveryStatus.FAILED,
             self.max_attempts,
             last_result.status_code if last_result else None,
-            last_result.response_body or last_result.error_message
-            if last_result
-            else None,
+            (
+                last_result.response_body or last_result.error_message
+                if last_result
+                else None
+            ),
         )
 
-        return last_result if last_result else DeliveryResult(
-            success=False,
-            error_message="Delivery failed",
+        return (
+            last_result
+            if last_result
+            else DeliveryResult(
+                success=False,
+                error_message="Delivery failed",
+            )
         )
 
     def deliver_to_all(
@@ -514,9 +521,7 @@ def deliver_webhook(
     return service.deliver(webhook, payload, async_retry)
 
 
-def get_webhooks_for_service(
-    service_id: Optional[int] = None
-) -> List[WebhookConfig]:
+def get_webhooks_for_service(service_id: Optional[int] = None) -> List[WebhookConfig]:
     """
     Get webhook configurations for a service.
 
