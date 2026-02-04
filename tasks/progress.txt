@@ -27,6 +27,47 @@
 - **API Deployment: Use checksum annotations on configmap/secret for automatic pod restart on config changes**
 - **Volume mounts: Add emptyDir for /tmp when using readOnlyRootFilesystem**
 - **Worker deployment: Use exec-based liveness probe (not HTTP) for non-service deployments**
+- **Service template: Use targetPort: http to reference named port from deployment**
+- **Ingress template: Use conditional TLS annotations (certificate-arn, listen-ports, ssl-redirect) when TLS enabled**
+- **Ingress TLS: Support both AWS ACM (certificateArn) and Kubernetes TLS secrets (secretName)**
+
+---
+
+## 2026-02-04 - US-016 - Linear Issue: SRE-43
+- **What was implemented**: Service and Ingress Helm templates for external access
+  - Created `helm/medic/templates/api-service.yaml` - ClusterIP service:
+    - Service name: `{{ include "medic.fullname" . }}-api`
+    - Service type: `{{ .Values.service.type }}` (default: ClusterIP)
+    - Port configurable via `{{ .Values.service.port }}` (default: 8080)
+    - Named port `http` for reference by ingress
+    - Selector uses `medic.api.selectorLabels` helper
+  - Created `helm/medic/templates/ingress.yaml` with conditional creation:
+    - Controlled by `{{ .Values.ingress.enabled }}`
+    - Uses `networking.k8s.io/v1` API version
+    - Supports `ingressClassName` for ALB controller
+    - ALB annotations configurable via `{{ .Values.ingress.annotations }}`
+    - Host configurable via `{{ .Values.ingress.host }}`
+    - TLS support with two options:
+      - AWS ACM: `certificateArn` adds ALB certificate annotations
+      - K8s secret: `secretName` for standard TLS secrets
+    - Automatic SSL redirect when TLS enabled with ACM certificate
+  - Updated `values.yaml` with TLS secretName field
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds
+
+- **Files changed**:
+  - `helm/medic/templates/api-service.yaml` (new)
+  - `helm/medic/templates/ingress.yaml` (new)
+  - `helm/medic/values.yaml` (added tls.secretName)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `targetPort: http` (named port) instead of hardcoding port number for flexibility
+  - Ingress annotations for ALB TLS include certificate-arn, listen-ports, and ssl-redirect
+  - Support both ACM certificates (AWS-managed) and K8s TLS secrets (for other ingress controllers)
+  - Conditional annotation blocks can be nested inside `{{- with }}` blocks
+  - Ingress paths should use `pathType: Prefix` for catch-all routing
 
 ---
 
