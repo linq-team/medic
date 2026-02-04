@@ -236,7 +236,7 @@
         "Verify image builds for arm64: `docker build --platform linux/arm64 .`"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Container setup - must support both amd64 (x86) and arm64 (Graviton/M1)"
     },
     {
