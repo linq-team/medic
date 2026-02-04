@@ -534,3 +534,16 @@
   - Use `git add -f src/lib/api.test.ts` for files in gitignored ui/src/lib/ directory
   - API client offset=0 is falsy, so it won't be added to URL params (only truthy offsets are included)
 ---
+
+## 2026-02-04 - US-032 - Linear Issue: SRE-85
+- What was implemented: Created comprehensive README.md with project setup documentation
+- Files changed:
+  - ui/README.md (replaced boilerplate with full project documentation)
+- **Learnings for future iterations:**
+  - README should cover: features, tech stack, prerequisites, local dev setup, Docker setup, npm scripts, env vars, auth, project structure, styling, testing, deployment, troubleshooting
+  - Use tables for scripts and color references for quick scanning
+  - Document API proxy configuration for both dev (Vite) and prod (nginx)
+  - Include sessionStorage vs localStorage note for auth - sessionStorage clears on browser close
+  - Project structure tree helps developers quickly navigate the codebase
+  - Include troubleshooting section for common issues (API connection, build errors, style issues)
+---
