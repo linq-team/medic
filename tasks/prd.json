@@ -457,7 +457,7 @@
         "Typecheck/lint passes"
       ],
       "priority": 21,
-      "passes": false,
+      "passes": true,
       "notes": "Exemplars enable Grafana to jump from metric spike to example trace",
       "blockedBy": ["SRE-46"]
     },

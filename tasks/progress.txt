@@ -45,6 +45,49 @@
 - **Log format env var: Use `MEDIC_LOG_FORMAT` ('json' default, 'text' for debug)**
 - **Log level env var: Use `MEDIC_LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR)**
 - **JSONFormatter: Includes TraceId, SpanId, Resource attributes, and request context**
+- **Metrics exemplars: Use `record_*_with_exemplar()` functions to include trace_id in histogram observations**
+- **OpenMetrics format: Use `get_metrics(openmetrics=True)` for exemplar support (default)**
+- **Metrics info gauge: `medic_build_info` gauge with service_name, service_version, deployment_environment labels**
+- **OTEL metric naming: Use `medic_http_server_*` for HTTP, `medic_db_client_*` for DB (follows OTEL semantic conventions)**
+
+---
+
+## 2026-02-04 - US-021 - Linear Issue: SRE-48
+- **What was implemented**: OTEL metrics with exemplars for trace correlation
+  - Updated `Medic/Core/metrics.py` with OTEL semantic naming conventions:
+    - `medic_http_server_request_total` (was `medic_http_requests_total`)
+    - `medic_http_server_request_duration_seconds` (was `medic_http_request_duration_seconds`)
+    - `medic_db_client_operation_duration_seconds` (was `medic_db_query_duration_seconds`)
+  - Added `medic_build_info` gauge with OTEL resource attribute labels:
+    - `service_name` from `OTEL_SERVICE_NAME`
+    - `service_version` from `MEDIC_VERSION`
+    - `deployment_environment` from `MEDIC_ENVIRONMENT`
+  - Added exemplar support to histograms:
+    - `record_request_duration_with_exemplar()` - includes trace_id in request duration
+    - `record_playbook_execution_duration_with_exemplar()` - includes trace_id in playbook duration
+    - `record_db_query_duration_with_exemplar()` - includes trace_id in DB query duration
+  - Updated `track_request_metrics` and `track_db_query` decorators to auto-extract trace_id from Flask g
+  - Changed `get_metrics()` to use OpenMetrics format by default (supports exemplars)
+  - Added `service_name` label to relevant metrics for resource attribution
+  - Maintained backwards compatibility with old metric name aliases
+  - Created comprehensive `docs/METRICS.md` documentation
+  - Added 39 unit tests covering all new functionality
+  - Typecheck (mypy) and lint (flake8) pass
+
+- **Files changed**:
+  - `Medic/Core/metrics.py` (major update with OTEL naming and exemplars)
+  - `docs/METRICS.md` (new comprehensive documentation)
+  - `tests/unit/test_metrics.py` (new, 39 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - prometheus_client `Info` metric with name 'x' creates timeseries 'x_info', avoid naming conflicts
+  - Use `MEDIC_BUILD_INFO` gauge (not `MEDIC_INFO`) to avoid collision with `APP_INFO`
+  - OpenMetrics `generate_latest()` requires `registry` parameter, Prometheus format doesn't
+  - Exemplars are passed as `{"trace_id": "..."}` dict to histogram `.observe(value, exemplar=...)`
+  - Counter internal `_name` doesn't include `_total` suffix (added at export time)
+  - Flask g context can be accessed with `getattr(g, "trace_id", None)` to safely get optional values
+  - Use `has_request_context()` before accessing Flask g in decorators that may run outside requests
 
 ---
 
