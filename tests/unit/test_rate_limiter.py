@@ -580,11 +580,323 @@ class TestGlobalRateLimiter:
 
 
 class TestRedisRateLimiter:
-    """Tests for RedisRateLimiter class."""
+    """Tests for RedisRateLimiter class using fakeredis."""
 
-    def test_raises_not_implemented(self):
-        """Test that RedisRateLimiter raises NotImplementedError."""
+    @pytest.fixture
+    def fake_redis(self):
+        """Create a fakeredis instance for testing."""
+        import fakeredis
+
+        return fakeredis.FakeRedis(decode_responses=True)
+
+    @pytest.fixture
+    def limiter(self, fake_redis):
+        """Create a RedisRateLimiter with fakeredis backend."""
+        from Medic.Core.rate_limiter import RedisRateLimiter, RateLimitConfig
+
+        return RedisRateLimiter(
+            redis_client=fake_redis,
+            default_config=RateLimitConfig(
+                heartbeat_limit=100,
+                management_limit=20,
+                window_seconds=60,
+            ),
+        )
+
+    def test_allows_requests_under_limit(self, limiter):
+        """Test that requests under the limit are allowed."""
+        for i in range(20):
+            result = limiter.check_rate_limit("test_key", "management")
+            assert result.allowed is True, f"Request {i+1} should be allowed"
+            assert result.remaining == 20 - (i + 1)
+
+    def test_blocks_requests_over_limit(self, limiter):
+        """Test that requests over the limit are blocked."""
+        # Use up the limit
+        for _ in range(20):
+            result = limiter.check_rate_limit("test_key", "management")
+            assert result.allowed is True
+
+        # Next request should be blocked
+        result = limiter.check_rate_limit("test_key", "management")
+        assert result.allowed is False
+        assert result.remaining == 0
+        assert result.retry_after is not None
+        assert result.retry_after > 0
+
+    def test_different_endpoint_types_separate_buckets(self, limiter):
+        """Test that heartbeat and management have separate limits."""
+        # Use up management limit
+        for _ in range(20):
+            result = limiter.check_rate_limit("test_key", "management")
+            assert result.allowed is True
+
+        # Management should be blocked
+        result = limiter.check_rate_limit("test_key", "management")
+        assert result.allowed is False
+
+        # Heartbeat should still be allowed
+        result = limiter.check_rate_limit("test_key", "heartbeat")
+        assert result.allowed is True
+
+    def test_different_keys_separate_buckets(self, limiter):
+        """Test that different API keys have separate limits."""
+        from Medic.Core.rate_limiter import RateLimitConfig
+
+        # Use a smaller limit for easier testing
+        config = RateLimitConfig(management_limit=5)
+
+        # Use up limit for key1
+        for _ in range(5):
+            result = limiter.check_rate_limit(
+                "key1", "management", config=config
+            )
+            assert result.allowed is True
+
+        # key1 should be blocked
+        result = limiter.check_rate_limit("key1", "management", config=config)
+        assert result.allowed is False
+
+        # key2 should still be allowed
+        result = limiter.check_rate_limit("key2", "management", config=config)
+        assert result.allowed is True
+
+    def test_custom_key_config(self, limiter):
+        """Test that custom per-key configuration works."""
+        from Medic.Core.rate_limiter import RateLimitConfig
+
+        # Set higher limit for premium key
+        premium_config = RateLimitConfig(management_limit=50)
+        limiter.set_key_config("premium_key", premium_config)
+
+        # Premium key can do many requests
+        for i in range(50):
+            result = limiter.check_rate_limit("premium_key", "management")
+            assert result.allowed is True, f"Request {i+1} should be allowed"
+
+        # 51st should be blocked
+        result = limiter.check_rate_limit("premium_key", "management")
+        assert result.allowed is False
+
+    def test_get_current_usage(self, limiter):
+        """Test that get_current_usage returns correct count."""
+        # Initial usage is 0
+        assert limiter.get_current_usage("test_key", "management") == 0
+
+        # Make some requests
+        limiter.check_rate_limit("test_key", "management")
+        limiter.check_rate_limit("test_key", "management")
+        limiter.check_rate_limit("test_key", "management")
+
+        assert limiter.get_current_usage("test_key", "management") == 3
+
+    def test_reset_single_endpoint(self, limiter):
+        """Test that reset clears counters for a specific endpoint."""
+        # Make requests to both endpoints
+        for _ in range(3):
+            limiter.check_rate_limit("test_key", "management")
+            limiter.check_rate_limit("test_key", "heartbeat")
+
+        assert limiter.get_current_usage("test_key", "management") == 3
+        assert limiter.get_current_usage("test_key", "heartbeat") == 3
+
+        # Reset only management
+        limiter.reset("test_key", "management")
+
+        assert limiter.get_current_usage("test_key", "management") == 0
+        assert limiter.get_current_usage("test_key", "heartbeat") == 3
+
+    def test_reset_all_endpoints(self, limiter, fake_redis):
+        """Test that reset without endpoint clears all counters for key."""
+        # Make requests to both endpoints
+        for _ in range(3):
+            limiter.check_rate_limit("test_key", "management")
+            limiter.check_rate_limit("test_key", "heartbeat")
+
+        # Reset all for this key
+        limiter.reset("test_key")
+
+        assert limiter.get_current_usage("test_key", "management") == 0
+        assert limiter.get_current_usage("test_key", "heartbeat") == 0
+
+    def test_result_metadata_correct(self, limiter):
+        """Test that result metadata is correct."""
+        result = limiter.check_rate_limit("test_key", "management")
+
+        assert result.limit == 20  # default management limit
+        assert result.remaining == 19
+        assert result.reset_at > time.time()
+        assert result.reset_at <= time.time() + 60
+
+    def test_config_parameter_override(self, limiter):
+        """Test that config parameter overrides key config."""
+        from Medic.Core.rate_limiter import RateLimitConfig
+
+        key_config = RateLimitConfig(management_limit=50)
+        limiter.set_key_config("test_key", key_config)
+
+        # Use custom config with limit of 2
+        custom_config = RateLimitConfig(management_limit=2)
+
+        result1 = limiter.check_rate_limit(
+            "test_key", "management", config=custom_config
+        )
+        result2 = limiter.check_rate_limit(
+            "test_key", "management", config=custom_config
+        )
+        result3 = limiter.check_rate_limit(
+            "test_key", "management", config=custom_config
+        )
+
+        assert result1.allowed is True
+        assert result2.allowed is True
+        # Third request blocked by custom limit
+        assert result3.allowed is False
+
+    def test_is_healthy_returns_true_when_connected(self, limiter):
+        """Test that is_healthy returns True when Redis is reachable."""
+        assert limiter.is_healthy() is True
+
+    def test_is_healthy_returns_false_on_error(self, fake_redis):
+        """Test that is_healthy returns False when Redis ping fails."""
+        from Medic.Core.rate_limiter import RedisRateLimiter
+        from unittest.mock import MagicMock
+
+        limiter = RedisRateLimiter(redis_client=fake_redis)
+
+        # Make ping raise an exception
+        limiter.redis.ping = MagicMock(
+            side_effect=Exception("Connection refused")
+        )
+
+        assert limiter.is_healthy() is False
+
+    def test_redis_key_prefix(self, fake_redis):
+        """Test that Redis keys use the correct prefix."""
         from Medic.Core.rate_limiter import RedisRateLimiter
 
-        with pytest.raises(NotImplementedError):
-            RedisRateLimiter(redis_client=None)
+        limiter = RedisRateLimiter(
+            redis_client=fake_redis,
+            key_prefix="custom:prefix:",
+        )
+
+        limiter.check_rate_limit("mykey", "management")
+
+        # Check that the key was created with custom prefix
+        keys = fake_redis.keys("custom:prefix:*")
+        assert len(keys) == 1
+        assert keys[0] == "custom:prefix:mykey:management"
+
+    def test_key_expiry_set(self, limiter, fake_redis):
+        """Test that Redis keys have TTL set for automatic cleanup."""
+        limiter.check_rate_limit("test_key", "management")
+
+        redis_key = "medic:ratelimit:test_key:management"
+        ttl = fake_redis.ttl(redis_key)
+
+        # TTL should be set (window_seconds + 1)
+        assert ttl > 0
+        assert ttl <= 61  # window_seconds (60) + 1
+
+    def test_requires_redis_url_when_no_client(self):
+        """Test that ValueError is raised when REDIS_URL is not set."""
+        from Medic.Core.rate_limiter import RedisRateLimiter
+        from unittest.mock import patch
+
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValueError) as exc_info:
+                RedisRateLimiter()
+
+            assert "REDIS_URL" in str(exc_info.value)
+
+    def test_creates_client_from_redis_url(self):
+        """Test that client is created from REDIS_URL environment variable."""
+        from Medic.Core.rate_limiter import RedisRateLimiter
+        from unittest.mock import patch, MagicMock
+
+        mock_redis_class = MagicMock()
+        mock_pool_class = MagicMock()
+
+        with patch.dict(
+            "os.environ",
+            {"REDIS_URL": "redis://localhost:6379/0", "REDIS_POOL_SIZE": "5"},
+        ):
+            with patch("redis.Redis", mock_redis_class):
+                with patch("redis.ConnectionPool", mock_pool_class):
+                    RedisRateLimiter()
+
+                    mock_pool_class.from_url.assert_called_once()
+                    call_args = mock_pool_class.from_url.call_args
+                    assert call_args[0][0] == "redis://localhost:6379/0"
+                    assert call_args[1]["max_connections"] == 5
+
+    def test_default_pool_size_is_10(self):
+        """Test that default REDIS_POOL_SIZE is 10."""
+        from Medic.Core.rate_limiter import RedisRateLimiter
+        from unittest.mock import patch, MagicMock
+
+        mock_redis_class = MagicMock()
+        mock_pool_class = MagicMock()
+
+        with patch.dict(
+            "os.environ",
+            {"REDIS_URL": "redis://localhost:6379/0"},
+            clear=True,
+        ):
+            with patch("redis.Redis", mock_redis_class):
+                with patch("redis.ConnectionPool", mock_pool_class):
+                    RedisRateLimiter()
+
+                    call_args = mock_pool_class.from_url.call_args
+                    assert call_args[1]["max_connections"] == 10
+
+    def test_get_key_config_returns_default(self, limiter):
+        """Test that get_key_config returns default for unknown key."""
+        config = limiter.get_key_config("unknown_key")
+        assert config.management_limit == 20
+        assert config.heartbeat_limit == 100
+
+    def test_sliding_window_removes_old_entries(self, fake_redis):
+        """Test that old entries are removed from the sliding window."""
+        from Medic.Core.rate_limiter import RedisRateLimiter, RateLimitConfig
+
+        limiter = RedisRateLimiter(
+            redis_client=fake_redis,
+            default_config=RateLimitConfig(
+                management_limit=5,
+                window_seconds=2,  # 2 second window
+            ),
+        )
+
+        # Add entries at current time
+        for _ in range(4):
+            limiter.check_rate_limit("test_key", "management")
+
+        assert limiter.get_current_usage("test_key", "management") == 4
+
+        # Wait for window to expire
+        time.sleep(2.1)
+
+        # New request should show count of 1 (only the new request)
+        result = limiter.check_rate_limit("test_key", "management")
+        assert result.allowed is True
+        assert limiter.get_current_usage("test_key", "management") == 1
+
+    def test_rate_limit_result_has_retry_after_when_blocked(self, limiter):
+        """Test that retry_after is set when rate limited."""
+        from Medic.Core.rate_limiter import RateLimitConfig
+
+        config = RateLimitConfig(management_limit=2, window_seconds=60)
+
+        # Use up limit
+        limiter.check_rate_limit("test_key", "management", config=config)
+        limiter.check_rate_limit("test_key", "management", config=config)
+
+        # Should be blocked with retry_after
+        result = limiter.check_rate_limit(
+            "test_key", "management", config=config
+        )
+
+        assert result.allowed is False
+        assert result.retry_after is not None
+        assert 1 <= result.retry_after <= 60

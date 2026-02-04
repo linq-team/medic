@@ -10,3 +10,4 @@ argon2-cffi>=23.1.0
 croniter>=2.0.0
 PyYAML>=6.0
 cryptography>=42.0.0
+redis>=5.0.0
