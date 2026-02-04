@@ -364,7 +364,7 @@
         "Verify `helm template` renders correctly with different value combinations"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Configuration management - supports both direct secrets and ESO"
     },
     {

@@ -31,6 +31,48 @@
 - **Ingress template: Use conditional TLS annotations (certificate-arn, listen-ports, ssl-redirect) when TLS enabled**
 - **Ingress TLS: Support both AWS ACM (certificateArn) and Kubernetes TLS secrets (secretName)**
 
+- **ExternalSecret template: Use `external-secrets.io/v1beta1` API, target same secret name as direct secret**
+- **ServiceAccount IRSA: Annotations go under `serviceAccount.annotations` with `eks.amazonaws.com/role-arn` key**
+
+---
+
+## 2026-02-04 - US-017 - Linear Issue: SRE-44
+- **What was implemented**: ConfigMap, Secret, and ServiceAccount Helm templates for configuration management
+  - ConfigMap (`configmap.yaml`) was already created in US-014:
+    - Iterates over `.Values.config` map to create key-value pairs
+    - Used for non-sensitive configuration (PORT, LOG_LEVEL, rate limits)
+  - Secret (`secret.yaml`) was already created in US-014:
+    - Conditional creation via `.Values.secret.create`
+    - Values base64-encoded automatically via `b64enc`
+    - Used for sensitive values when not using ESO
+  - Created `helm/medic/templates/external-secret.yaml` for ESO integration:
+    - Uses `external-secrets.io/v1beta1` API version
+    - Controlled by `.Values.externalSecret.enabled`
+    - References ClusterSecretStore configured in values
+    - Creates secret with same name as direct secret (`medic-secret`)
+    - Supports configurable refresh interval (default: 1h)
+    - Deletion policy set to Retain for safety
+  - Created `helm/medic/templates/serviceaccount.yaml`:
+    - Conditional creation via `.Values.serviceAccount.create`
+    - Supports custom annotations for IRSA (`eks.amazonaws.com/role-arn`)
+    - automountServiceAccountToken enabled
+    - Referenced by both API and Worker deployments
+  - Values.yaml already had all required defaults from US-013
+  - Verified `helm lint` passes
+  - Verified `helm template` renders correctly for all combinations
+  - Verified `kubectl apply --dry-run=client` validates all resources
+
+- **Files changed**:
+  - `helm/medic/templates/external-secret.yaml` (new)
+  - `helm/medic/templates/serviceaccount.yaml` (new)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - ExternalSecret `target.name` should match the name used by direct secrets for consistent envFrom references
+  - Use `deletionPolicy: Retain` for ExternalSecrets to prevent accidental secret deletion
+  - ServiceAccount annotations are the standard way to enable IRSA on EKS
+  - Test all value combinations (ESO on/off, secret.create on/off, custom SA name) with `helm template`
+
 ---
 
 ## 2026-02-04 - US-016 - Linear Issue: SRE-43
