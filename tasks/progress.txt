@@ -16,7 +16,32 @@
 
 - ESLint 9 uses flat config (eslint.config.js) instead of legacy .eslintrc.js
 - For custom fonts in Vite, copy font files to public/fonts/ and reference via /fonts/ path in CSS
+- shadcn/ui components installed to src/components/ui/ with path alias @/* -> ./src/*
+- cn() utility in src/lib/utils.ts for conditional class merging
+- Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
 
+---
+
+## 2026-02-04 - US-007 - Linear Issue: SRE-86
+- What was implemented: Installed shadcn/ui component library with Button and Card components
+- Files changed:
+  - ui/components.json (new - shadcn/ui configuration)
+  - ui/tsconfig.app.json (added path aliases @/* -> ./src/*)
+  - ui/vite.config.ts (added path alias resolution)
+  - ui/src/lib/utils.ts (new - cn() utility function)
+  - ui/src/components/ui/button.tsx (new - shadcn Button component)
+  - ui/src/components/ui/card.tsx (new - shadcn Card component)
+  - ui/src/index.css (added shadcn/ui CSS variables for theming)
+  - ui/tailwind.config.js (added darkMode, color system with CSS variables, borderRadius)
+  - ui/eslint.config.js (added rule override for shadcn/ui component exports)
+  - ui/package.json (added class-variance-authority, clsx, tailwind-merge, lucide-react, @radix-ui/react-slot)
+  - ui/src/App.tsx (updated to demonstrate Button and Card components)
+- **Learnings for future iterations:**
+  - shadcn CLI creates files in literal `@/` directory - must move to src/components/ui/
+  - Tailwind v4 doesn't support `@apply` with custom CSS variable colors like `border-border` - use raw CSS
+  - shadcn/ui uses CSS variables for theming - define in :root for light mode, .dark for dark mode
+  - Values must be space-separated RGB like `20 20 20` not hex `#141414`
+  - ESLint react-refresh rule must be disabled for ui components that export utilities alongside components
 ---
 
 ## 2026-02-04 - US-006 - Linear Issue: SRE-60
