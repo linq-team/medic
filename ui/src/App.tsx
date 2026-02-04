@@ -6,11 +6,23 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { useTheme } from '@/components/theme-provider'
 
 function App() {
+  const { theme } = useTheme()
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background font-sans p-8">
       <div className="text-center max-w-4xl">
+        {/* Theme toggle in top right */}
+        <div className="fixed top-4 right-4 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            Theme: {theme}
+          </span>
+          <ThemeToggle />
+        </div>
+
         <h1 className="text-4xl font-bold text-primary mb-4">Medic UI</h1>
         <p className="text-lg text-foreground">Heartbeat Monitoring Service</p>
         <p className="text-sm text-muted-foreground mt-2">UI Coming Soon</p>

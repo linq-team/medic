@@ -32,4 +32,11 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  // Provider components often export both the provider and a hook
+  {
+    files: ['src/components/*-provider.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
