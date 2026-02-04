@@ -16,9 +16,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - medic-network
 
   web:
     build: .
+    container_name: medic-api
     entrypoint: ["python", "./medic.py"]
     ports:
       - "5000:5000"
@@ -41,6 +44,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      medic-network:
+        aliases:
+          - medic-api
 
   worker:
     build: .
@@ -50,7 +57,7 @@ services:
       - PG_USER=pg
       - PG_PASS=docker
       - DB_NAME=medic
-      - MEDIC_BASE_URL=http://web:5000
+      - MEDIC_BASE_URL=http://medic-api:5000
       - SLACK_API_TOKEN
       - SLACK_CHANNEL_ID
       - PAGERDUTY_ROUTING_KEY
@@ -59,6 +66,31 @@ services:
         condition: service_healthy
       web:
         condition: service_healthy
+    networks:
+      - medic-network
+
+  medic-ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: medic-ui
+    ports:
+      - "80:80"
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - medic-network
+
+networks:
+  medic-network:
+    driver: bridge
 
 volumes:
   medic_pgdata:
