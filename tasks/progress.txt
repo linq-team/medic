@@ -32,6 +32,27 @@
 - AuthProvider pattern: use useMemo for context value to avoid unnecessary re-renders
 - AuthContext syncs API key to apiClient.setApiKey() on login/logout for consistent API calls
 
+- Login page pattern: place standalone auth pages (Login) outside Layout Route in App.tsx
+- TypeScript verbatimModuleSyntax: use `type` keyword for type imports (e.g., `import { useState, type FormEvent }`)
+- shadcn/ui Input component uses CSS variable classes (border-input, ring, etc.) from index.css
+
+---
+
+## 2026-02-04 - US-015 - Linear Issue: SRE-61
+- What was implemented: Created Login page with API key input, validation, and navigation
+- Files changed:
+  - ui/src/pages/Login.tsx (new - Login page component with form)
+  - ui/src/components/ui/input.tsx (new - shadcn/ui Input component)
+  - ui/src/pages/index.ts (added Login export)
+  - ui/src/App.tsx (added /login route outside Layout)
+- **Learnings for future iterations:**
+  - Login page should be outside Layout Route (standalone, no sidebar/header)
+  - Use createApiClient() with temporary API key to test validation before storing
+  - Health endpoint (/health) is unauthenticated - use getHealth() for connectivity test only
+  - Show specific error messages for different HTTP status codes (401, 403, etc.)
+  - Use Loader2 icon with animate-spin for loading states
+  - Use KeyRound icon for API key input field visual
+  - AlertCircle icon with destructive color scheme for error messages
 ---
 
 ## 2026-02-04 - US-014 - Linear Issue: SRE-61
