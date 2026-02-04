@@ -114,7 +114,8 @@
         "Supports success, error, warning variants",
         "Toasts auto-dismiss after 5 seconds",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-005",
