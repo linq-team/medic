@@ -157,7 +157,8 @@
         "Add tests for toggle interactions",
         "Verify in browser",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-007",

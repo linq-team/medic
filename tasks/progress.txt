@@ -1987,3 +1987,36 @@
   - shadcn CLI still creates files in literal `@/` directory - must move to `src/components/ui/`
   - Sonner supports rich toast options: duration, dismissible, action buttons, descriptions
 ---
+
+## 2026-02-04 - US-006 - Linear Issue: SRE-110
+- **What was implemented**: Inline toggle switches for mute and active status in Services table
+  - Created `ui/src/components/service-toggle.tsx` with:
+    - `MuteToggle` component - immediate toggle without confirmation
+    - `ActiveToggle` component - shows confirmation dialog before deactivating
+  - Added shadcn Switch component to `ui/src/components/ui/switch.tsx`
+  - Updated Services.tsx to use toggle switches instead of text display
+  - All toggles use useUpdateService hook with optimistic updates
+  - Toast notifications for success/error via sonner
+  - Comprehensive test suite with 13 test cases covering:
+    - Toggle state rendering
+    - Mute/unmute interactions
+    - Activation/deactivation with confirmation dialog
+    - Error handling
+
+- **Files changed**:
+  - `ui/src/components/ui/switch.tsx` (new - shadcn Switch component)
+  - `ui/src/components/service-toggle.tsx` (new - MuteToggle and ActiveToggle)
+  - `ui/src/components/service-toggle.test.tsx` (new - tests)
+  - `ui/src/pages/Services.tsx` (updated - replaced text with toggles)
+  - `tasks/prd.json` (marked US-006 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn CLI creates files in literal `@/` directory - must move to `src/components/ui/`
+  - Use `useState` for dialog open state management
+  - Confirmation dialogs should only appear for destructive actions (deactivate)
+  - Switch component has built-in checked/onCheckedChange props from Radix
+  - Test files using components need `.tsx` extension
+  - Use `userEvent` from @testing-library/user-event for realistic click interactions
+  - Dialog tests need to wait for dialog to appear with `waitFor`
+
+---

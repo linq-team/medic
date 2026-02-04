@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Server, AlertTriangle, Eye, EyeOff } from 'lucide-react'
+import { Server, AlertTriangle } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -13,9 +13,9 @@ import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
 import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
 import { SearchInput, useSearch } from '@/components/table-search'
+import { MuteToggle, ActiveToggle } from '@/components/service-toggle'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
-import type { Service } from '@/lib/api'
 
 /** Default number of services to display per page */
 const PAGE_SIZE = 25
@@ -55,16 +55,6 @@ const SERVICE_FILTERS: FilterConfig[] = [
     placeholder: 'All',
   },
 ]
-
-/**
- * Get status badge variant and label for a service
- */
-function getStatusBadge(service: Service): { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string } {
-  if (service.active === 0) {
-    return { variant: 'secondary', label: 'Inactive' }
-  }
-  return { variant: 'default', label: 'Active' }
-}
 
 /**
  * Get priority badge styling
@@ -289,7 +279,6 @@ export function Services() {
               </TableHeader>
               <TableBody>
                 {services.map((service) => {
-                  const statusBadge = getStatusBadge(service)
                   const priorityBadge = getPriorityBadge(service.priority)
 
                   return (
@@ -306,9 +295,7 @@ export function Services() {
                         {service.heartbeat_name}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={statusBadge.variant}>
-                          {statusBadge.label}
-                        </Badge>
+                        <ActiveToggle service={service} />
                       </TableCell>
                       <TableCell>
                         <span
@@ -330,26 +317,7 @@ export function Services() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 text-sm',
-                            service.muted === 1
-                              ? 'text-muted-foreground'
-                              : 'text-foreground'
-                          )}
-                        >
-                          {service.muted === 1 ? (
-                            <>
-                              <EyeOff className="h-4 w-4" />
-                              Yes
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="h-4 w-4" />
-                              No
-                            </>
-                          )}
-                        </span>
+                        <MuteToggle service={service} />
                       </TableCell>
                       <TableCell>{service.team || '—'}</TableCell>
                       <TableCell>
