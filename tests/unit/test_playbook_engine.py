@@ -962,13 +962,13 @@ class TestConvenienceFunctions:
 
 
 class TestParseDateTime:
-    """Tests for _parse_datetime helper function."""
+    """Tests for parse_datetime helper function."""
 
     def test_parse_datetime_iso_format(self):
         """Test parsing ISO format with timezone."""
-        from Medic.Core.playbook_engine import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("2026-02-03T10:00:00-06:00")
+        result = parse_datetime("2026-02-03T10:00:00-06:00")
         assert result is not None
         assert result.year == 2026
         assert result.month == 2
@@ -976,17 +976,17 @@ class TestParseDateTime:
 
     def test_parse_datetime_no_timezone(self):
         """Test parsing format without timezone."""
-        from Medic.Core.playbook_engine import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("2026-02-03 10:00:00")
+        result = parse_datetime("2026-02-03 10:00:00")
         assert result is not None
         assert result.year == 2026
 
     def test_parse_datetime_invalid(self):
         """Test parsing invalid format returns None."""
-        from Medic.Core.playbook_engine import _parse_datetime
+        from Medic.Core.utils.datetime_helpers import parse_datetime
 
-        result = _parse_datetime("invalid-date")
+        result = parse_datetime("invalid-date")
         assert result is None
 
 

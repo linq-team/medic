@@ -40,7 +40,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
-import pytz
 import requests
 
 import Medic.Core.database as db
@@ -51,6 +50,10 @@ from Medic.Core.metrics import (
     update_pending_approval_count,
 )
 from Medic.Core.url_validator import InvalidURLError, validate_url
+from Medic.Core.utils.datetime_helpers import (
+    now as get_now,
+    parse_datetime,
+)
 
 # Import audit logging - use try/except for graceful degradation
 try:
@@ -197,28 +200,6 @@ class PlaybookExecution:
 StepExecutor = Callable[[PlaybookStep, PlaybookExecution], StepResult]
 
 
-def _now() -> datetime:
-    """Get current time in Chicago timezone."""
-    return datetime.now(pytz.timezone('America/Chicago'))
-
-
-def _parse_datetime(dt_str: str) -> Optional[datetime]:
-    """Parse a datetime string in various formats."""
-    formats = [
-        "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%d %H:%M:%S %Z",
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S"
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(dt_str, fmt)
-        except ValueError:
-            continue
-    return None
-
-
 # ============================================================================
 # Database Operations
 # ============================================================================
@@ -241,7 +222,7 @@ def create_execution(
     Returns:
         PlaybookExecution object on success, None on failure
     """
-    now = _now()
+    now = get_now()
 
     # Determine started_at based on status
     started_at = now if status == ExecutionStatus.RUNNING else None
@@ -430,7 +411,7 @@ def update_execution_status(
     Returns:
         True if updated, False otherwise
     """
-    now = _now()
+    now = get_now()
 
     # Build dynamic update
     set_clauses = ["status = %s", "updated_at = %s"]
@@ -478,13 +459,13 @@ def _parse_execution(data: Dict[str, Any]) -> Optional[PlaybookExecution]:
 
         # Parse datetime strings if needed
         if isinstance(started_at, str):
-            started_at = _parse_datetime(started_at)
+            started_at = parse_datetime(started_at)
         if isinstance(completed_at, str):
-            completed_at = _parse_datetime(completed_at)
+            completed_at = parse_datetime(completed_at)
         if isinstance(created_at, str):
-            created_at = _parse_datetime(created_at)
+            created_at = parse_datetime(created_at)
         if isinstance(updated_at, str):
-            updated_at = _parse_datetime(updated_at)
+            updated_at = parse_datetime(updated_at)
 
         return PlaybookExecution(
             execution_id=data['execution_id'],
@@ -524,7 +505,7 @@ def create_step_result(
     Returns:
         StepResult object on success, None on failure
     """
-    now = _now()
+    now = get_now()
 
     result = db.query_db(
         """
@@ -582,7 +563,7 @@ def update_step_result(
     Returns:
         True if updated, False otherwise
     """
-    now = _now()
+    now = get_now()
 
     set_clauses = ["status = %s", "updated_at = %s"]
     params: List[Any] = [status.value, now]
@@ -656,9 +637,9 @@ def _parse_step_result(data: Dict[str, Any]) -> Optional[StepResult]:
         completed_at = data.get('completed_at')
 
         if isinstance(started_at, str):
-            started_at = _parse_datetime(started_at)
+            started_at = parse_datetime(started_at)
         if isinstance(completed_at, str):
-            completed_at = _parse_datetime(completed_at)
+            completed_at = parse_datetime(completed_at)
 
         return StepResult(
             result_id=data['result_id'],
@@ -749,7 +730,7 @@ def execute_wait_step(
     Returns:
         StepResult with completion status
     """
-    now = _now()
+    now = get_now()
     step_index = execution.current_step
 
     # Create step result as running
@@ -792,7 +773,7 @@ def execute_wait_step(
     # In production, this would be async or scheduled
     time.sleep(step.duration_seconds)
 
-    completed_at = _now()
+    completed_at = get_now()
 
     # Update result as completed
     update_step_result(
@@ -991,7 +972,7 @@ def execute_webhook_step(
     Returns:
         StepResult with execution outcome
     """
-    now = _now()
+    now = get_now()
     step_index = execution.current_step
 
     # Create step result as running
@@ -1032,7 +1013,7 @@ def execute_webhook_step(
         body = substitute_all(step.body, context) if step.body else None
     except Exception as e:
         # Handle secret substitution errors
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Variable/secret substitution failed: {e}"
         logger.log(
             level=30,
@@ -1061,7 +1042,7 @@ def execute_webhook_step(
     try:
         validate_url(url)
     except InvalidURLError:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = "Invalid webhook URL"
         logger.log(
             level=30,
@@ -1121,7 +1102,7 @@ def execute_webhook_step(
         # Check success condition (status code)
         is_success = response.status_code in step.success_codes
 
-        completed_at = _now()
+        completed_at = get_now()
 
         # Build output message
         output_msg = (
@@ -1185,7 +1166,7 @@ def execute_webhook_step(
             )
 
     except requests.Timeout:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Request timed out after {timeout}s"
         logger.log(
             level=30,
@@ -1211,7 +1192,7 @@ def execute_webhook_step(
         )
 
     except requests.ConnectionError as e:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Connection error: {str(e)}"
         logger.log(
             level=30,
@@ -1237,7 +1218,7 @@ def execute_webhook_step(
         )
 
     except requests.RequestException as e:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Request failed: {str(e)}"
         logger.log(
             level=30,
@@ -1434,7 +1415,7 @@ def execute_script_step(
     Returns:
         StepResult with execution outcome
     """
-    now = _now()
+    now = get_now()
     step_index = execution.current_step
 
     # Create step result as running
@@ -1467,7 +1448,7 @@ def execute_script_step(
     # Look up the registered script by name
     script = get_registered_script(step.script_name)
     if not script:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = (
             f"Script '{step.script_name}' not found in registered scripts. "
             "Only pre-registered scripts can be executed for security."
@@ -1507,7 +1488,7 @@ def execute_script_step(
         )
     except Exception as e:
         # Handle secret substitution errors
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Variable/secret substitution failed: {e}"
         logger.log(
             level=30,
@@ -1538,7 +1519,7 @@ def execute_script_step(
     elif script.interpreter == 'bash':
         interpreter_cmd = ['bash', '-e']
     else:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Unsupported interpreter: {script.interpreter}"
         logger.log(
             level=30,
@@ -1629,7 +1610,7 @@ def execute_script_step(
             combined_output = combined_output[:MAX_SCRIPT_OUTPUT_SIZE]
             combined_output += "\n...[output truncated]"
 
-        completed_at = _now()
+        completed_at = get_now()
 
         # Build output message
         output_msg = (
@@ -1698,7 +1679,7 @@ def execute_script_step(
         except (OSError, NameError):
             pass
 
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Script execution timed out after {timeout}s"
         logger.log(
             level=30,
@@ -1730,7 +1711,7 @@ def execute_script_step(
         except (OSError, NameError):
             pass
 
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = f"Script execution failed: {str(e)}"
         logger.log(
             level=30,
@@ -1850,7 +1831,7 @@ def execute_condition_step(
     Returns:
         StepResult with execution outcome
     """
-    now = _now()
+    now = get_now()
     step_index = execution.current_step
     condition_start = now
 
@@ -1888,7 +1869,7 @@ def execute_condition_step(
         service_id = step.parameters.get('service_id')
 
     if not service_id:
-        completed_at = _now()
+        completed_at = get_now()
         error_msg = (
             "No service_id available for condition check. "
             "Provide service_id in execution or step parameters."
@@ -1931,7 +1912,7 @@ def execute_condition_step(
 
     while True:
         # Check if timeout has expired
-        elapsed = (_now() - condition_start).total_seconds()
+        elapsed = (get_now() - condition_start).total_seconds()
         if elapsed >= timeout:
             break
 
@@ -1955,7 +1936,7 @@ def execute_condition_step(
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    completed_at = _now()
+    completed_at = get_now()
     elapsed_total = (completed_at - condition_start).total_seconds()
 
     if condition_met:
@@ -2331,7 +2312,7 @@ class PlaybookExecutionEngine:
             )
             return False
 
-        now = _now()
+        now = get_now()
         success = update_execution_status(
             execution_id,
             ExecutionStatus.CANCELLED,
@@ -2472,7 +2453,7 @@ class PlaybookExecutionEngine:
 
         executor = self._step_executors.get(step_type)
         if not executor:
-            now = _now()
+            now = get_now()
             return StepResult(
                 result_id=None,
                 execution_id=execution.execution_id or 0,
@@ -2545,7 +2526,7 @@ class PlaybookExecutionEngine:
         error_message: str
     ) -> None:
         """Mark execution as failed."""
-        now = _now()
+        now = get_now()
         execution.status = ExecutionStatus.FAILED
         execution.completed_at = now
 
@@ -2617,7 +2598,7 @@ class PlaybookExecutionEngine:
 
     def _complete_execution(self, execution: PlaybookExecution) -> None:
         """Mark execution as completed successfully."""
-        now = _now()
+        now = get_now()
         execution.status = ExecutionStatus.COMPLETED
         execution.completed_at = now
 

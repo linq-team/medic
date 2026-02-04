@@ -21,7 +21,7 @@ Usage:
         execution_id=123,
         playbook_name="restart-service",
         service_name="worker-prod-01",
-        expires_at=datetime.now() + timedelta(minutes=30)
+        expires_at=datetime.get_now() + timedelta(minutes=30)
     )
 
     # In Slack interaction webhook handler
@@ -38,12 +38,15 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-import pytz
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
+from Medic.Core.utils.datetime_helpers import (
+    now as get_now,
+    parse_datetime,
+)
 from Medic.Core.playbook_engine import (
     ExecutionStatus,
     approve_playbook_execution,
@@ -123,28 +126,6 @@ class ApprovalResult:
     execution_id: Optional[int] = None
 
 
-def _now() -> datetime:
-    """Get current time in Chicago timezone."""
-    return datetime.now(pytz.timezone('America/Chicago'))
-
-
-def _parse_datetime(dt_str: str) -> Optional[datetime]:
-    """Parse a datetime string in various formats."""
-    formats = [
-        "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%d %H:%M:%S %Z",
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S"
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(dt_str, fmt)
-        except ValueError:
-            continue
-    return None
-
-
 def get_slack_client() -> WebClient:
     """Get a configured Slack WebClient."""
     token = os.environ.get("SLACK_API_TOKEN")
@@ -185,7 +166,7 @@ def create_approval_request_record(
     Returns:
         ApprovalRequest object on success, None on failure
     """
-    now = _now()
+    now = get_now()
 
     result = db.query_db(
         """
@@ -341,7 +322,7 @@ def update_approval_request_status(
     Returns:
         True if updated, False otherwise
     """
-    now = _now()
+    now = get_now()
 
     # For approved/rejected, require decided_by and decided_at
     if status in (ApprovalStatus.APPROVED, ApprovalStatus.REJECTED):
@@ -388,19 +369,19 @@ def _parse_approval_request(data: Dict[str, Any]) -> Optional[ApprovalRequest]:
         updated_at = data.get('updated_at')
 
         if isinstance(requested_at, str):
-            requested_at = _parse_datetime(requested_at)
+            requested_at = parse_datetime(requested_at)
         if isinstance(expires_at, str):
-            expires_at = _parse_datetime(expires_at)
+            expires_at = parse_datetime(expires_at)
         if isinstance(decided_at, str):
-            decided_at = _parse_datetime(decided_at)
+            decided_at = parse_datetime(decided_at)
         if isinstance(created_at, str):
-            created_at = _parse_datetime(created_at)
+            created_at = parse_datetime(created_at)
         if isinstance(updated_at, str):
-            updated_at = _parse_datetime(updated_at)
+            updated_at = parse_datetime(updated_at)
 
         # requested_at should always be set; if parsing failed, use current time
         if requested_at is None:
-            requested_at = _now()
+            requested_at = get_now()
 
         return ApprovalRequest(
             request_id=data['request_id'],
@@ -838,7 +819,7 @@ def approve_request(
     Returns:
         ApprovalResult with success status and details
     """
-    now = _now()
+    now = get_now()
 
     # Get the approval request
     request = get_approval_request_by_execution(execution_id)
@@ -942,7 +923,7 @@ def reject_request(
     Returns:
         ApprovalResult with success status and details
     """
-    now = _now()
+    now = get_now()
 
     # Get the approval request
     request = get_approval_request_by_execution(execution_id)
@@ -1198,7 +1179,7 @@ def handle_slack_interaction(
     if message_ts and channel_id:
         decided_at = (
             result.request.decided_at if result.request and result.request.decided_at
-            else _now()
+            else get_now()
         )
         update_approval_message(
             channel_id=channel_id,
@@ -1229,7 +1210,7 @@ def expire_pending_requests() -> int:
     Returns:
         Number of requests expired
     """
-    now = _now()
+    now = get_now()
 
     # Find expired requests
     result = db.query_db(
