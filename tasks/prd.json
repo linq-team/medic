@@ -130,7 +130,7 @@
         "Typecheck/lint passes"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "Code quality improvement"
     },
     {

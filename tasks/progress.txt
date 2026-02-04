@@ -10,6 +10,43 @@
 - Rate limiting: All endpoints must be rate limited - no bypass prefixes allowed
 - Use `_get_endpoint_rate_limit_config()` to get endpoint-specific rate limits
 - Environment variable config: Use `int(os.environ.get("VAR_NAME", "default"))` pattern
+- **Datetime utilities: Import `from Medic.Core.utils.datetime_helpers import now as get_now, parse_datetime`**
+- **When local var shadows import name, alias the import (e.g., `now as get_now`) to avoid `now = now()` conflicts**
+
+---
+
+## 2026-02-04 - US-006 - Linear Issue: SRE-33
+- **What was implemented**: Extracted shared datetime utilities to single module
+  - Created `Medic/Core/utils/__init__.py` (empty package init)
+  - Created `Medic/Core/utils/datetime_helpers.py` with:
+    - `TIMEZONE: pytz.BaseTzInfo = pytz.timezone('America/Chicago')` constant
+    - `now() -> datetime` function for timezone-aware current time
+    - `parse_datetime(dt_str: str) -> Optional[datetime]` for multi-format parsing
+  - Replaced 6 duplicate `_now()` implementations with centralized `get_now()`
+  - Replaced 4 duplicate `_parse_datetime()` implementations with centralized `parse_datetime()`
+  - Removed unused `pytz` imports from modules using datetime_helpers
+
+- **Files changed**:
+  - `Medic/Core/utils/__init__.py` (new)
+  - `Medic/Core/utils/datetime_helpers.py` (new)
+  - `Medic/Core/playbook_engine.py` (import datetime_helpers, remove _now/_parse_datetime)
+  - `Medic/Core/audit_log.py` (import datetime_helpers, remove _now/_parse_datetime)
+  - `Medic/Core/slack_approval.py` (import datetime_helpers, remove _now/_parse_datetime)
+  - `Medic/Core/secrets.py` (import datetime_helpers, remove _now)
+  - `Medic/Core/circuit_breaker.py` (import datetime_helpers, remove _now)
+  - `Medic/Core/job_runs.py` (import datetime_helpers, remove _parse_datetime)
+  - `tests/unit/test_circuit_breaker.py` (update mocks for get_now)
+  - `tests/unit/test_job_runs.py` (update imports for parse_datetime)
+  - `tests/unit/test_playbook_engine.py` (update imports for parse_datetime)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - When importing a function that will be used as `var = func()`, alias the import to avoid shadowing
+  - Example: `from module import now as get_now` prevents `now = now()` from failing
+  - Mock paths must match the aliased import name (e.g., `@patch('module.get_now')` not `@patch('module.now')`)
+  - pytz.BaseTzInfo is the correct type hint for timezone objects
+  - Empty `__init__.py` creates a Python package; no content needed for basic package structure
+  - Centralized utilities reduce code duplication but require updating all tests that mock the old functions
 
 ---
 
