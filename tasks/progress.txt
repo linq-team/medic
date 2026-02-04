@@ -33,6 +33,54 @@
 
 - **ExternalSecret template: Use `external-secrets.io/v1beta1` API, target same secret name as direct secret**
 - **ServiceAccount IRSA: Annotations go under `serviceAccount.annotations` with `eks.amazonaws.com/role-arn` key**
+- **KEDA ScaledObject: Use `keda.sh/v1alpha1` API, reference deployment by name in scaleTargetRef**
+- **KEDA HPA behavior: Scale up fast (stabilizationWindowSeconds: 15), scale down slow (stabilizationWindowSeconds: 300)**
+- **KEDA CPU trigger: Use `type: cpu` with `metricType: Utilization` for percentage-based scaling**
+- **PodDisruptionBudget: Use `policy/v1` API, selector must match deployment's selector labels**
+- **Karpenter annotations: Add `karpenter.sh/do-not-disrupt: "false"` to allow node consolidation**
+
+---
+
+## 2026-02-04 - US-018 - Linear Issue: SRE-45
+- **What was implemented**: KEDA ScaledObject and PodDisruptionBudget Helm templates for autoscaling and availability
+  - Created `helm/medic/templates/api-scaledobject.yaml` for KEDA autoscaling:
+    - Uses `keda.sh/v1alpha1` API version
+    - Conditional creation via `.Values.api.autoscaling.enabled`
+    - Targets medic-api deployment via scaleTargetRef
+    - Configurable min/max replicas, cooldownPeriod (300s), pollingInterval (30s)
+    - CPU trigger with configurable threshold (default: 70%)
+    - Optional Prometheus trigger for custom metrics (e.g., request rate)
+    - HPA behavior: scale up fast (15s stabilization), scale down slow (300s)
+    - Karpenter-friendly annotation `karpenter.sh/do-not-disrupt: "false"`
+  - Created `helm/medic/templates/worker-pdb.yaml` for PodDisruptionBudget:
+    - Uses `policy/v1` API version
+    - Conditional creation via `.Values.worker.pdb.enabled`
+    - Configurable minAvailable (default: 1)
+    - Selector matches worker deployment labels
+    - Karpenter-friendly annotation for node consolidation
+  - Added topology spread constraints to worker-deployment.yaml:
+    - Previously only API deployment had topologySpreadConstraints
+    - Now worker also distributes across availability zones
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds
+
+- **Files changed**:
+  - `helm/medic/templates/api-scaledobject.yaml` (new)
+  - `helm/medic/templates/worker-pdb.yaml` (new)
+  - `helm/medic/templates/worker-deployment.yaml` (added topologySpreadConstraints)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - KEDA ScaledObject replaces HPA - use `keda.sh/v1alpha1` API
+  - ScaledObject's scaleTargetRef needs apiVersion, kind, and name fields
+  - CPU trigger uses `metricType: Utilization` for percentage-based scaling
+  - Prometheus trigger requires serverAddress, metricName, threshold, and query
+  - HPA behavior block in `advanced.horizontalPodAutoscalerConfig` controls scaling speed
+  - PodDisruptionBudget uses `policy/v1` (not `policy/v1beta1`)
+  - PDB selector must exactly match deployment's selector labels
+  - Karpenter annotation `karpenter.sh/do-not-disrupt: "false"` enables node consolidation
+  - When autoscaling enabled, omit `replicas` from Deployment to avoid KEDA conflicts
 
 ---
 
