@@ -48,7 +48,7 @@
         "Typecheck/lint passes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001 (SRE-28)",
       "blockedBy": ["SRE-28"]
     },

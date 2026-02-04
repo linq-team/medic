@@ -40,3 +40,29 @@
   - Use `patch.dict('os.environ', {...})` for testing environment variables
 
 ---
+
+## 2026-02-03 23:15 - US-002 - Linear Issue: SRE-29
+- **What was implemented**: Integrated URL validator into webhook execution
+  - Added `from Medic.Core.url_validator import InvalidURLError, validate_url` to `playbook_engine.py`
+  - Call `validate_url(url)` in `execute_webhook_step()` after variable substitution, before HTTP request
+  - On `InvalidURLError`, return `StepResult` with `FAILED` status and "Invalid webhook URL" message
+  - Added `from Medic.Core.url_validator import InvalidURLError, validate_url` to `webhook_delivery.py`
+  - Call `validate_url(url)` in `_send_request()` before HTTP request
+  - Log validation failures at WARNING level using `logger.warning()`
+  - Added 11 integration tests (5 in test_playbook_engine.py, 6 in test_webhook_delivery.py)
+
+- **Files changed**:
+  - `Medic/Core/playbook_engine.py` (import + validation in execute_webhook_step)
+  - `Medic/Core/webhook_delivery.py` (import + validation in _send_request)
+  - `tests/unit/test_playbook_engine.py` (new TestExecuteWebhookStepSSRFPrevention class)
+  - `tests/unit/test_webhook_delivery.py` (new TestWebhookDeliveryServiceSSRFPrevention class)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - URL validation should happen AFTER variable substitution so ${secrets.XXX} and ${VAR} are resolved first
+  - Use `@patch('Medic.Core.module.validate_url')` to mock URL validation in tests
+  - The playbook_engine uses `StepResult` dataclass for return values with specific status codes
+  - webhook_delivery uses `DeliveryResult` dataclass with `success` and `error_message` fields
+  - When validation fails, HTTP client should NOT be called - verify with `mock_client.assert_not_called()`
+
+---
