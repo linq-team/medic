@@ -659,22 +659,109 @@ class RedisRateLimiter(RateLimiter):
             logger.debug(f"Reset all rate limits for key {key}")
 
 
-# Global default rate limiter instance
+# Global default rate limiter instance (singleton)
 _default_limiter: Optional[RateLimiter] = None
 _default_limiter_lock = threading.Lock()
+
+# Rate limiter type configuration
+# 'redis': Force Redis (fails if Redis unavailable)
+# 'memory': Force in-memory (never uses Redis)
+# 'auto': Try Redis if REDIS_URL set, fall back to in-memory (default)
+RATE_LIMITER_TYPE_REDIS: str = "redis"
+RATE_LIMITER_TYPE_MEMORY: str = "memory"
+RATE_LIMITER_TYPE_AUTO: str = "auto"
+
+
+def _create_rate_limiter() -> RateLimiter:
+    """
+    Create a rate limiter instance based on configuration.
+
+    The limiter type is determined by the MEDIC_RATE_LIMITER_TYPE env var:
+    - 'redis': Force Redis (fails if unavailable)
+    - 'memory': Force in-memory
+    - 'auto' (default): Try Redis if REDIS_URL set, fall back to in-memory
+
+    Returns:
+        RateLimiter instance (Redis or InMemory)
+    """
+    limiter_type = os.environ.get(
+        "MEDIC_RATE_LIMITER_TYPE", RATE_LIMITER_TYPE_AUTO
+    ).lower()
+    redis_url = os.environ.get("REDIS_URL")
+
+    # Force in-memory limiter
+    if limiter_type == RATE_LIMITER_TYPE_MEMORY:
+        logger.info(
+            "Using InMemoryRateLimiter (MEDIC_RATE_LIMITER_TYPE=memory)"
+        )
+        return InMemoryRateLimiter()
+
+    # Force Redis limiter
+    if limiter_type == RATE_LIMITER_TYPE_REDIS:
+        if not redis_url:
+            raise ValueError(
+                "REDIS_URL is required when MEDIC_RATE_LIMITER_TYPE=redis"
+            )
+        logger.info("Using RedisRateLimiter (MEDIC_RATE_LIMITER_TYPE=redis)")
+        return RedisRateLimiter()
+
+    # Auto-select: try Redis if REDIS_URL is set
+    if limiter_type == RATE_LIMITER_TYPE_AUTO:
+        if not redis_url:
+            logger.info(
+                "Using InMemoryRateLimiter (REDIS_URL not set)"
+            )
+            return InMemoryRateLimiter()
+
+        # Try to create Redis limiter, fall back to in-memory on failure
+        try:
+            redis_limiter = RedisRateLimiter()
+            # Test connection to ensure Redis is reachable
+            if redis_limiter.is_healthy():
+                logger.info(
+                    "Using RedisRateLimiter (REDIS_URL configured, "
+                    "connection healthy)"
+                )
+                return redis_limiter
+            else:
+                logger.warning(
+                    "Redis health check failed, falling back to "
+                    "InMemoryRateLimiter"
+                )
+                return InMemoryRateLimiter()
+        except Exception as e:
+            logger.warning(
+                f"Failed to create RedisRateLimiter: {e}. "
+                "Falling back to InMemoryRateLimiter"
+            )
+            return InMemoryRateLimiter()
+
+    # Unknown type - log warning and use in-memory
+    logger.warning(
+        f"Unknown MEDIC_RATE_LIMITER_TYPE='{limiter_type}', "
+        "using InMemoryRateLimiter"
+    )
+    return InMemoryRateLimiter()
 
 
 def get_rate_limiter() -> RateLimiter:
     """
-    Get the global rate limiter instance.
+    Get the global rate limiter instance (singleton).
+
+    The limiter type is determined by the MEDIC_RATE_LIMITER_TYPE env var:
+    - 'redis': Force Redis (fails if unavailable)
+    - 'memory': Force in-memory
+    - 'auto' (default): Try Redis if REDIS_URL set, fall back to in-memory
+
+    The limiter instance is cached as a module-level singleton.
 
     Returns:
-        The global RateLimiter instance (InMemoryRateLimiter by default)
+        The global RateLimiter instance
     """
     global _default_limiter
     with _default_limiter_lock:
         if _default_limiter is None:
-            _default_limiter = InMemoryRateLimiter()
+            _default_limiter = _create_rate_limiter()
         return _default_limiter
 
 

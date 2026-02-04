@@ -900,3 +900,306 @@ class TestRedisRateLimiter:
         assert result.allowed is False
         assert result.retry_after is not None
         assert 1 <= result.retry_after <= 60
+
+
+class TestRateLimiterFactory:
+    """Tests for rate limiter factory function with auto-selection."""
+
+    def setup_method(self):
+        """Reset global limiter before each test."""
+        from Medic.Core.rate_limiter import set_rate_limiter
+
+        set_rate_limiter(None)
+
+    def teardown_method(self):
+        """Reset global limiter after each test."""
+        from Medic.Core.rate_limiter import set_rate_limiter
+
+        set_rate_limiter(None)
+
+    def test_auto_mode_no_redis_url_returns_inmemory(self):
+        """Test auto mode returns InMemoryRateLimiter when REDIS_URL not set."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch
+
+        with patch.dict(
+            "os.environ",
+            {"MEDIC_RATE_LIMITER_TYPE": "auto"},
+            clear=True,
+        ):
+            limiter = _create_rate_limiter()
+
+            assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_auto_mode_default_no_redis_url_returns_inmemory(self):
+        """Test default (auto) mode returns InMemoryRateLimiter without URL."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch
+
+        # No MEDIC_RATE_LIMITER_TYPE set - should default to auto
+        with patch.dict("os.environ", {}, clear=True):
+            limiter = _create_rate_limiter()
+
+            assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_memory_mode_returns_inmemory(self):
+        """Test memory mode always returns InMemoryRateLimiter."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch
+
+        # Even with REDIS_URL set, memory mode should return in-memory
+        with patch.dict(
+            "os.environ",
+            {
+                "MEDIC_RATE_LIMITER_TYPE": "memory",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            limiter = _create_rate_limiter()
+
+            assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_redis_mode_without_redis_url_raises_error(self):
+        """Test redis mode raises ValueError when REDIS_URL not set."""
+        from Medic.Core.rate_limiter import _create_rate_limiter
+        from unittest.mock import patch
+
+        with patch.dict(
+            "os.environ",
+            {"MEDIC_RATE_LIMITER_TYPE": "redis"},
+            clear=True,
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                _create_rate_limiter()
+
+            assert "REDIS_URL is required" in str(exc_info.value)
+
+    def test_redis_mode_with_redis_url_returns_redis_limiter(self):
+        """Test redis mode returns RedisRateLimiter when URL is set."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            RedisRateLimiter,
+        )
+        from unittest.mock import patch, MagicMock
+        import fakeredis
+
+        fake_redis = fakeredis.FakeRedis(decode_responses=True)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "MEDIC_RATE_LIMITER_TYPE": "redis",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch(
+                "Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client",
+                return_value=fake_redis,
+            ):
+                limiter = _create_rate_limiter()
+
+                assert isinstance(limiter, RedisRateLimiter)
+
+    def test_auto_mode_with_healthy_redis_returns_redis_limiter(self):
+        """Test auto mode returns RedisRateLimiter when Redis is healthy."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            RedisRateLimiter,
+        )
+        from unittest.mock import patch
+        import fakeredis
+
+        fake_redis = fakeredis.FakeRedis(decode_responses=True)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "MEDIC_RATE_LIMITER_TYPE": "auto",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch(
+                "Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client",
+                return_value=fake_redis,
+            ):
+                limiter = _create_rate_limiter()
+
+                assert isinstance(limiter, RedisRateLimiter)
+
+    def test_auto_mode_with_unhealthy_redis_falls_back_to_inmemory(self):
+        """Test auto mode falls back to InMemory when Redis is unhealthy."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch, MagicMock
+
+        # Create mock Redis that fails health check
+        mock_redis = MagicMock()
+        mock_redis.ping.side_effect = Exception("Connection refused")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "MEDIC_RATE_LIMITER_TYPE": "auto",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch(
+                "Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client",
+                return_value=mock_redis,
+            ):
+                limiter = _create_rate_limiter()
+
+                assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_auto_mode_redis_creation_error_falls_back_to_inmemory(self):
+        """Test auto mode falls back to InMemory when Redis creation fails."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch
+
+        with patch.dict(
+            "os.environ",
+            {
+                "MEDIC_RATE_LIMITER_TYPE": "auto",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch(
+                "Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client",
+                side_effect=Exception("Failed to connect"),
+            ):
+                limiter = _create_rate_limiter()
+
+                assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_unknown_limiter_type_returns_inmemory(self):
+        """Test unknown limiter type returns InMemoryRateLimiter."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch
+
+        with patch.dict(
+            "os.environ",
+            {"MEDIC_RATE_LIMITER_TYPE": "invalid_type"},
+        ):
+            limiter = _create_rate_limiter()
+
+            assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_get_rate_limiter_caches_instance(self):
+        """Test that get_rate_limiter returns cached singleton."""
+        from Medic.Core.rate_limiter import get_rate_limiter, set_rate_limiter
+        from unittest.mock import patch
+
+        set_rate_limiter(None)
+
+        with patch.dict("os.environ", {}, clear=True):
+            limiter1 = get_rate_limiter()
+            limiter2 = get_rate_limiter()
+
+            assert limiter1 is limiter2
+
+    def test_limiter_type_case_insensitive(self):
+        """Test that MEDIC_RATE_LIMITER_TYPE is case insensitive."""
+        from Medic.Core.rate_limiter import (
+            _create_rate_limiter,
+            InMemoryRateLimiter,
+        )
+        from unittest.mock import patch
+
+        # Test uppercase
+        with patch.dict(
+            "os.environ",
+            {"MEDIC_RATE_LIMITER_TYPE": "MEMORY"},
+        ):
+            limiter = _create_rate_limiter()
+            assert isinstance(limiter, InMemoryRateLimiter)
+
+        # Test mixed case
+        with patch.dict(
+            "os.environ",
+            {"MEDIC_RATE_LIMITER_TYPE": "Memory"},
+        ):
+            limiter = _create_rate_limiter()
+            assert isinstance(limiter, InMemoryRateLimiter)
+
+    def test_auto_mode_logs_info_when_redis_url_not_set(self):
+        """Test that auto mode logs INFO when REDIS_URL not set."""
+        from Medic.Core.rate_limiter import _create_rate_limiter
+        from unittest.mock import patch
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("Medic.Core.rate_limiter.logger") as mock_logger:
+                _create_rate_limiter()
+
+                # Verify INFO log was called
+                mock_logger.info.assert_called_once()
+                call_args = mock_logger.info.call_args[0][0]
+                assert "InMemoryRateLimiter" in call_args
+                assert "REDIS_URL not set" in call_args
+
+    def test_auto_mode_logs_warning_on_redis_fallback(self):
+        """Test that auto mode logs WARNING when falling back from Redis."""
+        from Medic.Core.rate_limiter import _create_rate_limiter
+        from unittest.mock import patch, MagicMock
+
+        # Create mock Redis that fails health check
+        mock_redis = MagicMock()
+        mock_redis.ping.side_effect = Exception("Connection refused")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "MEDIC_RATE_LIMITER_TYPE": "auto",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch(
+                "Medic.Core.rate_limiter.RedisRateLimiter._create_redis_client",
+                return_value=mock_redis,
+            ):
+                with patch("Medic.Core.rate_limiter.logger") as mock_logger:
+                    _create_rate_limiter()
+
+                    # Verify WARNING log was called for fallback
+                    mock_logger.warning.assert_called()
+                    warning_calls = [
+                        str(call)
+                        for call in mock_logger.warning.call_args_list
+                    ]
+                    assert any(
+                        "falling back" in call.lower()
+                        for call in warning_calls
+                    )
+
+    def test_memory_mode_logs_info(self):
+        """Test that memory mode logs INFO message."""
+        from Medic.Core.rate_limiter import _create_rate_limiter
+        from unittest.mock import patch
+
+        with patch.dict(
+            "os.environ",
+            {"MEDIC_RATE_LIMITER_TYPE": "memory"},
+        ):
+            with patch("Medic.Core.rate_limiter.logger") as mock_logger:
+                _create_rate_limiter()
+
+                mock_logger.info.assert_called_once()
+                call_args = mock_logger.info.call_args[0][0]
+                assert "InMemoryRateLimiter" in call_args
+                assert "memory" in call_args.lower()
