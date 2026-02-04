@@ -39,6 +39,27 @@
 - React Query hooks pattern: create query key factories (e.g., servicesKeys) for consistent cache key management
 - React Query hooks pattern: export filters interface and separate hooks for list/detail queries
 
+- Dashboard summary cards pattern: use Card with CardHeader, CardTitle, CardContent for consistent styling
+- Skeleton component for loading states: use animate-pulse with bg-primary/10
+- Status color classes: text-status-healthy, text-status-error for conditional coloring
+- shadcn CLI creates files in literal @/ directory - must move to src/components/ui/
+
+---
+
+## 2026-02-04 - US-018 - Linear Issue: SRE-66
+- What was implemented: Created Dashboard page with summary cards showing service health metrics
+- Files changed:
+  - ui/src/pages/Dashboard.tsx (replaced placeholder with full implementation)
+  - ui/src/hooks/use-alerts.ts (new - useAlerts React Query hook)
+  - ui/src/hooks/index.ts (added useAlerts export)
+  - ui/src/components/ui/skeleton.tsx (new - shadcn/ui Skeleton component)
+- **Learnings for future iterations:**
+  - Use font-mono class for numeric values in cards for better readability
+  - useServices() and useAlerts() return ApiResponse<T[]> - access data via data?.results ?? []
+  - Combine isLoading states from multiple queries: isLoading = isLoadingServices || isLoadingAlerts
+  - Error handling pattern: check hasError and display styled error banner with icon
+  - Color scheme: text-status-healthy for green (#83B149), text-status-error for red (#DC2626)
+  - Grid layout: grid gap-4 md:grid-cols-2 lg:grid-cols-4 for responsive card layout
 ---
 
 ## 2026-02-04 - US-017 - Linear Issue: SRE-88
