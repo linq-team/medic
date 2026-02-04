@@ -1,1 +1,19 @@
 @import 'tailwindcss';
+
+@theme {
+  /* Linq Brand Colors */
+  --color-linq-black: #141414;
+  --color-linq-cream: #FCF9E9;
+  --color-linq-sage: #B0BFB7;
+  --color-linq-blue: #4F9FDF;
+  --color-linq-navy: #1B3D67;
+  --color-linq-green: #83B149;
+  --color-linq-lime: #E8DF6E;
+
+  /* Status Colors for health indicators */
+  --color-status-healthy: #83B149;
+  --color-status-warning: #CA8A04;
+  --color-status-error: #DC2626;
+  --color-status-critical: #991B1B;
+  --color-status-muted: #6B7280;
+}
