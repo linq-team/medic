@@ -151,6 +151,36 @@
 - Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
 - **Service snapshots table**: Migration 017 creates medic.service_snapshots for backup/restore functionality
 - **Toast notifications**: Use sonner library via `import { toast } from "sonner"`, call `toast.success()`, `toast.error()`, `toast.warning()` for variants. Toaster component configured in main.tsx with 5s auto-dismiss.
+- **Service mutation hooks**: Use `useUpdateService`, `useCreateService`, `useBulkUpdateServices` from `@/hooks/use-service-mutations` for service CRUD operations with optimistic updates
+
+---
+
+## 2026-02-04 - US-005 - Linear Issue: SRE-109
+- **What was implemented**: React Query mutation hooks for service CRUD operations
+  - Created `ui/src/hooks/use-service-mutations.ts` with:
+    - `useUpdateService` hook with optimistic updates and rollback on error
+    - `useCreateService` hook for creating new services
+    - `useBulkUpdateServices` hook for bulk operations (returns succeeded/failed arrays)
+  - All hooks invalidate relevant queries on success
+  - Optimistic updates immediately reflect changes in UI
+  - Rollback mechanism restores previous state on error
+  - Exported types: `UpdateServiceInput`, `CreateServiceInput`, `BulkUpdateServicesInput`
+  - Added comprehensive test suite with 15 test cases
+
+- **Files changed**:
+  - `ui/src/hooks/use-service-mutations.ts` (new - mutation hooks)
+  - `ui/src/hooks/use-service-mutations.test.tsx` (new - tests)
+  - `ui/src/hooks/index.ts` (export new hooks)
+  - `tasks/prd.json` (marked US-005 as passes: true)
+
+- **Learnings for future iterations**:
+  - Use `useMutation` from React Query for all write operations
+  - Optimistic updates pattern: onMutate saves previous state, applies optimistic change, onError rolls back
+  - Always cancel outgoing queries before optimistic update to avoid race conditions
+  - Bulk operations should use Promise.allSettled to handle partial failures
+  - Test files using JSX/React components must use `.tsx` extension (not `.ts`)
+  - Return context from onMutate for rollback data in onError
+  - Query keys factory pattern (servicesKeys) ensures consistent cache invalidation
 
 ---
 

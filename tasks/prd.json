@@ -134,7 +134,8 @@
         "All hooks invalidate queries on success",
         "Add tests for all hooks",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-006",
