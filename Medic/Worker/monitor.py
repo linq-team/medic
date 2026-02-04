@@ -5,8 +5,8 @@ import threading
 import time
 import logging
 import psycopg2
-from Medic.Core import slack_client as slack
-from Medic.Core import pagerduty_client as pagerduty
+from Medic.Worker import slack_client as slack
+from Medic.Worker import pagerduty_client as pagerduty
 
 # Import maintenance window checker
 try:

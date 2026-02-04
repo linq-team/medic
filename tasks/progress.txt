@@ -1,4 +1,6 @@
 ## Codebase Patterns
+
+### Backend / Infrastructure
 - Script env security: Only pass allowlisted vars (PATH, HOME, USER, LANG, LC_ALL, TZ) via _get_script_env()
 - Use `Medic.Helpers.logSettings.logSetup()` for logging configuration
 - Follow existing module docstring pattern with description, features, and usage example
@@ -30,7 +32,6 @@
 - **Service template: Use targetPort: http to reference named port from deployment**
 - **Ingress template: Use conditional TLS annotations (certificate-arn, listen-ports, ssl-redirect) when TLS enabled**
 - **Ingress TLS: Support both AWS ACM (certificateArn) and Kubernetes TLS secrets (secretName)**
-
 - **ExternalSecret template: Use `external-secrets.io/v1beta1` API, target same secret name as direct secret**
 - **ServiceAccount IRSA: Annotations go under `serviceAccount.annotations` with `eks.amazonaws.com/role-arn` key**
 - **KEDA ScaledObject: Use `keda.sh/v1alpha1` API, reference deployment by name in scaleTargetRef**
@@ -69,6 +70,85 @@
 - **Helm hooks: Use `helm.sh/hook: pre-install,pre-upgrade` for migrations, negative weight runs first**
 - **Helm Job cleanup: Use `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded`**
 - **Migration script: Track applied migrations in `schema_migrations` table, support `DATABASE_URL` env var**
+
+### UI (React Dashboard)
+- UI project located in ui/ directory
+- Use Vite + React + TypeScript
+- Tailwind CSS for styling with Linq brand colors
+- shadcn/ui for component library foundation
+- React Router v6 for routing
+- React Query (TanStack Query) for server state management
+- Zustand for client state (theme, settings)
+- Geist font family for typography (Geist for body, Geist Mono for code/numerals)
+- Dark mode: use #141414 for backgrounds, #FFFFFF for text
+- Light mode: use #FCF9E9 (cream) for backgrounds, #141414 for text
+- Linq brand colors: navy (#1B3D67), linq-blue (#4F9FDF), linq-green (#83B149), sage (#B0BFB7), lime (#E8DF6E)
+- Status colors: healthy (#83B149), warning (#CA8A04 light / #EAB308 dark), error (#DC2626 light / #EF4444 dark)
+- API authentication via API key in Authorization header (Bearer token)
+- Store API key in sessionStorage, not localStorage
+- ESLint 9 uses flat config (eslint.config.js) instead of legacy .eslintrc.js
+- For custom fonts in Vite, copy font files to public/fonts/ and reference via /fonts/ path in CSS
+- shadcn/ui components installed to src/components/ui/ with path alias @/* -> ./src/*
+- cn() utility in src/lib/utils.ts for conditional class merging
+- Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
+- Provider components (e.g., ThemeProvider) export both component and hook - add ESLint override in eslint.config.js
+- Static assets (images, logos) go in ui/public/ and are served at root path (e.g., /assets/logo.png)
+- Layout component pattern: use Outlet for nested route rendering in React Router v6
+- Mobile navigation: use shadcn/ui Sheet component with side="left" for drawer pattern
+- Responsive breakpoints: md: (768px) is standard breakpoint to hide/show sidebar
+- tsconfig.app.json has erasableSyntaxOnly: true - don't use public constructor parameters in classes
+- API client factory pattern: createApiClient() returns object with methods, allows setApiKey() for runtime config
+- AuthProvider pattern: use useMemo for context value to avoid unnecessary re-renders
+- AuthContext syncs API key to apiClient.setApiKey() on login/logout for consistent API calls
+- Login page pattern: place standalone auth pages (Login) outside Layout Route in App.tsx
+- TypeScript verbatimModuleSyntax: use `type` keyword for type imports (e.g., `import { useState, type FormEvent }`)
+- shadcn/ui Input component uses CSS variable classes (border-input, ring, etc.) from index.css
+- ProtectedRoute pattern: wrap layout/routes with component that checks isAuthenticated and redirects to /login
+- React Query hooks pattern: create query key factories (e.g., servicesKeys) for consistent cache key management
+- React Query hooks pattern: export filters interface and separate hooks for list/detail queries
+- Dashboard summary cards pattern: use Card with CardHeader, CardTitle, CardContent for consistent styling
+- Skeleton component for loading states: use animate-pulse with bg-primary/10
+- Status color classes: text-status-healthy, text-status-error for conditional coloring
+- shadcn CLI creates files in literal @/ directory - must move to src/components/ui/
+- Services table pattern: use Table component with TableHeader, TableBody, TableRow, TableHead, TableCell
+- Badge component for status indicators: variant="default" for active, variant="secondary" for inactive
+- Priority badge styling: use custom className for P1 (error), P2 (warning), P3 (muted)
+- Empty state pattern: centered flex column with icon, heading, and description
+- Table loading state: use Skeleton components for entire rows
+- Pagination pattern: usePagination hook with useSearchParams for URL state management
+- TablePagination component: reusable pagination with Previous, Next, page numbers
+- Client-side pagination: allItems.slice(offset, offset + pageSize) for paging
+- Components exporting hooks: add ESLint override in eslint.config.js (e.g., *-pagination.tsx, *-sort.tsx)
+- Sorting pattern: useSort hook with useSearchParams for URL state management (?sort=column&dir=asc|desc)
+- SortableTableHead component: clickable headers with sort direction icons (ArrowUp/ArrowDown/ArrowUpDown)
+- Sort + pagination pattern: sort items first, then paginate (sortItems(allItems).slice(offset, offset + pageSize))
+- Reset pagination when sort changes: toggleSort deletes 'page' param to go back to page 1
+- Filtering pattern: useFilter hook with useSearchParams for URL state management (?active=1&muted=0&down=1)
+- TableFilters component: dropdown selects for each filter with Clear filters button
+- Filter + sort + pagination pattern: filter first, then sort, then paginate (filterItems(allItems) → sortItems → slice)
+- FilterConfig type: { param, label, options, placeholder } for configurable filter dropdowns
+- Filter options use 'all' value for "show all" (not null/empty) for cleaner Select handling
+- Search pattern: useSearch hook with useSearchParams for URL state management (?q=searchterm)
+- SearchInput component: styled input with search icon and clear button
+- Search + filter + sort + pagination pattern: search → filter → sort → paginate
+- Debounce pattern: use pendingValue state for immediate UI response, update URL after 300ms delay
+- ESLint react-hooks/set-state-in-effect rule: avoid setState in useEffect - use pending state pattern instead
+- Service detail page pattern: use useParams to get id from URL, useService(id) to fetch by heartbeat_name
+- Detail page pattern: Card components for grouping related information (Service Info, Monitoring Config, Timestamps)
+- Detail row pattern: dt/dd pattern with label and value for consistent styling
+- Services link by heartbeat_name (encodeURIComponent) since API uses heartbeat_name for lookup
+- Alerts table pattern: similar to Services table but with Alert-specific columns (Alert Name, Service, Status, Priority, Created Date, Closed Date, Duration)
+- Alert status badge: variant="destructive" for active alerts with animate-pulse, variant="secondary" for resolved
+- formatDuration() helper: converts seconds to human-readable (e.g., "1h 30m", "5m 20s", "45s")
+- formatDate() helper: uses toLocaleString() with month, day, year, hour, minute options
+- Alert icons: Bell for active alerts, CheckCircle for resolved, Clock for timestamps
+- useAlerts hook already exists in src/hooks/use-alerts.ts - no need to create new hooks
+- Alert detail page pattern: fetch all alerts via useAlerts() and filter by alert_id since no single-alert API endpoint exists
+- formatRelativeTime() helper: calculate diff from now and show "X hours ago", "X minutes ago", etc.
+- Server-side pagination pattern: pass limit/offset to API, calculate totalPages from response's total_count
+- Audit logs use PaginatedResponse<T> wrapper with entries, total_count, limit, offset, has_more
+- Date input filter: use Input type="date" with pl-8 padding for Calendar icon
+- Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
 
 ---
 
@@ -1273,4 +1353,465 @@
   - Support both `DATABASE_URL` and individual env vars for flexibility
   - Use `ttlSecondsAfterFinished` for automatic Job cleanup (requires TTLAfterFinished controller)
 
+---
+
+## 2026-02-04 - US-026 - Linear Issue: SRE-93
+- What was implemented: Added filtering and sorting to Alerts table
+- Files changed:
+  - ui/src/pages/Alerts.tsx (added filter configs, useFilter, useSort hooks, TableFilters, SortableTableHead components)
+- **Learnings for future iterations:**
+  - Reuse existing table-filter.tsx and table-sort.tsx components - same pattern as Services table
+  - ALERT_FILTERS config: Status filter uses 'active' param (1=Active, 0=Resolved), Priority uses 'priority' param (P1/P2/P3)
+  - Default sort for alerts is created_date descending (most recent first)
+  - Pipeline order: filter → sort (no pagination added in this story, but would follow same pattern as Services)
+  - Empty filtered state: show "No matching alerts" with Bell icon and clear filters button
+  - All columns are sortable via SortableTableHead component
+---
+
+## 2026-02-04 - US-025 - Linear Issue: SRE-72
+- What was implemented: Created Alerts list page with table displaying all active and historical alerts
+- Files changed:
+  - ui/src/pages/Alerts.tsx (replaced placeholder with full table implementation)
+- **Learnings for future iterations:**
+  - Alert type from api.ts includes: alert_id, service_id, heartbeat_name, service_name, active, priority, team, created_date, closed_date, duration, runbook
+  - useAlerts() hook returns ApiResponse<Alert[]> - access data via data?.results ?? []
+  - formatDuration() converts seconds to human-readable format with hours/minutes/seconds
+  - Active alerts use variant="destructive" with animate-pulse for visual urgency
+  - Link to service detail page via heartbeat_name (same pattern as Services table)
+  - Clock icon from lucide-react for timestamp columns
+  - Bell icon for active alerts, CheckCircle for resolved
+---
+
+## 2026-02-04 - US-024 - Linear Issue: SRE-68
+- What was implemented: Created Service detail page showing all service fields
+- Files changed:
+  - ui/src/pages/ServiceDetail.tsx (new - Service detail page component)
+  - ui/src/pages/Services.tsx (updated to link by heartbeat_name instead of service_id)
+  - ui/src/pages/index.ts (added ServiceDetail export)
+  - ui/src/App.tsx (added /services/:id route)
+- **Learnings for future iterations:**
+  - useParams<{ id: string }>() to get route parameter
+  - API returns services by heartbeat_name, not by service_id - link using encodeURIComponent(heartbeat_name)
+  - Detail pages need loading, error, and not-found states
+  - formatAlertInterval() helper converts minutes to human-readable (e.g., "30 minutes", "1 hour")
+  - Card components for logical grouping: Service Information, Monitoring Configuration, Timestamps, Runbook
+  - DetailRow component for consistent label/value display with dt/dd pattern
+  - Conditionally render Runbook card only if service.runbook exists
+  - Back button uses Link component with Button variant="outline"
+---
+
+## 2026-02-04 - US-023 - Linear Issue: SRE-92
+- What was implemented: Added search to Services table with debounced input
+- Files changed:
+  - ui/src/components/table-search.tsx (new - reusable useSearch hook and SearchInput component)
+  - ui/src/pages/Services.tsx (updated to use SearchInput for client-side search)
+  - ui/eslint.config.js (added ESLint override for *-search.tsx files)
+- **Learnings for future iterations:**
+  - useSearch hook returns { searchTerm, inputValue, setSearch, clearSearch, hasSearch, hasInputValue, searchItems }
+  - Search state persists in URL via useSearchParams (e.g., ?q=myservice)
+  - searchItems function accepts array of field names to search across (e.g., ['service_name', 'heartbeat_name'])
+  - Debounce pattern uses pendingValue state for responsive UI - input shows typed value immediately, URL updates after delay
+  - Use hasInputValue (input has text) vs hasSearch (URL has search) - clear button shows based on hasInputValue
+  - setSearch automatically clears any pending debounce timer before setting new one
+  - clearSearch clears immediately (no debounce) for responsive clear button
+  - Search integrates before filter in pipeline: search → filter → sort → paginate
+  - ESLint react-hooks/set-state-in-effect warns about setState in effects - use pending state instead of syncing
+---
+
+## 2026-02-04 - US-022 - Linear Issue: SRE-91
+- What was implemented: Added filtering to Services table with filter dropdowns for Status, Muted, and Health
+- Files changed:
+  - ui/src/components/table-filter.tsx (new - reusable useFilter hook and TableFilters component)
+  - ui/src/components/ui/select.tsx (new - shadcn/ui Select component)
+  - ui/src/pages/Services.tsx (updated to use TableFilters for client-side filtering)
+  - ui/eslint.config.js (added ESLint override for *-filter.tsx files)
+- **Learnings for future iterations:**
+  - useFilter hook returns { filterState, setFilter, clearFilters, hasActiveFilters, filterItems } for managing filter state
+  - Filter state persists in URL via useSearchParams (e.g., ?active=1&muted=0)
+  - Multiple filters combine with AND logic - all conditions must match
+  - Filter before sort before paginate: filterItems() → sortItems() → slice()
+  - setFilter and clearFilters automatically reset page param to go back to page 1
+  - FilterConfig interface for declarative filter configuration (param, label, options, placeholder)
+  - Use 'all' as special value for "show all" option - easier than handling null in Select
+  - shadcn/ui Select component installed via CLI, moved from @/ to src/components/ui/
+  - Handle empty filtered results with separate UI state from empty unfiltered state
+---
+
+## 2026-02-04 - US-021 - Linear Issue: SRE-90
+- What was implemented: Added sorting to Services table with clickable column headers
+- Files changed:
+  - ui/src/components/table-sort.tsx (new - reusable useSort hook and SortableTableHead component)
+  - ui/src/pages/Services.tsx (updated to use SortableTableHead for sortable columns)
+  - ui/eslint.config.js (added ESLint override for *-sort.tsx files)
+- **Learnings for future iterations:**
+  - useSort hook returns { sortColumn, sortDirection, toggleSort, sortItems } for managing sort state
+  - Sort state persists in URL via useSearchParams (e.g., ?sort=team&dir=desc)
+  - When clicking same column: asc -> desc -> back to default
+  - When clicking different column: switch to that column ascending
+  - SortableTableHead wraps TableHead with click handler and visual indicators
+  - Lucide icons: ArrowUp (ascending), ArrowDown (descending), ArrowUpDown (unsorted)
+  - Active sort column shows linq-blue icon, inactive columns show dimmed icon
+  - Sort before paginate: apply sortItems() to full list before slicing for pagination
+  - toggleSort automatically resets page param to avoid being on invalid page after resort
+---
+
+## 2026-02-04 - US-020 - Linear Issue: SRE-89
+- What was implemented: Added pagination to Services table with 25 items per page default
+- Files changed:
+  - ui/src/components/table-pagination.tsx (new - reusable TablePagination component with usePagination hook)
+  - ui/src/components/ui/pagination.tsx (new - shadcn/ui Pagination primitives)
+  - ui/src/pages/Services.tsx (updated to use TablePagination for client-side pagination)
+  - ui/eslint.config.js (added ESLint override for *-pagination.tsx files)
+- **Learnings for future iterations:**
+  - usePagination hook returns { currentPage, setPage, pageSize, offset } for managing pagination state
+  - Page state persists in URL via useSearchParams (e.g., ?page=2)
+  - When page=1, remove query param entirely for cleaner URLs
+  - Client-side pagination uses allItems.slice(offset, offset + pageSize)
+  - getPageRange() calculates which page numbers to display with ellipsis for large page counts
+  - Pagination component shows "Showing X to Y of Z services" for context
+  - linq-blue color class for active page button styling
+  - shadcn/ui PaginationLink uses anchor elements - use onClick handler for client-side nav
+---
+
+## 2026-02-04 - US-019 - Linear Issue: SRE-67
+- What was implemented: Created Services list page with table displaying all registered services
+- Files changed:
+  - ui/src/pages/Services.tsx (replaced placeholder with full table implementation)
+  - ui/src/components/ui/table.tsx (new - shadcn/ui Table component)
+  - ui/src/components/ui/badge.tsx (new - shadcn/ui Badge component)
+- **Learnings for future iterations:**
+  - Table component from shadcn/ui wraps table in div with overflow-auto for responsive scrolling
+  - Use font-mono for heartbeat_name column for better readability of identifiers
+  - Link to detail pages with react-router-dom Link component
+  - Eye/EyeOff icons from lucide-react for muted status
+  - Service type from api.ts can be imported with `import type { Service }` for type-only usage
+  - Status colors: text-status-healthy for green, text-status-error for red
+---
+
+## 2026-02-04 - US-018 - Linear Issue: SRE-66
+- What was implemented: Created Dashboard page with summary cards showing service health metrics
+- Files changed:
+  - ui/src/pages/Dashboard.tsx (replaced placeholder with full implementation)
+  - ui/src/hooks/use-alerts.ts (new - useAlerts React Query hook)
+  - ui/src/hooks/index.ts (added useAlerts export)
+  - ui/src/components/ui/skeleton.tsx (new - shadcn/ui Skeleton component)
+- **Learnings for future iterations:**
+  - Use font-mono class for numeric values in cards for better readability
+  - useServices() and useAlerts() return ApiResponse<T[]> - access data via data?.results ?? []
+  - Combine isLoading states from multiple queries: isLoading = isLoadingServices || isLoadingAlerts
+  - Error handling pattern: check hasError and display styled error banner with icon
+  - Color scheme: text-status-healthy for green (#83B149), text-status-error for red (#DC2626)
+  - Grid layout: grid gap-4 md:grid-cols-2 lg:grid-cols-4 for responsive card layout
+---
+
+## 2026-02-04 - US-017 - Linear Issue: SRE-88
+- What was implemented: Installed React Query and created QueryClient with sensible defaults for data fetching
+- Files changed:
+  - ui/package.json (added @tanstack/react-query dependency)
+  - ui/src/main.tsx (added QueryClient and QueryClientProvider)
+  - ui/src/hooks/use-services.ts (new - useServices and useService query hooks)
+  - ui/src/hooks/index.ts (new - barrel export for hooks)
+- **Learnings for future iterations:**
+  - React Query v5 renamed cacheTime to gcTime (garbage collection time)
+  - QueryClientProvider should wrap BrowserRouter and other providers for universal access
+  - Query key factory pattern: create object with all, lists, list(filters), details, detail(id) methods
+  - Use Omit<UseQueryOptions<...>, 'queryKey' | 'queryFn'> to allow custom options while enforcing core props
+  - staleTime: 30s is good default for dashboard data that doesn't change frequently
+  - gcTime: 5 minutes keeps unused data around for back navigation without refetch
+---
+
+## 2026-02-04 - US-016 - Linear Issue: SRE-61
+- What was implemented: Created ProtectedRoute component to redirect unauthenticated users to login
+- Files changed:
+  - ui/src/components/protected-route.tsx (new - ProtectedRoute component)
+  - ui/src/App.tsx (wrapped Layout route with ProtectedRoute)
+- **Learnings for future iterations:**
+  - ProtectedRoute pattern: check isAuthenticated from context, redirect with Navigate component
+  - Preserve attempted URL in location state for redirect after login (from: location)
+  - Wrap parent layout Route element, not individual child routes (DRY)
+  - Use `replace` on Navigate to avoid back button issues
+---
+
+## 2026-02-04 - US-015 - Linear Issue: SRE-61
+- What was implemented: Created Login page with API key input, validation, and navigation
+- Files changed:
+  - ui/src/pages/Login.tsx (new - Login page component with form)
+  - ui/src/components/ui/input.tsx (new - shadcn/ui Input component)
+  - ui/src/pages/index.ts (added Login export)
+  - ui/src/App.tsx (added /login route outside Layout)
+- **Learnings for future iterations:**
+  - Login page should be outside Layout Route (standalone, no sidebar/header)
+  - Use createApiClient() with temporary API key to test validation before storing
+  - Health endpoint (/health) is unauthenticated - use getHealth() for connectivity test only
+  - Show specific error messages for different HTTP status codes (401, 403, etc.)
+  - Use Loader2 icon with animate-spin for loading states
+  - Use KeyRound icon for API key input field visual
+  - AlertCircle icon with destructive color scheme for error messages
+---
+
+## 2026-02-04 - US-014 - Linear Issue: SRE-61
+- What was implemented: Created AuthContext with authentication state and methods for API key management
+- Files changed:
+  - ui/src/components/auth-provider.tsx (new - AuthProvider context and useAuth hook)
+  - ui/src/main.tsx (wrapped App in AuthProvider)
+- **Learnings for future iterations:**
+  - AuthProvider follows same pattern as ThemeProvider with createContext + useContext
+  - sessionStorage used for API key (not localStorage) per security requirements
+  - useCallback for login/logout to prevent unnecessary re-renders
+  - useMemo for context value object to prevent unnecessary consumer re-renders
+  - apiClient.setApiKey() synced whenever API key changes (login/logout)
+  - ESLint rule override for *-provider.tsx files already in eslint.config.js
+---
+
+## 2026-02-04 - US-013 - Linear Issue: SRE-61
+- What was implemented: Created API client module with TypeScript types for communicating with Medic backend
+- Files changed:
+  - ui/src/lib/api.ts (new - API client module)
+- **Learnings for future iterations:**
+  - TypeScript erasableSyntaxOnly restricts constructor parameter properties - declare fields separately
+  - Use `git add -f` for files in ui/src/lib/ due to root .gitignore pattern
+  - API client pattern: factory function returns object with methods for each endpoint
+  - ApiError class extends Error with status and response properties for error handling
+  - Fetch-based client with Bearer token in Authorization header
+  - TypeScript types for all entities: Service, Alert, Heartbeat, AuditLogEntry, Playbook
+  - Methods return ApiResponse<T> for consistent response envelope handling
+---
+
+## 2026-02-04 - US-012 - Linear Issue: SRE-64
+- What was implemented: Created main Layout component with responsive sidebar and mobile navigation
+- Files changed:
+  - ui/src/components/layout.tsx (new - Layout component with DesktopSidebar, MobileSidebar, Header)
+  - ui/src/components/ui/sheet.tsx (new - shadcn/ui Sheet component for mobile drawer)
+  - ui/src/App.tsx (refactored to use Layout with nested Routes pattern via Outlet)
+  - ui/package.json (added @radix-ui/react-dialog dependency)
+- **Learnings for future iterations:**
+  - React Router v6 nested routes: parent Route with element={<Layout />} renders child routes via <Outlet />
+  - Responsive sidebar pattern: hidden (hidden md:flex) on mobile, visible on desktop
+  - Mobile sidebar uses Sheet component (slides from left) with same NavItem structure
+  - Hamburger menu button uses Menu icon from lucide-react, hidden on desktop (md:hidden)
+  - Sheet component uses @radix-ui/react-dialog under the hood
+  - shadcn CLI still creates files in literal @/ directory - must move to src/components/ui/
+---
+
+## 2026-02-04 - US-011 - Linear Issue: SRE-64
+- What was implemented: Created Header component with Medic logo and theme toggle
+- Files changed:
+  - ui/src/components/header.tsx (new - Header component with logo and ThemeToggle)
+  - ui/src/App.tsx (refactored to use Header component instead of inline header)
+  - ui/public/assets/medic-icon-all-green.png (new - copied from docs/assets/)
+- **Learnings for future iterations:**
+  - For Vite projects, static assets like logos should be copied to ui/public/ directory
+  - Assets in public/ are served at root path (e.g., /assets/medic-icon-all-green.png)
+  - Header component pattern: flex container with logo+title on left, actions (ThemeToggle) on right
+---
+
+## 2026-02-04 - US-010 - Linear Issue: SRE-64
+- What was implemented: Created sidebar navigation component with Lucide icons and active link highlighting
+- Files changed:
+  - ui/src/components/sidebar.tsx (new - Sidebar component with NavLink)
+  - ui/src/App.tsx (refactored to use Sidebar instead of horizontal nav)
+- **Learnings for future iterations:**
+  - Lucide icons: LayoutDashboard, Server, AlertTriangle, BookOpen, ScrollText, Settings for nav items
+  - Use useLocation() hook to determine active nav link
+  - NavItem pattern with interface { to, label, icon } for extensible navigation
+  - Sidebar uses flex layout with flex-shrink-0 to prevent icon squishing
+  - cn() utility from lib/utils for conditional class merging
+---
+
+## 2026-02-04 - US-009 - Linear Issue: SRE-87
+- What was implemented: Installed React Router v6 and created basic routes with placeholder pages
+- Files changed:
+  - ui/package.json (added react-router-dom dependency)
+  - ui/src/main.tsx (added BrowserRouter wrapper)
+  - ui/src/App.tsx (replaced demo content with Routes configuration and NavLink component)
+  - ui/src/pages/Dashboard.tsx (new - placeholder page)
+  - ui/src/pages/Services.tsx (new - placeholder page)
+  - ui/src/pages/Alerts.tsx (new - placeholder page)
+  - ui/src/pages/Playbooks.tsx (new - placeholder page)
+  - ui/src/pages/AuditLogs.tsx (new - placeholder page)
+  - ui/src/pages/Settings.tsx (new - placeholder page)
+  - ui/src/pages/index.ts (new - barrel export for all pages)
+- **Learnings for future iterations:**
+  - React Router v6 uses Routes/Route components (not Switch from v5)
+  - BrowserRouter should wrap the entire app in main.tsx
+  - Create a pages/ directory with barrel export (index.ts) for clean imports
+  - NavLink helper component with useLocation() for active link highlighting
+  - Path aliases (@/pages) work for page imports same as components
+---
+
+## 2026-02-04 - US-008 - Linear Issue: SRE-60
+- What was implemented: Created ThemeProvider with dark mode support
+- Files changed:
+  - ui/src/components/theme-provider.tsx (new - ThemeProvider context and useTheme hook)
+  - ui/src/components/theme-toggle.tsx (new - ThemeToggle button with sun/moon icons)
+  - ui/src/main.tsx (wrapped App in ThemeProvider)
+  - ui/src/App.tsx (added ThemeToggle button in top-right corner)
+  - ui/eslint.config.js (added rule override for *-provider.tsx files)
+- **Learnings for future iterations:**
+  - ThemeProvider uses React context with useState for theme state (light/dark/system)
+  - Theme is applied by adding/removing 'dark' class on document.documentElement
+  - localStorage persistence with configurable storage key (medic-ui-theme)
+  - ThemeToggle cycles through light -> dark -> system on click
+  - ESLint react-refresh rule needs override for files that export both components and hooks
+---
+
+## 2026-02-04 - US-007 - Linear Issue: SRE-86
+- What was implemented: Installed shadcn/ui component library with Button and Card components
+- Files changed:
+  - ui/components.json (new - shadcn/ui configuration)
+  - ui/tsconfig.app.json (added path aliases @/* -> ./src/*)
+  - ui/vite.config.ts (added path alias resolution)
+  - ui/src/lib/utils.ts (new - cn() utility function)
+  - ui/src/components/ui/button.tsx (new - shadcn Button component)
+  - ui/src/components/ui/card.tsx (new - shadcn Card component)
+  - ui/src/index.css (added shadcn/ui CSS variables for theming)
+  - ui/tailwind.config.js (added darkMode, color system with CSS variables, borderRadius)
+  - ui/eslint.config.js (added rule override for shadcn/ui component exports)
+  - ui/package.json (added class-variance-authority, clsx, tailwind-merge, lucide-react, @radix-ui/react-slot)
+  - ui/src/App.tsx (updated to demonstrate Button and Card components)
+- **Learnings for future iterations:**
+  - shadcn CLI creates files in literal `@/` directory - must move to src/components/ui/
+  - Tailwind v4 doesn't support `@apply` with custom CSS variable colors like `border-border` - use raw CSS
+  - shadcn/ui uses CSS variables for theming - define in :root for light mode, .dark for dark mode
+  - Values must be space-separated RGB like `20 20 20` not hex `#141414`
+  - ESLint react-refresh rule must be disabled for ui components that export utilities alongside components
+---
+
+## 2026-02-04 - US-006 - Linear Issue: SRE-60
+- What was implemented: Installed Geist font family for brand-compliant typography
+- Files changed:
+  - ui/package.json (added geist dependency)
+  - ui/public/fonts/Geist-Variable.woff2 (new)
+  - ui/public/fonts/GeistMono-Variable.woff2 (new)
+  - ui/src/index.css (added @font-face declarations and --font-sans/--font-mono CSS variables)
+  - ui/tailwind.config.js (added fontFamily configuration)
+  - ui/src/App.tsx (added font-sans class and font-mono demo)
+- **Learnings for future iterations:**
+  - The `geist` npm package is designed for Next.js - for Vite projects, copy font files to public/fonts/
+  - Use variable fonts (Geist-Variable.woff2) for flexibility with font-weight 100-900
+  - In Tailwind v4, configure fonts in @theme block with --font-sans and --font-mono CSS variables
+  - Also add fontFamily to tailwind.config.js for IDE/TypeScript support
+---
+
+## 2026-02-04 - US-002 - Linear Issue: SRE-59
+- What was implemented: Verified ESLint and Prettier are already configured correctly
+- Files changed: None (already complete from prior work)
+- ESLint 9 flat config at ui/eslint.config.js with TypeScript, React Hooks, and Prettier integration
+- Prettier config at ui/.prettierrc with project conventions
+- npm scripts: `lint`, `lint:fix`, `format` all working
+- **Learnings for future iterations:**
+  - ESLint 9 uses eslint.config.js (flat config) instead of .eslintrc.js
+  - eslint-config-prettier disables ESLint formatting rules that conflict with Prettier
+  - Package @typescript-eslint handles TypeScript-specific linting
+---
+
+## 2026-02-04 - US-001 - Linear Issue: SRE-59
+- What was implemented: Verified React + Vite + TypeScript project scaffolding is complete; updated App.tsx heading from "Medic" to "Medic UI" per acceptance criteria
+- Files changed: ui/src/App.tsx
+- **Learnings for future iterations:**
+  - The ui/ directory was already scaffolded with Vite + React + TypeScript in prior work
+  - tsconfig.app.json (not tsconfig.json) contains the strict mode configuration
+  - Tailwind CSS and brand colors were already configured in US-003, US-004, US-005
+---
+
+
+## 2026-02-04 - US-027 - Linear Issue: SRE-73
+- What was implemented: Created Alert detail page showing all alert fields with human-readable timestamps
+- Files changed:
+  - ui/src/pages/AlertDetail.tsx (new - Alert detail page component)
+  - ui/src/pages/Alerts.tsx (updated to link alert names to detail page)
+  - ui/src/pages/index.ts (added AlertDetail export)
+  - ui/src/App.tsx (added /alerts/:id route)
+- **Learnings for future iterations:**
+  - Alert detail page uses same DetailRow, Card patterns as ServiceDetail
+  - No single-alert API endpoint - fetch all alerts and filter client-side by alert_id
+  - formatRelativeTime() helper shows relative timestamps (e.g., "2 hours ago") alongside absolute
+  - Active alerts show "Ongoing" for duration instead of calculating live duration
+  - Alert link pattern: use alert_id (number) for URL route, not heartbeat_name
+  - StatusIcon pattern: extract icon from badge config object and render dynamically
+---
+
+## 2026-02-04 - US-028 - Linear Issue: SRE-74
+- What was implemented: Created Playbooks list page with table, filtering, and search
+- Files changed:
+  - ui/src/lib/api.ts (added getPlaybooks API method)
+  - ui/src/hooks/use-playbooks.ts (new - usePlaybooks React Query hook)
+  - ui/src/hooks/index.ts (added usePlaybooks export)
+  - ui/src/pages/Playbooks.tsx (replaced placeholder with full table implementation)
+- **Learnings for future iterations:**
+  - Playbook type from api.ts includes: playbook_id, name, description, trigger_type, active, last_run, status
+  - usePlaybooks() hook follows same pattern as useServices/useAlerts
+  - PlaybookStatus type: 'pending_approval' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'
+  - Trigger types: 'alert', 'manual', 'scheduled' with distinct badge colors
+  - Status badges show execution state with icons (Loader2 for running with animate-spin)
+  - Search searches both name and description fields
+  - No pagination added (similar to Alerts page pattern)
+  - Table columns: Name, Description, Trigger Type, Last Run, Status, Active
+---
+
+## 2026-02-04 - US-029 - Linear Issue: SRE-78
+- What was implemented: Created Audit Logs page with table, filtering, and server-side pagination
+- Files changed:
+  - ui/src/hooks/use-audit-logs.ts (new - useAuditLogs React Query hook)
+  - ui/src/hooks/index.ts (added useAuditLogs export)
+  - ui/src/pages/AuditLogs.tsx (replaced placeholder with full table implementation)
+- **Learnings for future iterations:**
+  - AuditLogEntry type includes: log_id, execution_id, action_type, details (Record<string,unknown>), actor, timestamp, created_at
+  - AuditActionType is union of: 'execution_started' | 'step_completed' | 'step_failed' | 'approval_requested' | 'approved' | 'rejected' | 'execution_completed' | 'execution_failed'
+  - getAuditLogs API returns PaginatedResponse<AuditLogEntry> with entries, total_count, limit, offset, has_more
+  - Server-side pagination: pass limit and offset to API, use totalCount from response for pagination calculation
+  - Date filter inputs use native HTML date type with pl-8 padding for Calendar icon
+  - Actor filter uses local state + debounce pattern (500ms) to avoid excessive API calls
+  - formatSummary() extracts meaningful fields from details JSON (step_name, playbook_name, message, error, result)
+  - Table columns: Timestamp (font-mono), Action Type (color-coded badge), Actor, Execution ID (font-mono), Summary (truncated)
+---
+
+## 2026-02-04 - US-030 - Linear Issue: SRE-81
+- What was implemented: Created Settings page for UI preferences with theme toggle and auto-refresh configuration
+- Files changed:
+  - ui/src/components/settings-provider.tsx (new - SettingsProvider context for auto-refresh interval)
+  - ui/src/pages/Settings.tsx (replaced placeholder with full implementation)
+  - ui/src/main.tsx (added SettingsProvider to provider hierarchy)
+- **Learnings for future iterations:**
+  - SettingsProvider follows same pattern as ThemeProvider - createContext + useContext + localStorage persistence
+  - RefreshInterval type is union of specific values: 0 | 15000 | 30000 | 60000 (milliseconds)
+  - Settings page uses Card components for grouping: Appearance, Auto-Refresh, Reset Settings
+  - Theme toggle uses custom button grid with visual icons (Sun/Moon/Monitor) rather than Select dropdown
+  - Auto-refresh interval uses Select dropdown with refreshIntervalOptions array
+  - resetToDefaults only resets SettingsProvider settings, not theme (theme managed separately by ThemeProvider)
+  - ESLint override for *-provider.tsx already existed, so no config change needed
+---
+
+## 2026-02-04 - US-031 - Linear Issue: SRE-94
+- What was implemented: Added unit tests for core components (ThemeProvider, AuthContext, API client)
+- Files changed:
+  - ui/package.json (added vitest, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event, jsdom)
+  - ui/vite.config.ts (added vitest configuration using vitest/config defineConfig)
+  - ui/tsconfig.app.json (added vitest/globals and @testing-library/jest-dom types, excluded test files from build)
+  - ui/src/test/setup.ts (new - test setup with localStorage/sessionStorage/matchMedia mocks)
+  - ui/src/components/theme-provider.test.tsx (new - 12 tests for ThemeProvider)
+  - ui/src/components/auth-provider.test.tsx (new - 12 tests for AuthContext)
+  - ui/src/lib/api.test.ts (new - 33 tests for API client)
+- **Learnings for future iterations:**
+  - vitest/config exports defineConfig that includes test property types (use instead of vite's defineConfig)
+  - Exclude test files from tsconfig.app.json to avoid build errors: "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+  - Mock localStorage/sessionStorage in setup.ts using factory pattern that returns object with getItem/setItem/removeItem/clear
+  - Mock matchMedia for theme provider tests with prefers-color-scheme: dark returning true
+  - Use vi.mock() to mock modules like @/lib/api for testing AuthProvider in isolation
+  - Testing hooks that throw when used outside provider context is difficult with React Testing Library - error boundaries catch the errors
+  - Use `git add -f src/lib/api.test.ts` for files in gitignored ui/src/lib/ directory
+  - API client offset=0 is falsy, so it won't be added to URL params (only truthy offsets are included)
+---
+
+## 2026-02-04 - US-032 - Linear Issue: SRE-85
+- What was implemented: Created comprehensive README.md with project setup documentation
+- Files changed:
+  - ui/README.md (replaced boilerplate with full project documentation)
+- **Learnings for future iterations:**
+  - README should cover: features, tech stack, prerequisites, local dev setup, Docker setup, npm scripts, env vars, auth, project structure, styling, testing, deployment, troubleshooting
+  - Use tables for scripts and color references for quick scanning
+  - Document API proxy configuration for both dev (Vite) and prod (nginx)
+  - Include sessionStorage vs localStorage note for auth - sessionStorage clears on browser close
+  - Project structure tree helps developers quickly navigate the codebase
+  - Include troubleshooting section for common issues (API connection, build errors, style issues)
 ---

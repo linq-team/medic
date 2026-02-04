@@ -1,0 +1,655 @@
+{
+  "project": "Medic",
+  "branchName": "ralph/medic-v2-roadmap",
+  "description": "Medic v2 — Self-Healing Heartbeat Monitoring with API auth, webhooks, maintenance windows, and auto-remediation playbooks",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add API keys database schema",
+      "description": "As a developer, I need to store API keys in the database for authentication.",
+      "acceptanceCriteria": [
+        "Create api_keys table with columns: id, name, key_hash, scopes (array), expires_at (nullable), created_at, updated_at",
+        "Scopes support: read, write, admin",
+        "Key hash uses bcrypt or argon2",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Migration created in migrations/001_create_api_keys.sql. Added argon2-cffi dependency."
+    },
+    {
+      "id": "US-002",
+      "title": "Implement API key generation and hashing",
+      "description": "As a developer, I need functions to generate and hash API keys.",
+      "acceptanceCriteria": [
+        "Function to generate cryptographically secure API key (32+ bytes)",
+        "Function to hash API key using bcrypt/argon2",
+        "Function to verify API key against hash",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/api_keys.py with argon2 hashing. 17 unit tests in tests/unit/test_api_keys.py."
+    },
+    {
+      "id": "US-003",
+      "title": "Add authentication middleware",
+      "description": "As a developer, I need middleware to authenticate API requests using API keys.",
+      "acceptanceCriteria": [
+        "Middleware extracts API key from Authorization header (Bearer token)",
+        "Middleware verifies key against database",
+        "Middleware checks key expiration",
+        "Middleware checks required scopes",
+        "/health/* endpoints bypass authentication",
+        "Returns 401 for invalid/missing keys, 403 for insufficient scopes",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/auth_middleware.py. 35 unit tests in tests/unit/test_auth_middleware.py. Includes decorator and function-based auth, scope checking, expiration validation, and health endpoint bypass."
+    },
+    {
+      "id": "US-004",
+      "title": "Add Prometheus metrics for auth failures",
+      "description": "As an operator, I want to monitor authentication failures.",
+      "acceptanceCriteria": [
+        "Counter metric: medic_auth_failures_total with labels (reason: invalid_key, expired_key, insufficient_scope)",
+        "Metric incremented on each auth failure",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added AUTH_FAILURES counter in Medic/Core/metrics.py with record_auth_failure() helper. Integrated into auth_middleware.py for all failure cases."
+    },
+    {
+      "id": "US-005",
+      "title": "Add rate limiting infrastructure",
+      "description": "As a developer, I need rate limiting backend infrastructure.",
+      "acceptanceCriteria": [
+        "Rate limiter interface supporting in-memory and Redis backends",
+        "In-memory implementation using sliding window",
+        "Configurable limits per API key",
+        "Default limits: 100 req/min heartbeats, 20 req/min management",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/rate_limiter.py with RateLimiter ABC, InMemoryRateLimiter (sliding window), and RedisRateLimiter placeholder. 29 unit tests in tests/unit/test_rate_limiter.py."
+    },
+    {
+      "id": "US-006",
+      "title": "Add rate limiting middleware",
+      "description": "As a developer, I need middleware to enforce rate limits.",
+      "acceptanceCriteria": [
+        "Middleware checks rate limit before processing request",
+        "Returns 429 when limit exceeded",
+        "Adds X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/rate_limit_middleware.py with @rate_limit() decorator. 29 unit tests in tests/unit/test_rate_limit_middleware.py. Supports auto-detection of heartbeat vs management endpoints, custom configs, and falls back to IP-based rate limiting for unauthenticated requests."
+    },
+    {
+      "id": "US-007",
+      "title": "Add webhooks database schema",
+      "description": "As a developer, I need to store webhook configurations in the database.",
+      "acceptanceCriteria": [
+        "Create webhooks table with columns: id, service_id (nullable for global), url, headers (jsonb), enabled, created_at, updated_at",
+        "Create webhook_deliveries table: id, webhook_id, payload, status, attempts, last_attempt_at, response_code, response_body",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Migration created in migrations/002_create_webhooks.sql. Tables use JSONB for headers and payload. URL validation via regex constraint. Foreign key to services with ON DELETE CASCADE."
+    },
+    {
+      "id": "US-008",
+      "title": "Implement webhook delivery service",
+      "description": "As a developer, I need a service to deliver webhook notifications.",
+      "acceptanceCriteria": [
+        "Service sends POST request to webhook URL with JSON payload",
+        "Custom headers from webhook config included",
+        "Retry with exponential backoff: 1s, 5s, 30s (max 3 attempts)",
+        "Delivery status tracked in webhook_deliveries table",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/webhook_delivery.py with WebhookDeliveryService class. 41 unit tests in tests/unit/test_webhook_delivery.py. Supports POST with JSON, custom headers, exponential backoff (1s, 5s, 30s), and delivery tracking."
+    },
+    {
+      "id": "US-009",
+      "title": "Add teams database schema",
+      "description": "As a developer, I need to store team configurations for alert routing.",
+      "acceptanceCriteria": [
+        "Create teams table with columns: id, name, slack_channel_id, created_at, updated_at",
+        "Add team_id column to services table (nullable, foreign key)",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Migration created in migrations/003_create_teams.sql. Teams table includes team_id, name, slack_channel_id, timestamps. Services table gets team_id FK with ON DELETE SET NULL."
+    },
+    {
+      "id": "US-010",
+      "title": "Implement team-based alert routing",
+      "description": "As a developer, I need alert routing to use team Slack channels.",
+      "acceptanceCriteria": [
+        "Alert routing checks service's team first",
+        "Falls back to default channel if no team or team has no channel",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/alert_routing.py with get_slack_channel_for_service() and get_team_for_service(). 19 unit tests in tests/unit/test_alert_routing.py. Checks team's Slack channel first, falls back to default SLACK_CHANNEL_ID."
+    },
+    {
+      "id": "US-011",
+      "title": "Add notification targets schema",
+      "description": "As a developer, I need to store multiple notification targets per service.",
+      "acceptanceCriteria": [
+        "Create notification_targets table: id, service_id, type (slack, pagerduty, webhook), config (jsonb), priority, enabled",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Migration created in migrations/004_create_notification_targets.sql. Table includes target_id, service_id, type (slack/pagerduty/webhook), config (jsonb), priority, enabled, timestamps. Indexes on service_id, enabled, type, and composite service+priority."
+    },
+    {
+      "id": "US-012",
+      "title": "Implement flexible alert routing logic",
+      "description": "As a developer, I need alert routing to support multiple targets with modes.",
+      "acceptanceCriteria": [
+        "Support 'notify_all' mode: send to all targets",
+        "Support 'notify_until_success' mode: stop after first successful delivery",
+        "Targets ordered by priority",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/alert_routing.py. Added NotificationMode and NotificationType enums, NotificationTarget and NotificationResult dataclasses, route_alert() with notify_all and notify_until_success modes, get_notification_targets_for_service(), and helper functions. 36 new unit tests (55 total) in tests/unit/test_alert_routing.py."
+    },
+    {
+      "id": "US-013",
+      "title": "Add working hours schema",
+      "description": "As a developer, I need to store working hours schedules.",
+      "acceptanceCriteria": [
+        "Create schedules table: id, name, timezone (IANA format), hours (jsonb for day/hour ranges)",
+        "Add schedule_id to services table (nullable)",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Migration created in migrations/005_create_schedules.sql. Table includes schedule_id, name (unique), timezone (IANA format with CHECK constraint), hours (JSONB for day/hour ranges), timestamps. Services table gets schedule_id FK with ON DELETE SET NULL."
+    },
+    {
+      "id": "US-014",
+      "title": "Implement working hours evaluation",
+      "description": "As a developer, I need to evaluate if current time is within working hours.",
+      "acceptanceCriteria": [
+        "Function to check if given time is within schedule's working hours",
+        "Uses IANA timezone names (e.g., America/Chicago)",
+        "Handles DST transitions correctly",
+        "Handles leap years",
+        "Unit tests for DST edge cases pass",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/working_hours.py with is_within_working_hours(), get_schedule_for_service(), get_current_period(). Uses zoneinfo for proper IANA timezone support and DST handling. 47 unit tests in tests/unit/test_working_hours.py covering DST transitions, leap years, edge cases."
+    },
+    {
+      "id": "US-015",
+      "title": "Add working hours to alert routing",
+      "description": "As a developer, I need alert routing to respect working hours.",
+      "acceptanceCriteria": [
+        "Service config supports separate routing for during_hours and after_hours",
+        "Alert routing uses correct targets based on current time and schedule",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Added period column to notification_targets table (always/during_hours/after_hours) via migration 006. Implemented route_alert_with_schedule() in Medic/Core/alert_routing.py that uses get_service_current_period() from working_hours module to select appropriate targets. 24 new unit tests (79 total) in tests/unit/test_alert_routing.py."
+    },
+    {
+      "id": "US-016",
+      "title": "Add maintenance windows schema",
+      "description": "As a developer, I need to store maintenance window definitions.",
+      "acceptanceCriteria": [
+        "Create maintenance_windows table: id, name, start_time, end_time, recurrence (cron, nullable), timezone, service_ids (array, empty = all), created_at",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Migration created in migrations/007_create_maintenance_windows.sql. Table includes window_id, name (unique), start_time, end_time, recurrence (cron, nullable), timezone (IANA format with CHECK), service_ids (integer array), timestamps. Indexes on name, time range, service_ids (GIN), and recurrence."
+    },
+    {
+      "id": "US-017",
+      "title": "Implement maintenance window evaluation",
+      "description": "As a developer, I need to check if a service is in a maintenance window.",
+      "acceptanceCriteria": [
+        "Function to check if service is currently in maintenance window",
+        "Supports one-time windows (start_time to end_time)",
+        "Supports recurring windows via cron expression",
+        "Handles timezone/DST correctly",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/maintenance_windows.py. Primary function is_service_in_maintenance() checks if service is in active window. Supports one-time and recurring (cron) windows with timezone/DST handling. 57 unit tests in tests/unit/test_maintenance_windows.py."
+    },
+    {
+      "id": "US-018",
+      "title": "Suppress alerts during maintenance windows",
+      "description": "As an operator, I want alerts suppressed during maintenance windows.",
+      "acceptanceCriteria": [
+        "Alert checker skips services in active maintenance window",
+        "Logs indicate alert was suppressed due to maintenance",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Integrated is_service_in_maintenance() check in Medic/Worker/monitor.py queryForNoHeartbeat(). Suppresses new alerts when service is in maintenance window with logging. 5 new unit tests in tests/unit/test_monitor.py. Recovery alerts still sent during maintenance."
+    },
+    {
+      "id": "US-019",
+      "title": "Add start/complete signal statuses",
+      "description": "As a developer, I need to track job start and completion signals.",
+      "acceptanceCriteria": [
+        "Add status enum values: STARTED, COMPLETED, FAILED to heartbeat status",
+        "Add run_id column to heartbeats table (nullable, for correlating start/complete)",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Added HeartbeatStatus enum with STARTED/COMPLETED/FAILED values in Medic/Helpers/heartbeat.py. Migration 008 adds run_id column to heartbeatEvents table with indexes. Heartbeat class updated to support run_id parameter. 21 unit tests in tests/unit/test_heartbeat.py."
+    },
+    {
+      "id": "US-020",
+      "title": "Implement start/complete signal API endpoints",
+      "description": "As a developer, I need API endpoints for start/complete signals.",
+      "acceptanceCriteria": [
+        "POST /v2/heartbeat/:id/start - records STARTED status with optional run_id",
+        "POST /v2/heartbeat/:id/complete - records COMPLETED status with optional run_id",
+        "POST /v2/heartbeat/:id/fail - records FAILED status with optional run_id",
+        "Integration tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/routes.py with three v2 endpoints (/v2/heartbeat/:id/start, /complete, /fail). Helper function _record_job_signal() handles validation, optional run_id parsing, and response formatting. 10 integration tests in tests/integration/test_api.py."
+    },
+    {
+      "id": "US-021",
+      "title": "Add duration tracking to services",
+      "description": "As a developer, I need to track job duration statistics.",
+      "acceptanceCriteria": [
+        "Store duration for each completed run (end_time - start_time)",
+        "Add max_duration column to services table",
+        "Create job_runs table: id, service_id, run_id, started_at, completed_at, duration_ms, status",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Migration 009 creates medic.job_runs table and adds max_duration_ms to services. Medic/Core/job_runs.py implements duration tracking with record_job_start(), record_job_completion(). Routes.py integrates job_runs tracking in V2 signal endpoints. 25 unit tests in tests/unit/test_job_runs.py."
+    },
+    {
+      "id": "US-022",
+      "title": "Implement duration statistics API",
+      "description": "As a developer, I need an API to retrieve duration statistics.",
+      "acceptanceCriteria": [
+        "GET /v2/services/:id/stats returns avg, p50, p95, p99 duration from last 100 runs",
+        "Returns empty stats if fewer than 5 runs",
+        "Integration tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Implemented GET /v2/services/:id/stats endpoint in routes.py. Added DurationStatistics dataclass and get_duration_statistics() function with percentile calculations in job_runs.py. 20 unit tests + 5 integration tests added."
+    },
+    {
+      "id": "US-023",
+      "title": "Alert on duration threshold exceeded",
+      "description": "As an operator, I want alerts when jobs exceed max duration.",
+      "acceptanceCriteria": [
+        "Alert triggered when COMPLETED duration exceeds service's max_duration",
+        "Alert triggered when STARTED job has no COMPLETED after max_duration",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Implemented DurationAlert dataclass, check_duration_threshold() for completed jobs, get_stale_runs_exceeding_max_duration() for hung jobs. Integrated with routes.py V2 completion endpoints and monitor.py worker. Added Prometheus metrics: medic_duration_alerts_total, medic_stale_jobs_current. 25 new unit tests in tests/unit/test_job_runs.py."
+    },
+    {
+      "id": "US-024",
+      "title": "Add grace periods to services",
+      "description": "As a developer, I need to support grace periods for heartbeat checks.",
+      "acceptanceCriteria": [
+        "Add grace_period_seconds column to services table",
+        "Alert checker waits grace_period after missed heartbeat before alerting",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Migration 010 adds grace_period_seconds column to services table. Monitor.py checks grace period before alerting - computes required_delay = interval + grace_period and delays alert if time_since_last < required_delay. 8 new unit tests in tests/unit/test_monitor.py."
+    },
+    {
+      "id": "US-025",
+      "title": "Add playbooks database schema",
+      "description": "As a developer, I need to store playbook definitions in the database.",
+      "acceptanceCriteria": [
+        "Create playbooks table: id, name, description, yaml_content, version, created_at, updated_at",
+        "Create playbook_triggers table: id, playbook_id, service_pattern, consecutive_failures, enabled",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Migration created in migrations/011_create_playbooks.sql. Tables: medic.playbooks (playbook_id, name, description, yaml_content, version, timestamps) and medic.playbook_triggers (trigger_id, playbook_id, service_pattern, consecutive_failures, enabled, timestamps). Includes FK constraint with CASCADE delete, appropriate indexes for lookups and trigger matching."
+    },
+    {
+      "id": "US-026",
+      "title": "Implement playbook YAML parser",
+      "description": "As a developer, I need to parse playbook YAML definitions.",
+      "acceptanceCriteria": [
+        "Parse playbook YAML into typed structure",
+        "Support step types: webhook, script, wait, condition",
+        "Support approval settings: none, required, timeout:Xm",
+        "Validate required fields and step structure",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/playbook_parser.py. StepType enum (webhook, script, wait, condition), ApprovalMode enum (none, required, timeout:Xm), dataclasses for each step type and Playbook, parse_playbook_yaml() with validation. 63 unit tests in tests/unit/test_playbook_parser.py."
+    },
+    {
+      "id": "US-027",
+      "title": "Add playbook executions tracking",
+      "description": "As a developer, I need to track playbook execution state.",
+      "acceptanceCriteria": [
+        "Create playbook_executions table: id, playbook_id, service_id, status (pending_approval, running, waiting, completed, failed, cancelled), current_step, started_at, completed_at",
+        "Create playbook_step_results table: id, execution_id, step_name, status, output, started_at, completed_at",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "Migration created in migrations/012_create_playbook_executions.sql. Tables: medic.playbook_executions (execution_id, playbook_id, service_id, status, current_step, started_at, completed_at, timestamps) and medic.playbook_step_results (result_id, execution_id, step_name, step_index, status, output, error_message, started_at, completed_at, timestamps). Includes FK constraints with CASCADE delete and appropriate indexes for common queries."
+    },
+    {
+      "id": "US-028",
+      "title": "Implement playbook execution engine core",
+      "description": "As a developer, I need an engine to execute playbook steps.",
+      "acceptanceCriteria": [
+        "Engine processes steps sequentially",
+        "State persisted after each step (survives restart)",
+        "Support for wait step (pause execution for duration)",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/playbook_engine.py. PlaybookExecutionEngine class with sequential step processing, state persistence to database, wait step support. ExecutionStatus and StepResultStatus enums. Placeholder executors for webhook/script/condition steps. 50 unit tests in tests/unit/test_playbook_engine.py."
+    },
+    {
+      "id": "US-029",
+      "title": "Implement webhook step executor",
+      "description": "As a developer, I need to execute webhook steps in playbooks.",
+      "acceptanceCriteria": [
+        "Execute HTTP request with configured method, URL, headers, body",
+        "Variable substitution: ${SERVICE_NAME}, ${ALERT_ID}, ${RUN_ID}",
+        "Configurable success conditions (status code)",
+        "Step result includes response code and body",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "Implemented execute_webhook_step() in Medic/Core/playbook_engine.py. Supports variable substitution (${SERVICE_NAME}, ${SERVICE_ID}, ${ALERT_ID}, ${RUN_ID}, ${EXECUTION_ID}, ${PLAYBOOK_NAME}), configurable success_codes, response truncation. substitute_variables() handles strings/dicts/lists. _build_webhook_context() fetches service name from DB. 20 new webhook tests (70 total) in tests/unit/test_playbook_engine.py."
+    },
+    {
+      "id": "US-030",
+      "title": "Add registered scripts schema",
+      "description": "As a developer, I need to store pre-registered scripts for execution.",
+      "acceptanceCriteria": [
+        "Create registered_scripts table: id, name, content, interpreter (bash, python), timeout_seconds, created_at",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": "Migration created in migrations/013_create_registered_scripts.sql. Table includes script_id, name (unique), content, interpreter (bash/python with CHECK), timeout_seconds (positive with CHECK), timestamps. Indexes on name, interpreter, and created_at."
+    },
+    {
+      "id": "US-031",
+      "title": "Implement script step executor",
+      "description": "As a developer, I need to execute script steps in playbooks.",
+      "acceptanceCriteria": [
+        "Execute only pre-registered scripts by name",
+        "Sandboxed execution with resource limits (timeout, memory)",
+        "Output captured in step result",
+        "Reject unregistered script names",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Implemented execute_script_step() in Medic/Core/playbook_engine.py. Looks up scripts from medic.registered_scripts by name, rejects unregistered scripts. Supports bash/python interpreters. Resource limits: timeout, memory (256MB), output truncation (8KB). Variable substitution with ${VAR_NAME} syntax. Sets MEDIC_* env vars for scripts. 20 new unit tests (90 total) in tests/unit/test_playbook_engine.py."
+    },
+    {
+      "id": "US-032",
+      "title": "Implement condition step executor",
+      "description": "As a developer, I need to execute condition steps in playbooks.",
+      "acceptanceCriteria": [
+        "Support check type: heartbeat_received (verify service received heartbeat)",
+        "Configurable timeout for condition",
+        "Support on_failure: escalate, continue, fail",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Implemented execute_condition_step() in Medic/Core/playbook_engine.py. Supports heartbeat_received check with polling, configurable timeout (default 5 min), and on_failure modes (fail/continue/escalate). check_heartbeat_received() queries medic.heartbeatEvents table for count since condition start. 19 new unit tests (108 total) in tests/unit/test_playbook_engine.py."
+    },
+    {
+      "id": "US-033",
+      "title": "Implement playbook trigger matching",
+      "description": "As a developer, I need to match alerts to playbook triggers.",
+      "acceptanceCriteria": [
+        "Match service name against trigger's service_pattern (glob pattern)",
+        "Check consecutive_failures threshold",
+        "Return matching playbook for alert",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/playbook_triggers.py. PlaybookTrigger dataclass with matches_service() using fnmatch glob patterns and meets_failure_threshold() for consecutive failures. find_matching_trigger() returns most specific trigger (highest failure threshold first). find_playbook_for_alert() returns MatchedPlaybook with full playbook details. 40 unit tests in tests/unit/test_playbook_triggers.py."
+    },
+    {
+      "id": "US-034",
+      "title": "Integrate playbook triggering with alerts",
+      "description": "As an operator, I want playbooks to trigger automatically on alerts.",
+      "acceptanceCriteria": [
+        "When alert fires, check for matching playbook",
+        "If match found and approval=none, start execution immediately",
+        "If match found and approval=required, create pending_approval execution",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/playbook_alert_integration.py with trigger_playbook_for_alert() function. Integrated into monitor.py sendAlert() via _check_playbook_triggers(). Sends Slack notifications for running and pending_approval playbooks. 19 unit tests in tests/unit/test_playbook_alert_integration.py."
+    },
+    {
+      "id": "US-035",
+      "title": "Add approval requests tracking",
+      "description": "As a developer, I need to track approval requests for playbooks.",
+      "acceptanceCriteria": [
+        "Create approval_requests table: id, execution_id, requested_at, expires_at, status (pending, approved, rejected, expired), decided_by, decided_at",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": "Migration created in migrations/014_create_approval_requests.sql. Table includes request_id, execution_id (unique FK to playbook_executions), requested_at, expires_at, status (pending/approved/rejected/expired), decided_by, decided_at. CHECK constraint ensures decided_by/decided_at are set appropriately per status. Indexes for pending requests, expiration, and audit queries."
+    },
+    {
+      "id": "US-036",
+      "title": "Implement Slack approval buttons",
+      "description": "As an operator, I want to approve/reject playbooks via Slack buttons.",
+      "acceptanceCriteria": [
+        "Send Slack message with Accept/Decline interactive buttons",
+        "Handle Slack interaction webhook callback",
+        "Update approval_request status on button click",
+        "Resume playbook execution on approval",
+        "Cancel execution on rejection",
+        "Integration tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/slack_approval.py with complete Slack Block Kit support. Added POST /v2/slack/interactions endpoint in routes.py for handling button clicks. Features: send_approval_request(), handle_slack_interaction(), approve_request(), reject_request(), Slack signature verification, message updating on decision. 42 unit tests in tests/unit/test_slack_approval.py."
+    },
+    {
+      "id": "US-037",
+      "title": "Add circuit breaker for playbook executions",
+      "description": "As an operator, I want to prevent runaway playbook executions.",
+      "acceptanceCriteria": [
+        "Track execution count per service in sliding window (1 hour)",
+        "Block new executions if service exceeds threshold (default 5/hour)",
+        "Log and alert when circuit breaker trips",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 37,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/circuit_breaker.py with CircuitBreakerConfig, check_circuit_breaker(), is_circuit_open() functions. Default: 5 executions per hour per service. Integrated into playbook_alert_integration.py to block executions when threshold exceeded. Prometheus metrics: medic_circuit_breaker_trips_total, medic_circuit_breaker_open. 31 unit tests in tests/unit/test_circuit_breaker.py."
+    },
+    {
+      "id": "US-038",
+      "title": "Add playbook execution Prometheus metrics",
+      "description": "As an operator, I want to monitor playbook execution metrics.",
+      "acceptanceCriteria": [
+        "Counter: medic_playbook_executions_total{playbook, status}",
+        "Histogram: medic_playbook_execution_duration_seconds{playbook}",
+        "Gauge: medic_playbook_executions_pending_approval",
+        "Typecheck passes"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/metrics.py. Added PLAYBOOK_EXECUTIONS counter with playbook/status labels, PLAYBOOK_EXECUTION_DURATION histogram with playbook label and buckets [1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600], and PLAYBOOK_EXECUTIONS_PENDING_APPROVAL gauge. Helper functions: record_playbook_execution(), record_playbook_execution_duration(), update_pending_approval_count(). Integrated into playbook_engine.py _complete_execution(), _fail_execution(), cancel_execution(), approve_execution(), start_execution(). Added get_pending_approval_count() and _update_pending_approval_metric() functions. 12 new unit tests in tests/unit/test_playbook_engine.py."
+    },
+    {
+      "id": "US-039",
+      "title": "Add remediation audit log schema",
+      "description": "As a developer, I need to store remediation audit logs.",
+      "acceptanceCriteria": [
+        "Create remediation_audit_log table: id, execution_id, action_type, details (jsonb), actor, timestamp",
+        "Action types: execution_started, step_completed, step_failed, approval_requested, approved, rejected, execution_completed, execution_failed",
+        "Migration runs successfully",
+        "Typecheck passes"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Migration created in migrations/015_create_remediation_audit_log.sql. Table includes log_id, execution_id (FK to playbook_executions), action_type (CHECK constraint for valid types), details (JSONB), actor (nullable for automated actions), timestamp. Indexes for execution_id, action_type, timestamp, actor, composite execution+timestamp, and GIN index on details JSONB."
+    },
+    {
+      "id": "US-040",
+      "title": "Implement audit logging in execution engine",
+      "description": "As a developer, I need the execution engine to write audit logs.",
+      "acceptanceCriteria": [
+        "Log entry created for each action type during execution",
+        "Includes full context in details field",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": "Implemented in Medic/Core/audit_log.py with AuditActionType enum and convenience functions for all action types. Integrated into playbook_engine.py (execution_started, step_completed, step_failed, execution_completed, execution_failed) and slack_approval.py (approval_requested, approved, rejected). Uses graceful degradation pattern with AUDIT_LOG_AVAILABLE flag. 38 unit tests in tests/unit/test_audit_log.py."
+    },
+    {
+      "id": "US-041",
+      "title": "Add audit log query API",
+      "description": "As an operator, I want to query and export audit logs.",
+      "acceptanceCriteria": [
+        "GET /v2/audit-logs with filters: execution_id, service_id, action_type, date range",
+        "Pagination support",
+        "Export formats: JSON, CSV via Accept header",
+        "Integration tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": "Implemented query_audit_logs() in Medic/Core/audit_log.py with filters for execution_id, service_id, action_type, actor, start_date, end_date. Added AuditLogQueryResult dataclass with pagination info. GET /v2/audit-logs endpoint in routes.py with JSON and CSV export via Accept header. 21 new unit tests (59 total in test_audit_log.py), 12 integration tests."
+    },
+    {
+      "id": "US-042",
+      "title": "Add API endpoint to trigger playbooks",
+      "description": "As a developer, I want to trigger playbooks via API.",
+      "acceptanceCriteria": [
+        "POST /v2/playbooks/:id/execute with optional service_id and variables",
+        "Rate limiting applied (10 req/min per API key)",
+        "Returns execution_id",
+        "Integration tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 42,
+      "passes": true,
+      "notes": "Implemented POST /v2/playbooks/:id/execute endpoint in Medic/Core/routes.py. Rate limiting at 10 req/min via verify_rate_limit() with custom RateLimitConfig. Accepts optional service_id and variables in JSON body. Returns execution_id, playbook_name, status. Validates playbook exists, service exists if provided. 12 integration tests in tests/integration/test_api.py."
+    },
+    {
+      "id": "US-043",
+      "title": "Add webhook endpoint to trigger playbooks",
+      "description": "As an external system, I want to trigger playbooks via webhook.",
+      "acceptanceCriteria": [
+        "POST /v2/webhooks/playbooks/:id/trigger",
+        "Authenticate via webhook secret in header",
+        "Rate limiting applied",
+        "Integration tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 43,
+      "passes": true,
+      "notes": "Implemented POST /v2/webhooks/playbooks/:id/trigger in Medic/Core/routes.py. Authentication via X-Webhook-Secret header (compared with MEDIC_WEBHOOK_SECRET env var using constant-time comparison). Rate limiting at 10 req/min per source IP via verify_rate_limit() with key_override. Added key_override parameter to verify_rate_limit() in rate_limit_middleware.py. 13 integration tests in tests/integration/test_api.py."
+    },
+    {
+      "id": "US-044",
+      "title": "Add secrets encryption for playbooks",
+      "description": "As a developer, I need to encrypt secrets used in playbooks.",
+      "acceptanceCriteria": [
+        "Create secrets table: id, name, encrypted_value, created_at",
+        "Encrypt using AES-256-GCM with server key",
+        "Decrypt only at execution time",
+        "Support ${secrets.SECRET_NAME} syntax in playbook YAML",
+        "Unit tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 44,
+      "passes": true,
+      "notes": "Migration 016 creates medic.secrets table with encrypted_value (BYTEA), nonce, tag columns. Medic/Core/secrets.py implements AES-256-GCM encryption with cryptography library. Key from MEDIC_SECRETS_KEY env var. Playbook engine updated with substitute_all() for ${secrets.SECRET_NAME} syntax in webhooks and scripts. 45 unit tests in tests/unit/test_secrets.py."
+    }
+  ]
+}

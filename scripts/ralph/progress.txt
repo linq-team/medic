@@ -11,6 +11,10 @@ Started: Tue Feb  3 13:50:31 CST 2026
 - Python type checking via mypy (existing codebase has pre-existing type errors in heartbeat.py, medic.py, pagerduty_client.py)
 - Unit tests in tests/unit/, run with `python3 -m pytest tests/unit/ -v`
 - Pre-existing test failures in test_monitor.py due to missing `slack_client` module (not related to new code)
+- **UI Stack**: Vite 7 + React 19 + TypeScript in ui/ directory
+- **UI Quality**: Run `npm run typecheck && npm run lint` before committing UI changes
+- **UI Build**: `npm run build` creates production bundle in ui/dist/
+- **Tailwind CSS 4**: Uses @tailwindcss/postcss plugin and @import 'tailwindcss' in CSS files
 ---
 
 ## 2026-02-03 14:15 CST - US-035
@@ -89,4 +93,111 @@ Started: Tue Feb  3 13:50:31 CST 2026
   - Secret names must be valid identifiers (start with letter or underscore)
   - Use try/except for graceful degradation when cryptography not installed
   - Cache resolved secrets during substitution to avoid repeated DB calls
+---
+
+## 2026-02-04 01:45 CST - US-001 - Linear Issue: SRE-59
+- What was implemented:
+  - Created ui/ directory with Vite + React + TypeScript scaffolding
+  - Installed dependencies: react 19.2.0, typescript 5.9.3, vite 7
+  - Configured ESLint 9 with TypeScript, React hooks, and Prettier plugins
+  - Created .prettierrc with consistent code style settings
+  - Added package.json scripts: dev, build, test, lint, lint:fix, format, typecheck, preview
+  - Created src/main.tsx with StrictMode React root
+  - Created src/App.tsx with Medic placeholder content
+  - Simplified src/index.css with basic reset styles
+  - Build produces dist/ folder with production bundle
+- Files changed:
+  - ui/ directory (new)
+  - ui/package.json, ui/package-lock.json
+  - ui/eslint.config.js, ui/.prettierrc
+  - ui/src/main.tsx, ui/src/App.tsx, ui/src/index.css
+  - ui/vite.config.ts, ui/tsconfig.json, ui/tsconfig.app.json, ui/tsconfig.node.json
+  - .gitignore (added ui/node_modules/ and ui/dist/)
+- **Learnings for future iterations:**
+  - Vite 7 uses new create-vite template with React 19
+  - ESLint 9 uses flat config (eslint.config.js) with defineConfig()
+  - Import eslint-config-prettier as prettierConfig and add to extends array
+  - TypeScript check via `tsc --noEmit`, build via `tsc -b && vite build`
+  - cwd is /Users/coreyjones/Documents/Github/medic/ui during npm commands
+---
+
+## 2026-02-04 02:15 CST - US-002 - Linear Issue: SRE-59
+- What was implemented:
+  - Created ui/Dockerfile with multi-stage build:
+    - Stage 1: Node 22 Alpine builder - installs deps, runs build
+    - Stage 2: nginx Alpine - copies dist/ and nginx.conf
+  - Created ui/nginx.conf with:
+    - Upstream proxy to medic-api:5000
+    - `/` route: serve static files with SPA fallback (try_files)
+    - `/api/*` route: proxy to medic-api backend
+    - `/ws` route: WebSocket proxy with upgrade headers
+    - Gzip compression for text assets
+- Files changed:
+  - ui/Dockerfile (new)
+  - ui/nginx.conf (new)
+- **Learnings for future iterations:**
+  - Multi-stage Docker builds: use `--from=builder` to copy artifacts
+  - nginx WebSocket proxy requires: proxy_http_version 1.1, Upgrade/Connection headers
+  - SPA routing needs try_files $uri $uri/ /index.html for client-side routes
+  - nginx upstream block defines backend service name (medic-api:5000)
+---
+
+## 2026-02-04 02:47 CST - US-003 - Linear Issue: SRE-59
+- What was implemented:
+  - Added medic-ui service to docker-compose.yml
+  - Service builds from ui/ directory using ui/Dockerfile
+  - Port 80 exposed for nginx (UI access)
+  - Depends on web service (medic-api) with healthcheck condition
+  - Added healthcheck for medic-ui service (curl localhost:80)
+  - Created medic-network bridge network for service communication
+  - Added container_name: medic-api to web service for nginx upstream reference
+  - Added network alias 'medic-api' to web service for nginx.conf compatibility
+  - Updated worker service MEDIC_BASE_URL to use medic-api hostname
+- Files changed:
+  - docker-compose.yml (modified)
+- **Learnings for future iterations:**
+  - Use network aliases when service name differs from hostname referenced in nginx.conf
+  - docker compose config --quiet validates configuration without verbose output
+  - Bridge network allows services to communicate via service/container names
+  - container_name ensures consistent hostname for nginx upstream references
+---
+
+## 2026-02-04 03:15 CST - US-004 - Linear Issue: SRE-60
+- What was implemented:
+  - Installed Tailwind CSS 4.x with PostCSS and Autoprefixer
+  - Created tailwind.config.js with content paths for index.html and src/**/*.{js,ts,jsx,tsx}
+  - Created postcss.config.js using @tailwindcss/postcss plugin (required for Tailwind CSS 4)
+  - Updated src/index.css with @import 'tailwindcss' directive (Tailwind 4 syntax)
+  - Verified build produces CSS with Tailwind utilities (flex, min-h-screen, bg-gray-100, etc.)
+- Files changed:
+  - ui/package.json (added tailwindcss, postcss, autoprefixer, @tailwindcss/postcss)
+  - ui/package-lock.json (updated dependencies)
+  - ui/tailwind.config.js (new)
+  - ui/postcss.config.js (new)
+  - ui/src/index.css (replaced with Tailwind import)
+- **Learnings for future iterations:**
+  - Tailwind CSS 4 requires @tailwindcss/postcss plugin (not direct tailwindcss in PostCSS config)
+  - Tailwind CSS 4 uses @import 'tailwindcss' syntax instead of @tailwind base/components/utilities directives
+  - tailwind.config.js is still used for customization but configuration is simpler in v4
+  - Build output shows Tailwind utilities being properly tree-shaken based on usage in components
+---
+
+## 2026-02-04 08:45 CST - US-005 - Linear Issue: SRE-60
+- What was implemented:
+  - Configured Linq brand color palette in Tailwind CSS
+  - Added colors to tailwind.config.js: linq-black (#141414), linq-cream (#FCF9E9), linq-sage (#B0BFB7), linq-blue (#4F9FDF), linq-navy (#1B3D67), linq-green (#83B149), linq-lime (#E8DF6E)
+  - Added status colors: status-healthy (#83B149), status-warning (#CA8A04), status-error (#DC2626), status-critical (#991B1B), status-muted (#6B7280)
+  - Added colors to src/index.css using @theme directive for Tailwind CSS 4 compatibility
+  - Updated App.tsx to demonstrate colors work with bg-linq-cream, text-linq-navy, bg-status-* classes
+  - Verified build produces CSS with all color utilities properly tree-shaken
+- Files changed:
+  - ui/tailwind.config.js (modified)
+  - ui/src/index.css (modified)
+  - ui/src/App.tsx (modified)
+- **Learnings for future iterations:**
+  - Tailwind CSS 4 uses @theme directive in CSS for custom colors (CSS-first configuration)
+  - Define colors as --color-<name>: #hex in @theme block
+  - Colors automatically become available as bg-<name>, text-<name>, border-<name>, etc.
+  - Keep tailwind.config.js colors for backwards compatibility and IDE autocomplete
+  - Build only includes colors actually used (tree-shaking)
 ---

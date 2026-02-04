@@ -2,7 +2,7 @@
 import os
 import logging
 import requests
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def create_alert(
     # Use heartbeat_name as dedup_key for idempotent alerts
     dedup_key = f"medic-{heartbeat_name}"
 
-    payload = {
+    payload: dict[str, Any] = {
         "routing_key": routing_key,
         "event_action": "trigger",
         "dedup_key": dedup_key,
