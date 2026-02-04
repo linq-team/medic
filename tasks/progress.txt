@@ -38,6 +38,58 @@
 - **KEDA CPU trigger: Use `type: cpu` with `metricType: Utilization` for percentage-based scaling**
 - **PodDisruptionBudget: Use `policy/v1` API, selector must match deployment's selector labels**
 - **Karpenter annotations: Add `karpenter.sh/do-not-disrupt: "false"` to allow node consolidation**
+- **OpenTelemetry: Use `opentelemetry.exporter.otlp.proto.grpc.trace_exporter` for OTLP gRPC exporter**
+- **Telemetry init: Call `init_telemetry(app)` after Flask app creation but before route registration**
+- **Trace context: Use `get_current_trace_id()` from Flask g context for log correlation**
+
+---
+
+## 2026-02-04 - US-019 - Linear Issue: SRE-46
+- **What was implemented**: OpenTelemetry instrumentation for distributed tracing
+  - Added OpenTelemetry packages to `Medic/requirements.txt`:
+    - `opentelemetry-api>=1.24.0`
+    - `opentelemetry-sdk>=1.24.0`
+    - `opentelemetry-instrumentation-flask>=0.45b0`
+    - `opentelemetry-exporter-otlp-proto-grpc>=1.24.0`
+  - Created `Medic/Core/telemetry.py` module with:
+    - `get_otel_config()`: Read configuration from environment variables
+    - `create_resource()`: Create OTEL Resource with service metadata
+    - `create_tracer_provider()`: Configure TracerProvider with OTLP exporter
+    - `setup_propagators()`: Configure W3C trace context propagation
+    - `store_trace_context()`: Store trace_id/span_id in Flask g context
+    - `get_current_trace_id()`: Get trace_id from Flask g for log correlation
+    - `get_current_span_id()`: Get span_id from Flask g
+    - `init_telemetry()`: Initialize OTEL for Flask application
+    - `shutdown_telemetry()`: Gracefully shutdown telemetry
+    - `get_tracer()`: Get tracer instance for custom spans
+  - Environment variables supported:
+    - `OTEL_EXPORTER_OTLP_ENDPOINT` (default: http://alloy:4317)
+    - `OTEL_SERVICE_NAME` (default: medic)
+    - `OTEL_RESOURCE_ATTRIBUTES` (comma-separated key=value pairs)
+    - `MEDIC_ENVIRONMENT` (default: development)
+    - `MEDIC_VERSION` (default: unknown)
+    - `OTEL_ENABLED` (default: true)
+  - Integrated telemetry into `medic.py` create_app()
+  - Flask auto-instrumentation for request tracing
+  - W3C trace context header propagation enabled
+  - Added 28 unit tests covering all telemetry functions
+  - Typecheck (mypy) and lint (flake8) pass
+
+- **Files changed**:
+  - `Medic/requirements.txt` (added OTEL packages)
+  - `Medic/Core/telemetry.py` (new)
+  - `medic.py` (added telemetry initialization)
+  - `tests/unit/test_telemetry.py` (new, 28 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - OpenTelemetry exporter import path is `opentelemetry.exporter.otlp.proto.grpc.trace_exporter` (not `proto_grpc`)
+  - Use `insecure=True` for OTLP exporter when communicating within cluster
+  - Trace IDs are 128-bit, format with `format(trace_id, "032x")` for 32-char hex string
+  - Span IDs are 64-bit, format with `format(span_id, "016x")` for 16-char hex string
+  - Initialize telemetry BEFORE registering routes so Flask instrumentation covers all endpoints
+  - Use `before_request` hook to store trace context in Flask g for log correlation
+  - Module-level `_initialized` flag prevents double initialization
 
 ---
 
