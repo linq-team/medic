@@ -1851,3 +1851,49 @@
   - Project structure tree helps developers quickly navigate the codebase
   - Include troubleshooting section for common issues (API connection, build errors, style issues)
 ---
+
+## 2026-02-04 - US-002 - Linear Issue: SRE-106
+- **What was implemented**: Snapshot REST API endpoints for backup/restore functionality
+  - Created `Medic/Core/snapshots.py` module with:
+    - `SnapshotActionType` enum for action types (deactivate, activate, mute, unmute, edit, bulk_edit, priority_change, team_change, delete)
+    - `ServiceSnapshot` and `SnapshotQueryResult` dataclasses with `to_dict()` methods
+    - `create_snapshot()` for capturing service state before destructive changes
+    - `get_snapshot_by_id()` for retrieving single snapshots
+    - `query_snapshots()` with pagination and filtering (service_id, action_type, date range)
+    - `restore_snapshot()` for reverting service to previous state
+  - Added API endpoints in `Medic/Core/routes.py`:
+    - `GET /v2/snapshots` - list snapshots with filters
+    - `GET /v2/snapshots/:id` - get single snapshot details
+    - `POST /v2/snapshots/:id/restore` - restore service to snapshot state
+  - Auto-create snapshots before destructive actions in `POST /service/:heartbeat_name`:
+    - Service deactivation (active=0) creates DEACTIVATE snapshot
+    - Service activation (active=1) creates ACTIVATE snapshot
+    - Mute (muted=1) creates MUTE snapshot
+    - Unmute (muted=0) creates UNMUTE snapshot
+    - Priority changes create PRIORITY_CHANGE snapshot
+    - Team changes create TEAM_CHANGE snapshot
+    - Other edits create EDIT snapshot
+  - Updated Swagger/OpenAPI documentation with snapshot endpoints and schemas
+  - Added comprehensive unit tests (34 tests, all passing)
+
+- **Files changed**:
+  - `Medic/Core/snapshots.py` (new - snapshot module)
+  - `Medic/Core/routes.py` (added snapshot endpoints + auto-snapshot creation)
+  - `Medic/Docs/swagger.json` (API documentation)
+  - `tests/unit/test_snapshots.py` (new - unit tests)
+  - `tasks/prd.json` (marked US-002 as passes: true)
+
+- **Learnings for future iterations**:
+  - Follow existing API response pattern: `{"success": bool, "message": str, "results": data}`
+  - Use dataclasses with `to_dict()` methods for consistent JSON serialization
+  - Pagination pattern: validate limits (min 1, max 250), return has_more flag
+  - Date filtering: parse ISO format with `.replace("Z", "+00:00")` for timezone handling
+  - Query pattern: build WHERE clause dynamically with conditions list and params list
+  - Use `db.query_db()` with `show_columns=True` for dict results, parse with `json.loads()`
+  - Use `db.insert_db()` for INSERT/UPDATE operations
+  - Import modules inside functions to avoid circular imports (e.g., import snapshots in routes.py)
+  - Test patterns: mock `db.query_db` with side_effect for sequential returns
+  - Optional request body parsing: use try/except for JSON decode errors
+  - X-Actor header pattern: pass actor context for audit/logging purposes
+
+---

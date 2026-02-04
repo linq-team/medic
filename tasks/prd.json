@@ -76,7 +76,8 @@
         "Add unit tests for all new endpoints",
         "Update Swagger/OpenAPI documentation",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-003",
