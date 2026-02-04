@@ -94,6 +94,7 @@
 - Audit log query API: GET /v2/audit-logs with filters for execution_id, service_id, action_type, actor, start_date, end_date. Use query_audit_logs() from Medic/Core/audit_log.py.
 - Audit log pagination: query_audit_logs() returns AuditLogQueryResult with entries, total_count, limit (default 50, max 250), offset, has_more.
 - Audit log CSV export: Use Accept: text/csv header to get CSV response. audit_logs_to_csv() converts entries to CSV format.
+- Playbook API execution: POST /v2/playbooks/:id/execute with optional service_id and variables. Use start_playbook_execution() from playbook_engine. Rate limit with verify_rate_limit() and custom RateLimitConfig.
 
 ---
 
@@ -630,4 +631,21 @@
   - CSV export includes X-Total-Count, X-Limit, X-Offset, X-Has-More headers for pagination info
   - Date parameters accept ISO-8601 format with 'Z' suffix replaced with '+00:00' for Python parsing
   - When mocking functions imported inside a route handler, mock at the source module (Medic.Core.audit_log.query_audit_logs) not the routes module
+---
+
+## 2026-02-03 - US-042 - Linear Issue: SRE-24
+- Implemented POST /v2/playbooks/:id/execute API endpoint for triggering playbooks
+- Files changed: Medic/Core/routes.py (extended), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - Playbook execute API: POST /v2/playbooks/:id/execute accepts optional service_id and variables in JSON body
+  - Rate limiting: Use verify_rate_limit() with custom RateLimitConfig(management_limit=10) for 10 req/min
+  - Rate limit check happens BEFORE playbook lookup for early rejection
+  - Response includes execution_id, playbook_id, playbook_name, status, service_id
+  - If status is pending_approval, response includes message about approval requirement
+  - Playbook lookup uses get_playbook_by_id() from playbook_engine module
+  - Service validation: If service_id provided, verify it exists before starting execution
+  - String service_id values are converted to int if possible (e.g., "42" -> 42)
+  - Context passed to playbook includes all variables plus trigger='api'
+  - skip_approval=False so playbook's approval setting is respected
+  - When testing rate-limited endpoints, use @patch decorator on verify_rate_limit returning None to bypass
 ---
