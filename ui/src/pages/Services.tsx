@@ -7,13 +7,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
 import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
 import { SearchInput, useSearch } from '@/components/table-search'
 import { MuteToggle, ActiveToggle } from '@/components/service-toggle'
+import { PrioritySelector } from '@/components/priority-selector'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
 
@@ -56,21 +56,6 @@ const SERVICE_FILTERS: FilterConfig[] = [
   },
 ]
 
-/**
- * Get priority badge styling
- */
-function getPriorityBadge(priority: string): { className: string; label: string } {
-  switch (priority.toLowerCase()) {
-    case 'p1':
-      return { className: 'bg-status-error text-white', label: 'P1' }
-    case 'p2':
-      return { className: 'bg-status-warning text-black dark:text-white', label: 'P2' }
-    case 'p3':
-      return { className: 'bg-muted text-muted-foreground', label: 'P3' }
-    default:
-      return { className: 'bg-muted text-muted-foreground', label: priority.toUpperCase() }
-  }
-}
 
 /**
  * Loading skeleton for the table
@@ -278,56 +263,50 @@ export function Services() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {services.map((service) => {
-                  const priorityBadge = getPriorityBadge(service.priority)
-
-                  return (
-                    <TableRow key={service.service_id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          to={`/services/${encodeURIComponent(service.heartbeat_name)}`}
-                          className="hover:underline hover:text-linq-blue"
-                        >
-                          {service.service_name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {service.heartbeat_name}
-                      </TableCell>
-                      <TableCell>
-                        <ActiveToggle service={service} />
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 text-sm font-medium',
-                            service.down === 1
-                              ? 'text-status-error'
-                              : 'text-status-healthy'
-                          )}
-                        >
-                          {service.down === 1 ? (
-                            <>
-                              <AlertTriangle className="h-4 w-4" />
-                              Yes
-                            </>
-                          ) : (
-                            'No'
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <MuteToggle service={service} />
-                      </TableCell>
-                      <TableCell>{service.team || '—'}</TableCell>
-                      <TableCell>
-                        <Badge className={priorityBadge.className}>
-                          {priorityBadge.label}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                {services.map((service) => (
+                  <TableRow key={service.service_id}>
+                    <TableCell className="font-medium">
+                      <Link
+                        to={`/services/${encodeURIComponent(service.heartbeat_name)}`}
+                        className="hover:underline hover:text-linq-blue"
+                      >
+                        {service.service_name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {service.heartbeat_name}
+                    </TableCell>
+                    <TableCell>
+                      <ActiveToggle service={service} />
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 text-sm font-medium',
+                          service.down === 1
+                            ? 'text-status-error'
+                            : 'text-status-healthy'
+                        )}
+                      >
+                        {service.down === 1 ? (
+                          <>
+                            <AlertTriangle className="h-4 w-4" />
+                            Yes
+                          </>
+                        ) : (
+                          'No'
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <MuteToggle service={service} />
+                    </TableCell>
+                    <TableCell>{service.team || '—'}</TableCell>
+                    <TableCell>
+                      <PrioritySelector service={service} />
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
