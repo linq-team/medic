@@ -1,0 +1,888 @@
+{
+  "project": "Medic UI Dashboard",
+  "branchName": "ralph/medic-ui",
+  "description": "Web-based user interface for Medic heartbeat monitoring service with real-time updates, service management, alerts, playbooks, and audit logs",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create React project scaffolding with Vite and TypeScript",
+      "description": "As a developer, I need the React project scaffolded so that we have a foundation to build upon.",
+      "acceptanceCriteria": [
+        "Create ui/ directory with Vite + React + TypeScript",
+        "Configure ESLint and Prettier",
+        "Add package.json with scripts: dev, build, test, lint",
+        "Create src/main.tsx entry point",
+        "Create src/App.tsx with placeholder content",
+        "npm run build produces dist/ folder",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add Dockerfile and nginx configuration",
+      "description": "As a developer, I need Docker configuration so the UI can be containerized.",
+      "acceptanceCriteria": [
+        "Create ui/Dockerfile with multi-stage build (Node build to nginx serve)",
+        "Create ui/nginx.conf with routes: /api/* proxy, /ws proxy, /* static files",
+        "nginx proxies /api/* to medic-api:5000",
+        "nginx proxies /ws with WebSocket upgrade headers",
+        "Static files served from /usr/share/nginx/html",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Update docker-compose.yml to include UI service",
+      "description": "As a developer, I need the UI service added to docker-compose.",
+      "acceptanceCriteria": [
+        "Add medic-ui service to docker-compose.yml",
+        "Service builds from ui/ directory",
+        "Port 80 exposed for nginx",
+        "Depends on medic-api service",
+        "docker-compose up starts all services",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Install and configure Tailwind CSS",
+      "description": "As a developer, I need Tailwind CSS configured for styling.",
+      "acceptanceCriteria": [
+        "Install tailwindcss, postcss, autoprefixer",
+        "Create tailwind.config.js with content paths",
+        "Create postcss.config.js",
+        "Add Tailwind directives to src/index.css",
+        "Import index.css in main.tsx",
+        "Tailwind classes work in components",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Configure Linq brand color palette in Tailwind",
+      "description": "As a developer, I need the Linq brand colors available in Tailwind.",
+      "acceptanceCriteria": [
+        "Add custom colors to tailwind.config.js: linq-black (#141414), linq-cream (#FCF9E9), linq-sage (#B0BFB7), linq-blue (#4F9FDF), linq-navy (#1B3D67), linq-green (#83B149), linq-lime (#E8DF6E)",
+        "Add status colors: status-healthy (#83B149), status-warning (#CA8A04), status-error (#DC2626), status-critical (#991B1B), status-muted (#6B7280)",
+        "Colors usable as bg-linq-blue, text-linq-navy, etc.",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Add Geist font family",
+      "description": "As a developer, I need the Geist fonts configured per brand guidelines.",
+      "acceptanceCriteria": [
+        "Install geist font package or add via CSS import",
+        "Configure Tailwind fontFamily: sans (Geist), mono (Geist Mono)",
+        "Set default font to Geist in base styles",
+        "Font renders correctly in browser",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create theme provider with light/dark mode",
+      "description": "As a user, I want to toggle between light and dark themes.",
+      "acceptanceCriteria": [
+        "Install zustand for state management",
+        "Create src/stores/themeStore.ts with theme state (light/dark/system)",
+        "Create ThemeProvider component that applies theme class to html element",
+        "Theme persists to localStorage",
+        "Configure Tailwind darkMode: 'class'",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create Button component",
+      "description": "As a developer, I need a reusable Button component.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Button.tsx",
+        "Variants: primary (linq-navy bg), secondary (outline), danger (red)",
+        "Sizes: sm, md, lg",
+        "Disabled state styling",
+        "Focus ring using linq-blue",
+        "TypeScript props interface exported",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Create Input component",
+      "description": "As a developer, I need a reusable Input component.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Input.tsx",
+        "Support text, email, password types",
+        "Error state with red border and message",
+        "Disabled state styling",
+        "Label prop with proper htmlFor association",
+        "Focus ring using linq-blue",
+        "TypeScript props interface exported",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Create Card component",
+      "description": "As a developer, I need a reusable Card component.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Card.tsx",
+        "Props: title, children, className",
+        "Light mode: white bg, linq-sage border",
+        "Dark mode: linq-black bg, appropriate border",
+        "Optional header section",
+        "TypeScript props interface exported",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create Badge component",
+      "description": "As a developer, I need a reusable Badge component for status indicators.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Badge.tsx",
+        "Variants: healthy (green), warning (yellow), error (red), critical (dark red), muted (gray), default",
+        "Small and medium sizes",
+        "TypeScript props interface exported",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Create Toast notification system",
+      "description": "As a user, I need toast notifications for action feedback.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Toast.tsx",
+        "Create src/stores/toastStore.ts with zustand",
+        "Toast types: success, error, info, warning",
+        "Auto-dismiss after 5 seconds",
+        "Manual dismiss button",
+        "Stack multiple toasts in corner",
+        "useToast hook exported for triggering",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Create Modal component",
+      "description": "As a developer, I need a reusable Modal component.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Modal.tsx",
+        "Props: isOpen, onClose, title, children",
+        "Backdrop with click-to-close",
+        "Escape key closes modal",
+        "Focus trap inside modal",
+        "Proper ARIA attributes",
+        "TypeScript props interface exported",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Create Table component",
+      "description": "As a developer, I need a reusable Table component.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Table.tsx",
+        "Subcomponents: Table, TableHead, TableBody, TableRow, TableCell",
+        "Sortable column headers with sort indicator",
+        "Hover row highlighting",
+        "Responsive horizontal scroll on small screens",
+        "TypeScript props interface exported",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Set up React Router with basic routes",
+      "description": "As a developer, I need routing configured for the application.",
+      "acceptanceCriteria": [
+        "Install react-router-dom v6",
+        "Create src/routes.tsx with route definitions",
+        "Routes: / (Dashboard), /services, /alerts, /playbooks, /audit-logs, /settings",
+        "Create placeholder page components for each route",
+        "BrowserRouter configured in main.tsx",
+        "Navigation between routes works",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Create API client module",
+      "description": "As a developer, I need an API client for making requests to the backend.",
+      "acceptanceCriteria": [
+        "Create src/lib/api.ts",
+        "Configure base URL from VITE_API_BASE_URL env var",
+        "Add API key header injection from session storage",
+        "Create typed fetch wrapper with error handling",
+        "Export functions: getServices, getAlerts, etc. (stubs)",
+        "TypeScript types for API responses",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Create login page for API key authentication",
+      "description": "As a user, I need to enter my API key to authenticate.",
+      "acceptanceCriteria": [
+        "Create src/pages/LoginPage.tsx",
+        "API key input field (password type)",
+        "Submit button to validate and store key",
+        "Store API key in sessionStorage on success",
+        "Show error message on invalid key",
+        "Medic logo displayed on page",
+        "Redirect to dashboard on successful login",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Create auth guard for protected routes",
+      "description": "As a developer, I need routes protected behind authentication.",
+      "acceptanceCriteria": [
+        "Create src/components/AuthGuard.tsx",
+        "Check sessionStorage for API key",
+        "Redirect to /login if not authenticated",
+        "Wrap protected routes with AuthGuard",
+        "Logout function clears sessionStorage and redirects",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Create sidebar navigation component",
+      "description": "As a user, I want sidebar navigation to move between sections.",
+      "acceptanceCriteria": [
+        "Create src/components/layout/Sidebar.tsx",
+        "Navigation items: Dashboard, Services, Alerts, Playbooks, Audit Logs, Settings",
+        "Use Lucide icons for each item",
+        "Highlight active route",
+        "Collapsible on mobile (hamburger menu)",
+        "Width: 240px expanded, 60px collapsed",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Create header component with branding",
+      "description": "As a user, I want a header with Medic branding and user info.",
+      "acceptanceCriteria": [
+        "Create src/components/layout/Header.tsx",
+        "Display Medic logo (from docs/assets/medic-icon-all-green.png)",
+        "Theme toggle button (sun/moon icon)",
+        "Connection status indicator placeholder",
+        "Logout button",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Create footer component with Linq branding",
+      "description": "As required by brand guidelines, the footer shows Linq attribution.",
+      "acceptanceCriteria": [
+        "Create src/components/layout/Footer.tsx",
+        "Display Linq Cube logo (black in light mode, white in dark mode)",
+        "Text: 'Built by Linq'",
+        "Display app version from VITE_VERSION env var",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Create main layout component combining header, sidebar, footer",
+      "description": "As a developer, I need a layout wrapper for all pages.",
+      "acceptanceCriteria": [
+        "Create src/components/layout/MainLayout.tsx",
+        "Compose Header, Sidebar, Footer components",
+        "Main content area with proper padding",
+        "Responsive layout (sidebar collapses on mobile)",
+        "Children rendered in main content area",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Install and configure TanStack Query",
+      "description": "As a developer, I need React Query for server state management.",
+      "acceptanceCriteria": [
+        "Install @tanstack/react-query",
+        "Create QueryClient with default options",
+        "Add QueryClientProvider to main.tsx",
+        "Configure staleTime: 30000, retry: 2",
+        "Create src/hooks/useServices.ts with useQuery example",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Create Dashboard page with summary cards",
+      "description": "As an SRE, I want to see summary stats on the dashboard.",
+      "acceptanceCriteria": [
+        "Create src/pages/DashboardPage.tsx",
+        "Display 4 summary cards: Total Services, Active Services, Down Services, Active Alerts",
+        "Cards use Card component with appropriate colors",
+        "Use useQuery to fetch stats from API",
+        "Loading skeleton while fetching",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Create Services list page with table",
+      "description": "As a developer, I want to see all registered services in a table.",
+      "acceptanceCriteria": [
+        "Create src/pages/ServicesPage.tsx",
+        "Fetch services using useQuery",
+        "Display in Table component with columns: Name, Heartbeat, Status, Team, Priority, Last Heartbeat",
+        "Badge for status (active/inactive/down/muted)",
+        "Click row to navigate to /services/:id",
+        "Loading skeleton while fetching",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Add search and filter to Services page",
+      "description": "As a user, I want to search and filter the services list.",
+      "acceptanceCriteria": [
+        "Add search input above table (debounced 300ms)",
+        "Add filter dropdowns: Status (all/active/inactive), Muted (all/muted/unmuted)",
+        "Filters update URL query params",
+        "Filters persist on page refresh (read from URL)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Create Service detail page",
+      "description": "As a developer, I want to view details of a specific service.",
+      "acceptanceCriteria": [
+        "Create src/pages/ServiceDetailPage.tsx",
+        "Route: /services/:serviceId",
+        "Fetch service by ID using useQuery",
+        "Display all service fields in organized sections",
+        "Link to runbook if configured",
+        "Edit button (opens modal - placeholder for now)",
+        "Mute/Unmute button",
+        "Loading skeleton while fetching",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Create Service edit modal",
+      "description": "As an SRE, I want to edit service configuration.",
+      "acceptanceCriteria": [
+        "Create src/components/services/ServiceEditModal.tsx",
+        "Form fields: service_name, active, alert_interval, threshold, team, priority, runbook",
+        "Install and use zod for form validation",
+        "useMutation to update service via API",
+        "Success/error toast on save",
+        "Close modal on successful save",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Create Service registration modal",
+      "description": "As a developer, I want to register a new service.",
+      "acceptanceCriteria": [
+        "Create src/components/services/ServiceRegisterModal.tsx",
+        "Add 'Register Service' button to ServicesPage",
+        "Form fields: heartbeat_name (required), service_name (required), alert_interval (required), team, priority, runbook",
+        "Validation with zod",
+        "useMutation to create service via API",
+        "Success toast with link to new service",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Add mute/unmute functionality",
+      "description": "As an SRE, I want to mute services to suppress alerts.",
+      "acceptanceCriteria": [
+        "Create src/components/services/MuteModal.tsx",
+        "Duration options: 1 hour, 4 hours, 8 hours, 24 hours, indefinite",
+        "Optional reason field",
+        "useMutation to mute/unmute via API",
+        "Visual indicator for muted services (gray styling + icon)",
+        "Show mute duration on service detail",
+        "Success toast on mute/unmute",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Create Alerts list page",
+      "description": "As an SRE, I want to view all alerts.",
+      "acceptanceCriteria": [
+        "Create src/pages/AlertsPage.tsx",
+        "Fetch alerts using useQuery",
+        "Table columns: Alert Name, Service, Status, Priority, Created, Duration",
+        "Badge for priority (P1=red, P2=orange, P3=yellow)",
+        "Badge for status (active/resolved)",
+        "Click row to navigate to /alerts/:id",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-032",
+      "title": "Add filters to Alerts page",
+      "description": "As an SRE, I want to filter alerts by status and priority.",
+      "acceptanceCriteria": [
+        "Add filter dropdowns: Status (all/active/resolved), Priority (all/P1/P2/P3)",
+        "Add date range picker for created date",
+        "Filters update URL query params",
+        "Filters persist on page refresh",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-033",
+      "title": "Create Alert detail page",
+      "description": "As an SRE, I want to view detailed alert information.",
+      "acceptanceCriteria": [
+        "Create src/pages/AlertDetailPage.tsx",
+        "Route: /alerts/:alertId",
+        "Display all alert fields with human-readable timestamps",
+        "Link to associated service",
+        "Link to PagerDuty if external_reference_id exists",
+        "Link to runbook from service",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Create Playbooks list page",
+      "description": "As an SRE, I want to view all configured playbooks.",
+      "acceptanceCriteria": [
+        "Create src/pages/PlaybooksPage.tsx",
+        "Fetch playbooks using useQuery",
+        "Table columns: Name, Description, Trigger Type, Last Run, Status",
+        "Filter by: active/inactive, trigger type",
+        "Search by name",
+        "Create Playbook button",
+        "Execute button per row",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-035",
+      "title": "Create Playbook detail page",
+      "description": "As an SRE, I want to view playbook details and execution history.",
+      "acceptanceCriteria": [
+        "Create src/pages/PlaybookDetailPage.tsx",
+        "Route: /playbooks/:playbookId",
+        "Display playbook configuration",
+        "Show steps in visual list/timeline",
+        "Execution history table",
+        "Execute Now button",
+        "Edit button",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-036",
+      "title": "Create Audit Logs page",
+      "description": "As an SRE, I want to view audit logs for compliance.",
+      "acceptanceCriteria": [
+        "Create src/pages/AuditLogsPage.tsx",
+        "Fetch audit logs using useQuery with pagination",
+        "Table columns: Timestamp, Action, Actor, Resource, Summary",
+        "Filter by: action type, actor, date range",
+        "Search by execution_id",
+        "Expandable rows for detail preview",
+        "Export to CSV button",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-037",
+      "title": "Create Settings page",
+      "description": "As a user, I want to configure my UI preferences.",
+      "acceptanceCriteria": [
+        "Create src/pages/SettingsPage.tsx",
+        "Theme toggle (light/dark/system)",
+        "Auto-refresh interval (15s/30s/60s/disabled)",
+        "Notification preferences toggle",
+        "Keyboard shortcuts enabled toggle",
+        "Save to localStorage",
+        "Reset to defaults button",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 37,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-038",
+      "title": "Add keyboard shortcuts system",
+      "description": "As a power user, I want keyboard shortcuts for navigation.",
+      "acceptanceCriteria": [
+        "Install hotkeys library (react-hotkeys-hook or similar)",
+        "Create src/hooks/useKeyboardShortcuts.ts",
+        "Global shortcuts: ? (help), g+d (dashboard), g+s (services), g+a (alerts), g+p (playbooks), g+l (logs), t (theme toggle)",
+        "Shortcuts disabled when typing in inputs",
+        "Typecheck passes"
+      ],
+      "priority": 38,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-039",
+      "title": "Create keyboard shortcuts help modal",
+      "description": "As a user, I want to see available keyboard shortcuts.",
+      "acceptanceCriteria": [
+        "Create src/components/KeyboardShortcutsModal.tsx",
+        "Triggered by ? key",
+        "List all available shortcuts with descriptions",
+        "Organized by category (Navigation, Actions)",
+        "Modal styling matches design system",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 39,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-040",
+      "title": "Add Flask-SocketIO to backend",
+      "description": "As a developer, I need WebSocket support in the Medic API.",
+      "acceptanceCriteria": [
+        "Add flask-socketio to requirements.txt",
+        "Create Medic/Core/websocket.py with SocketIO initialization",
+        "Configure /ws endpoint",
+        "Add connection/disconnect event handlers",
+        "Support API key auth in connection handshake",
+        "Tests pass"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-041",
+      "title": "Emit WebSocket events on data changes",
+      "description": "As a developer, I need the backend to emit events when data changes.",
+      "acceptanceCriteria": [
+        "Emit 'heartbeat_received' event when heartbeat posted",
+        "Emit 'alert_created' event when new alert created",
+        "Emit 'alert_resolved' event when alert resolved",
+        "Emit 'service_updated' event when service modified",
+        "Events include relevant entity data",
+        "Tests pass"
+      ],
+      "priority": 41,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-042",
+      "title": "Create WebSocket client in frontend",
+      "description": "As a developer, I need a WebSocket client to receive real-time updates.",
+      "acceptanceCriteria": [
+        "Install socket.io-client",
+        "Create src/lib/websocket.ts",
+        "Connect to /ws endpoint with API key",
+        "Handle connection/disconnect events",
+        "Automatic reconnection with exponential backoff",
+        "Export connection status observable",
+        "Typecheck passes"
+      ],
+      "priority": 42,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-043",
+      "title": "Update React Query cache on WebSocket events",
+      "description": "As an SRE, I want data to update in real-time without refresh.",
+      "acceptanceCriteria": [
+        "On 'service_updated' event, invalidate services query",
+        "On 'alert_created' event, invalidate alerts query",
+        "On 'alert_resolved' event, invalidate alerts query",
+        "Dashboard stats update on relevant events",
+        "Typecheck passes"
+      ],
+      "priority": 43,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-044",
+      "title": "Add connection status indicator to header",
+      "description": "As a user, I want to see the WebSocket connection status.",
+      "acceptanceCriteria": [
+        "Add status indicator to Header component",
+        "Green dot when connected",
+        "Yellow dot with 'Reconnecting...' when reconnecting",
+        "Red dot with 'Disconnected' when offline",
+        "Tooltip shows detailed status",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 44,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-045",
+      "title": "Add loading skeletons to all pages",
+      "description": "As a user, I want to see loading feedback while data loads.",
+      "acceptanceCriteria": [
+        "Create src/components/ui/Skeleton.tsx",
+        "Add skeletons to DashboardPage cards",
+        "Add skeletons to ServicesPage table",
+        "Add skeletons to AlertsPage table",
+        "Add skeletons to detail pages",
+        "Skeleton animation matches Linq theme",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 45,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-046",
+      "title": "Add error boundary and error pages",
+      "description": "As a user, I want graceful error handling.",
+      "acceptanceCriteria": [
+        "Create src/components/ErrorBoundary.tsx",
+        "Create src/pages/NotFoundPage.tsx (404)",
+        "Create src/pages/ErrorPage.tsx (500)",
+        "Wrap app in ErrorBoundary",
+        "Add catch-all route for 404",
+        "Error pages styled with Medic branding",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 46,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-047",
+      "title": "Add responsive design for mobile",
+      "description": "As a user, I want to use the UI on mobile devices.",
+      "acceptanceCriteria": [
+        "Sidebar collapses to hamburger menu on screens < 768px",
+        "Tables scroll horizontally with sticky first column",
+        "Cards stack vertically on mobile",
+        "Touch-friendly button sizes (min 44x44px)",
+        "Test on 320px, 768px, 1024px breakpoints",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 47,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-048",
+      "title": "Add accessibility improvements",
+      "description": "As a user with accessibility needs, I want the UI to be accessible.",
+      "acceptanceCriteria": [
+        "ARIA labels on all icon buttons",
+        "Focus indicators visible (linq-blue outline)",
+        "Keyboard navigation for all interactive elements",
+        "Skip navigation link",
+        "Color contrast meets WCAG AA (4.5:1)",
+        "Install and run axe-core, zero violations",
+        "Typecheck passes"
+      ],
+      "priority": 48,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-049",
+      "title": "Integrate Grafana Faro for observability",
+      "description": "As an SRE, I need frontend observability for monitoring.",
+      "acceptanceCriteria": [
+        "Install @grafana/faro-web-sdk",
+        "Create src/lib/faro.ts initialization",
+        "Configure Faro URL from VITE_FARO_URL env var",
+        "Track page views",
+        "Track Web Vitals (LCP, FID, CLS)",
+        "Capture JavaScript errors",
+        "Track key user actions",
+        "Typecheck passes"
+      ],
+      "priority": 49,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-050",
+      "title": "Add unit tests for core components",
+      "description": "As a developer, I need unit tests for quality assurance.",
+      "acceptanceCriteria": [
+        "Install vitest and @testing-library/react",
+        "Configure vitest.config.ts",
+        "Tests for Button, Input, Card, Badge, Modal components",
+        "Tests for themeStore",
+        "Tests for API client error handling",
+        "npm run test passes",
+        "Typecheck passes"
+      ],
+      "priority": 50,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-051",
+      "title": "Create README documentation",
+      "description": "As a developer, I need documentation to understand the project.",
+      "acceptanceCriteria": [
+        "Create ui/README.md",
+        "Overview of the UI project",
+        "Local development setup instructions",
+        "Environment variables documentation",
+        "Build and deployment instructions",
+        "Testing instructions",
+        "Typecheck passes"
+      ],
+      "priority": 51,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

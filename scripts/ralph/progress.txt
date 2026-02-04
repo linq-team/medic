@@ -11,6 +11,9 @@ Started: Tue Feb  3 13:50:31 CST 2026
 - Python type checking via mypy (existing codebase has pre-existing type errors in heartbeat.py, medic.py, pagerduty_client.py)
 - Unit tests in tests/unit/, run with `python3 -m pytest tests/unit/ -v`
 - Pre-existing test failures in test_monitor.py due to missing `slack_client` module (not related to new code)
+- **UI Stack**: Vite 7 + React 19 + TypeScript in ui/ directory
+- **UI Quality**: Run `npm run typecheck && npm run lint` before committing UI changes
+- **UI Build**: `npm run build` creates production bundle in ui/dist/
 ---
 
 ## 2026-02-03 14:15 CST - US-035
@@ -89,4 +92,51 @@ Started: Tue Feb  3 13:50:31 CST 2026
   - Secret names must be valid identifiers (start with letter or underscore)
   - Use try/except for graceful degradation when cryptography not installed
   - Cache resolved secrets during substitution to avoid repeated DB calls
+---
+
+## 2026-02-04 01:45 CST - US-001 - Linear Issue: SRE-59
+- What was implemented:
+  - Created ui/ directory with Vite + React + TypeScript scaffolding
+  - Installed dependencies: react 19.2.0, typescript 5.9.3, vite 7
+  - Configured ESLint 9 with TypeScript, React hooks, and Prettier plugins
+  - Created .prettierrc with consistent code style settings
+  - Added package.json scripts: dev, build, test, lint, lint:fix, format, typecheck, preview
+  - Created src/main.tsx with StrictMode React root
+  - Created src/App.tsx with Medic placeholder content
+  - Simplified src/index.css with basic reset styles
+  - Build produces dist/ folder with production bundle
+- Files changed:
+  - ui/ directory (new)
+  - ui/package.json, ui/package-lock.json
+  - ui/eslint.config.js, ui/.prettierrc
+  - ui/src/main.tsx, ui/src/App.tsx, ui/src/index.css
+  - ui/vite.config.ts, ui/tsconfig.json, ui/tsconfig.app.json, ui/tsconfig.node.json
+  - .gitignore (added ui/node_modules/ and ui/dist/)
+- **Learnings for future iterations:**
+  - Vite 7 uses new create-vite template with React 19
+  - ESLint 9 uses flat config (eslint.config.js) with defineConfig()
+  - Import eslint-config-prettier as prettierConfig and add to extends array
+  - TypeScript check via `tsc --noEmit`, build via `tsc -b && vite build`
+  - cwd is /Users/coreyjones/Documents/Github/medic/ui during npm commands
+---
+
+## 2026-02-04 02:15 CST - US-002 - Linear Issue: SRE-59
+- What was implemented:
+  - Created ui/Dockerfile with multi-stage build:
+    - Stage 1: Node 22 Alpine builder - installs deps, runs build
+    - Stage 2: nginx Alpine - copies dist/ and nginx.conf
+  - Created ui/nginx.conf with:
+    - Upstream proxy to medic-api:5000
+    - `/` route: serve static files with SPA fallback (try_files)
+    - `/api/*` route: proxy to medic-api backend
+    - `/ws` route: WebSocket proxy with upgrade headers
+    - Gzip compression for text assets
+- Files changed:
+  - ui/Dockerfile (new)
+  - ui/nginx.conf (new)
+- **Learnings for future iterations:**
+  - Multi-stage Docker builds: use `--from=builder` to copy artifacts
+  - nginx WebSocket proxy requires: proxy_http_version 1.1, Upgrade/Connection headers
+  - SPA routing needs try_files $uri $uri/ /index.html for client-side routes
+  - nginx upstream block defines backend service name (medic-api:5000)
 ---
