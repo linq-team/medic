@@ -651,7 +651,7 @@
         "Verify `terraform init && terraform validate` passes"
       ],
       "priority": 30,
-      "passes": false,
+      "passes": true,
       "notes": "Single terraform apply provisions infra AND deploys app via Helm",
       "blockedBy": ["SRE-54", "SRE-55", "SRE-56"]
     },
