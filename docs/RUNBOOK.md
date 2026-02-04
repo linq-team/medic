@@ -20,9 +20,10 @@ This runbook provides operational procedures for managing and troubleshooting th
 
 | Component | Description | Port |
 |-----------|-------------|------|
-| Web Server | Flask API serving heartbeat endpoints | 5000 |
+| Web Server | Flask API serving heartbeat endpoints | 8080 |
 | Worker | Background process monitoring heartbeats | N/A |
 | PostgreSQL | Database storing heartbeats and alerts | 5432 |
+| Redis | Distributed rate limiting cache | 6379 |
 
 ### Health Endpoints
 
@@ -34,16 +35,58 @@ This runbook provides operational procedures for managing and troubleshooting th
 
 ### Environment Variables
 
+#### Database (Required)
+
 | Variable | Required | Description |
 |----------|----------|-------------|
+| `DB_HOST` | Yes | PostgreSQL host |
+| `DB_PORT` | Yes | PostgreSQL port (default: 5432) |
+| `DB_NAME` | Yes | PostgreSQL database name |
 | `PG_USER` | Yes | PostgreSQL username |
 | `PG_PASS` | Yes | PostgreSQL password |
-| `DB_HOST` | Yes | PostgreSQL host |
-| `DB_NAME` | Yes | PostgreSQL database name |
-| `PORT` | Yes | Web server port |
-| `PAGERDUTY_ROUTING_KEY` | Yes | PagerDuty Events API routing key |
-| `SLACK_API_TOKEN` | Yes | Slack Bot token |
-| `SLACK_CHANNEL_ID` | Yes | Slack channel for notifications |
+
+#### Application (Optional)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Web server port (default: 8080) |
+| `DEBUG` | No | Debug mode (default: false) |
+| `MEDIC_BASE_URL` | No | Base URL for links (default: http://localhost:8080) |
+| `MEDIC_TIMEZONE` | No | Timezone for scheduling (default: America/Chicago) |
+| `LOG_LEVEL` | No | Logging level (default: INFO) |
+
+#### Worker Settings (Optional)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `WORKER_INTERVAL_SECONDS` | No | Heartbeat check interval (default: 15) |
+| `ALERT_AUTO_UNMUTE_HOURS` | No | Hours until auto-unmute (default: 24) |
+| `HEARTBEAT_RETENTION_DAYS` | No | Data retention period (default: 30) |
+
+#### Redis (Required for distributed rate limiting)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `REDIS_URL` | Conditional | Redis connection URL (e.g., redis://localhost:6379/0) |
+| `MEDIC_RATE_LIMITER_TYPE` | No | Rate limiter: `auto`, `redis`, or `memory` (default: auto) |
+| `REDIS_POOL_SIZE` | No | Redis connection pool size (default: 10) |
+
+#### Integrations (Optional)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SLACK_API_TOKEN` | No | Slack Bot token for notifications |
+| `SLACK_CHANNEL_ID` | No | Slack channel for notifications |
+| `SLACK_SIGNING_SECRET` | No | Slack webhook signature verification |
+| `PAGERDUTY_ROUTING_KEY` | No | PagerDuty Events API routing key |
+
+#### Security (Required for production)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MEDIC_SECRETS_KEY` | Prod | AES-256 key for encrypting secrets (32-byte base64) |
+| `MEDIC_WEBHOOK_SECRET` | Prod | Secret for webhook signature validation |
+| `MEDIC_ALLOWED_WEBHOOK_HOSTS` | No | Comma-separated allowlist for webhook URLs (SSRF prevention) |
 
 ---
 
