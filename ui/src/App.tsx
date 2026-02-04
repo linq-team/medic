@@ -6,6 +6,7 @@ import {
   Services,
   ServiceDetail,
   Alerts,
+  AlertDetail,
   Playbooks,
   AuditLogs,
   Settings,
@@ -30,6 +31,7 @@ function App() {
         <Route path="/services" element={<Services />} />
         <Route path="/services/:id" element={<ServiceDetail />} />
         <Route path="/alerts" element={<Alerts />} />
+        <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/playbooks" element={<Playbooks />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
         <Route path="/settings" element={<Settings />} />

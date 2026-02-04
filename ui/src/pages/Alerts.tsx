@@ -285,7 +285,12 @@ export function Alerts() {
                 return (
                   <TableRow key={alert.alert_id}>
                     <TableCell className="font-mono text-sm">
-                      {alert.heartbeat_name}
+                      <Link
+                        to={`/alerts/${alert.alert_id}`}
+                        className="hover:underline hover:text-linq-blue"
+                      >
+                        {alert.heartbeat_name}
+                      </Link>
                     </TableCell>
                     <TableCell className="font-medium">
                       <Link
