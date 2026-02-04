@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "description": "Medic is a service for posting heartbeats and generating alerts based on heartbeat failures.",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "title": "Medic API"
   },
   "host": "localhost:5000",
@@ -22,6 +22,10 @@
     {
       "name": "alerts",
       "description": "Information regarding active and historical alerts in Medic"
+    },
+    {
+      "name": "snapshots",
+      "description": "Service snapshots for backup and restore functionality"
     }
   ],
   "schemes": [
@@ -591,6 +595,205 @@
         },
         "x-swagger-router-controller": "swagger_server.controllers.alerts_controller"
       }
+    },
+    "/v2/snapshots": {
+      "get": {
+        "tags": [
+          "snapshots"
+        ],
+        "summary": "List service snapshots",
+        "description": "Query service snapshots with flexible filtering and pagination. Snapshots capture service state before destructive actions.",
+        "operationId": "listSnapshots",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "service_id",
+            "in": "query",
+            "description": "Filter by service ID",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "name": "action_type",
+            "in": "query",
+            "description": "Filter by action type (deactivate, activate, mute, unmute, edit, bulk_edit, priority_change, team_change, delete)",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter snapshots on or after this date (ISO format, e.g., 2026-01-01T00:00:00Z)",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter snapshots on or before this date (ISO format, e.g., 2026-01-31T23:59:59Z)",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum entries to return (default 50, max 250)",
+            "required": false,
+            "type": "integer",
+            "default": 50
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of entries to skip for pagination",
+            "required": false,
+            "type": "integer",
+            "default": 0
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string"
+                },
+                "results": {
+                  "$ref": "#/definitions/SnapshotQueryResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters"
+          }
+        }
+      }
+    },
+    "/v2/snapshots/{snapshot_id}": {
+      "get": {
+        "tags": [
+          "snapshots"
+        ],
+        "summary": "Get snapshot by ID",
+        "description": "Retrieve a single snapshot by its ID",
+        "operationId": "getSnapshot",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "description": "Snapshot ID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string"
+                },
+                "results": {
+                  "$ref": "#/definitions/Snapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Snapshot not found"
+          }
+        }
+      }
+    },
+    "/v2/snapshots/{snapshot_id}/restore": {
+      "post": {
+        "tags": [
+          "snapshots"
+        ],
+        "summary": "Restore service from snapshot",
+        "description": "Restore a service to a previous state captured in a snapshot. The snapshot can only be restored once.",
+        "operationId": "restoreSnapshot",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "description": "Snapshot ID",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "description": "Restore options",
+            "required": false,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "actor": {
+                  "type": "string",
+                  "description": "User performing the restore (for audit purposes)"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Snapshot restored successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Snapshot restored successfully."
+                },
+                "results": {
+                  "$ref": "#/definitions/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Snapshot has already been restored"
+          },
+          "404": {
+            "description": "Snapshot not found"
+          },
+          "500": {
+            "description": "Failed to restore snapshot"
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -926,6 +1129,114 @@
             "runbook": "https://myurl.com/link/to/my/runbook/doc"
           }
         ]
+      }
+    },
+    "Snapshot": {
+      "type": "object",
+      "description": "Service snapshot capturing the state of a service before a destructive action",
+      "properties": {
+        "snapshot_id": {
+          "type": "integer",
+          "format": "int64",
+          "example": 123
+        },
+        "service_id": {
+          "type": "integer",
+          "format": "int64",
+          "example": 42
+        },
+        "snapshot_data": {
+          "type": "object",
+          "description": "Complete service state at time of snapshot",
+          "properties": {
+            "service_id": {
+              "type": "integer"
+            },
+            "heartbeat_name": {
+              "type": "string"
+            },
+            "service_name": {
+              "type": "string"
+            },
+            "active": {
+              "type": "integer"
+            },
+            "alert_interval": {
+              "type": "integer"
+            },
+            "threshold": {
+              "type": "integer"
+            },
+            "team": {
+              "type": "string"
+            },
+            "priority": {
+              "type": "string"
+            },
+            "muted": {
+              "type": "integer"
+            },
+            "down": {
+              "type": "integer"
+            },
+            "runbook": {
+              "type": "string"
+            }
+          }
+        },
+        "action_type": {
+          "type": "string",
+          "enum": ["deactivate", "activate", "mute", "unmute", "edit", "bulk_edit", "priority_change", "team_change", "delete"],
+          "example": "deactivate"
+        },
+        "actor": {
+          "type": "string",
+          "description": "User or system that triggered the snapshot",
+          "example": "user@example.com"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "example": "2026-01-15T10:30:00Z"
+        },
+        "restored_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when snapshot was restored (null if not restored)",
+          "example": null
+        }
+      }
+    },
+    "SnapshotQueryResult": {
+      "type": "object",
+      "description": "Paginated result of snapshot query",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Snapshot"
+          }
+        },
+        "total_count": {
+          "type": "integer",
+          "description": "Total number of matching snapshots",
+          "example": 100
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum entries returned",
+          "example": 50
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Number of entries skipped",
+          "example": 0
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "Whether more entries exist beyond current page",
+          "example": true
+        }
       }
     }
   }
