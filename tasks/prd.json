@@ -587,7 +587,7 @@
         "Verify `terraform validate` passes in modules/rds"
       ],
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "notes": "RDS outputs will be passed to Helm via helm_release"
     },
     {
