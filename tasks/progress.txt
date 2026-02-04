@@ -18,6 +18,36 @@
 - **Redis rate limiter: Use `REDIS_URL` env var for connection, `REDIS_POOL_SIZE` for pool (default 10), use `is_healthy()` to check connectivity**
 - **Redis testing: Use `fakeredis` package for testing Redis-dependent code**
 - **Rate limiter factory: Use `MEDIC_RATE_LIMITER_TYPE` env var (redis/memory/auto) for selection, `get_rate_limiter()` returns cached singleton**
+- **Dockerfile: Multi-stage build (builder -> runtime), python:3.11-slim-bookworm base, port 8080, gunicorn WSGI server**
+- **Docker user: Non-root user `medic` with uid 1000 for Kubernetes compatibility**
+
+---
+
+## 2026-02-04 - US-011 - Linear Issue: SRE-38
+- **What was implemented**: Production Dockerfile with multi-arch support (amd64 and arm64)
+  - Multi-stage build: builder stage for installing dependencies, runtime stage for minimal app image
+  - Base image: `python:3.11-slim-bookworm` (supports both amd64 and arm64 architectures)
+  - Only production dependencies from requirements.txt installed (not dev dependencies)
+  - Non-root user `medic` with uid 1000 created for Kubernetes security policies
+  - Environment variables: `PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`
+  - Exposed port 8080 (production standard)
+  - HEALTHCHECK instruction: `curl -f http://localhost:8080/health || exit 1`
+  - Labels: maintainer, version, description
+  - Gunicorn WSGI server with 2 workers and 4 threads for production performance
+  - Created `.dockerignore` excluding: .git, tests/, __pycache__, *.pyc, .env, .venv, tasks/, docs/
+
+- **Files changed**:
+  - `Dockerfile` (rewrote with multi-stage build and production optimizations)
+  - `.dockerignore` (new file for Docker build context optimization)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `python:3.11-slim-bookworm` for multi-arch support (not alpine - has musl issues)
+  - Install `libpq5` in runtime stage (not `libpq-dev`) for psycopg2 runtime
+  - Copy Python packages from builder with `COPY --from=builder /root/.local /home/medic/.local`
+  - Set uid 1000 explicitly for Kubernetes SecurityContext compatibility
+  - Use gunicorn instead of Flask dev server for production
+  - All Python dependencies (flask, psycopg2-binary, cryptography, etc.) have pre-built wheels for both amd64 and arm64
 
 ---
 
