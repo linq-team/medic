@@ -24,6 +24,19 @@
 
 ---
 
+## 2026-02-04 - US-010 - Linear Issue: SRE-64
+- What was implemented: Created sidebar navigation component with Lucide icons and active link highlighting
+- Files changed:
+  - ui/src/components/sidebar.tsx (new - Sidebar component with NavLink)
+  - ui/src/App.tsx (refactored to use Sidebar instead of horizontal nav)
+- **Learnings for future iterations:**
+  - Lucide icons: LayoutDashboard, Server, AlertTriangle, BookOpen, ScrollText, Settings for nav items
+  - Use useLocation() hook to determine active nav link
+  - NavItem pattern with interface { to, label, icon } for extensible navigation
+  - Sidebar uses flex layout with flex-shrink-0 to prevent icon squishing
+  - cn() utility from lib/utils for conditional class merging
+---
+
 ## 2026-02-04 - US-009 - Linear Issue: SRE-87
 - What was implemented: Installed React Router v6 and created basic routes with placeholder pages
 - Files changed:
