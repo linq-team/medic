@@ -11,12 +11,49 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
+import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
 
 /** Default number of services to display per page */
 const PAGE_SIZE = 25
+
+/**
+ * Filter configurations for the Services table
+ */
+const SERVICE_FILTERS: FilterConfig[] = [
+  {
+    param: 'active',
+    label: 'Status',
+    options: [
+      { value: 'all', label: 'All' },
+      { value: '1', label: 'Active' },
+      { value: '0', label: 'Inactive' },
+    ],
+    placeholder: 'All',
+  },
+  {
+    param: 'muted',
+    label: 'Muted',
+    options: [
+      { value: 'all', label: 'All' },
+      { value: '1', label: 'Muted' },
+      { value: '0', label: 'Not Muted' },
+    ],
+    placeholder: 'All',
+  },
+  {
+    param: 'down',
+    label: 'Health',
+    options: [
+      { value: 'all', label: 'All' },
+      { value: '1', label: 'Down' },
+      { value: '0', label: 'Up' },
+    ],
+    placeholder: 'All',
+  },
+]
 
 /**
  * Get status badge variant and label for a service
@@ -86,11 +123,19 @@ export function Services() {
     'service_name', // default sort column
     'asc' // default direction
   )
+  const {
+    filterState,
+    setFilter,
+    clearFilters,
+    hasActiveFilters,
+    filterItems,
+  } = useFilter(SERVICE_FILTERS)
 
   const allServices = data?.results ?? []
 
-  // Sort services first, then paginate
-  const sortedServices = sortItems(allServices)
+  // Filter first, then sort, then paginate
+  const filteredServices = filterItems(allServices)
+  const sortedServices = sortItems(filteredServices)
   const totalItems = sortedServices.length
 
   // Paginate services client-side
@@ -115,10 +160,37 @@ export function Services() {
         </div>
       )}
 
+      {/* Filter controls */}
+      {!isLoading && allServices.length > 0 && (
+        <TableFilters
+          filters={SERVICE_FILTERS}
+          filterState={filterState}
+          onFilterChange={setFilter}
+          onClearFilters={clearFilters}
+          hasActiveFilters={hasActiveFilters}
+        />
+      )}
+
       {isLoading ? (
         <TableSkeleton />
       ) : allServices.length === 0 ? (
         <EmptyState />
+      ) : totalItems === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <Server className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium text-foreground mb-2">No matching services</h3>
+          <p className="text-muted-foreground max-w-sm mb-4">
+            No services match your current filters. Try adjusting or clearing your filters.
+          </p>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-linq-blue hover:underline text-sm"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
       ) : (
         <>
           <div className="rounded-md border">

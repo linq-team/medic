@@ -41,7 +41,11 @@ export default defineConfig([
   },
   // Components that export hooks alongside UI components
   {
-    files: ['src/components/*-pagination.tsx', 'src/components/*-sort.tsx'],
+    files: [
+      'src/components/*-pagination.tsx',
+      'src/components/*-sort.tsx',
+      'src/components/*-filter.tsx',
+    ],
     rules: {
       'react-refresh/only-export-components': 'off',
     },
