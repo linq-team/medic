@@ -513,3 +513,24 @@
   - resetToDefaults only resets SettingsProvider settings, not theme (theme managed separately by ThemeProvider)
   - ESLint override for *-provider.tsx already existed, so no config change needed
 ---
+
+## 2026-02-04 - US-031 - Linear Issue: SRE-94
+- What was implemented: Added unit tests for core components (ThemeProvider, AuthContext, API client)
+- Files changed:
+  - ui/package.json (added vitest, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event, jsdom)
+  - ui/vite.config.ts (added vitest configuration using vitest/config defineConfig)
+  - ui/tsconfig.app.json (added vitest/globals and @testing-library/jest-dom types, excluded test files from build)
+  - ui/src/test/setup.ts (new - test setup with localStorage/sessionStorage/matchMedia mocks)
+  - ui/src/components/theme-provider.test.tsx (new - 12 tests for ThemeProvider)
+  - ui/src/components/auth-provider.test.tsx (new - 12 tests for AuthContext)
+  - ui/src/lib/api.test.ts (new - 33 tests for API client)
+- **Learnings for future iterations:**
+  - vitest/config exports defineConfig that includes test property types (use instead of vite's defineConfig)
+  - Exclude test files from tsconfig.app.json to avoid build errors: "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+  - Mock localStorage/sessionStorage in setup.ts using factory pattern that returns object with getItem/setItem/removeItem/clear
+  - Mock matchMedia for theme provider tests with prefers-color-scheme: dark returning true
+  - Use vi.mock() to mock modules like @/lib/api for testing AuthProvider in isolation
+  - Testing hooks that throw when used outside provider context is difficult with React Testing Library - error boundaries catch the errors
+  - Use `git add -f src/lib/api.test.ts` for files in gitignored ui/src/lib/ directory
+  - API client offset=0 is falsy, so it won't be added to URL params (only truthy offsets are included)
+---
