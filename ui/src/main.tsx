@@ -6,6 +6,7 @@ import './index.css'
 import App from './App.tsx'
 import { ThemeProvider } from './components/theme-provider'
 import { AuthProvider } from './components/auth-provider'
+import { SettingsProvider } from './components/settings-provider'
 
 /**
  * React Query client with sensible defaults for the Medic UI
@@ -31,9 +32,11 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider defaultTheme="system" storageKey="medic-ui-theme">
-          <AuthProvider>
-            <App />
-          </AuthProvider>
+          <SettingsProvider>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </SettingsProvider>
         </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
