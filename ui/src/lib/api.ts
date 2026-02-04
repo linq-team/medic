@@ -531,6 +531,23 @@ export function createApiClient(config: ApiClientConfig = {}) {
     // =========================================================================
 
     /**
+     * Get all playbooks with optional filters
+     */
+    async getPlaybooks(params?: {
+      active?: number
+      trigger_type?: string
+    }): Promise<ApiResponse<Playbook[]>> {
+      const searchParams = new URLSearchParams()
+      if (params?.active !== undefined) searchParams.set('active', String(params.active))
+      if (params?.trigger_type) searchParams.set('trigger_type', params.trigger_type)
+
+      const query = searchParams.toString()
+      const endpoint = query ? `/v2/playbooks?${query}` : '/v2/playbooks'
+
+      return fetchWithAuth<ApiResponse<Playbook[]>>(endpoint)
+    },
+
+    /**
      * Execute a playbook
      */
     async executePlaybook(
