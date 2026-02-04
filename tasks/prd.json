@@ -435,7 +435,7 @@
         "Typecheck/lint passes"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "OTEL semantic logging - trace_id enables Grafana log-to-trace correlation",
       "blockedBy": ["SRE-46"]
     },
