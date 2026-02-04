@@ -7,6 +7,35 @@
 - Use `pytest.mark.parametrize` for testing multiple inputs
 - Import database module as `import Medic.Core.database as db`
 - Module constants should be type-annotated: `CONSTANT: Type = value`
+- Rate limiting: All endpoints must be rate limited - no bypass prefixes allowed
+- Use `_get_endpoint_rate_limit_config()` to get endpoint-specific rate limits
+- Environment variable config: Use `int(os.environ.get("VAR_NAME", "default"))` pattern
+
+---
+
+## 2026-02-04 - US-005 - Linear Issue: SRE-32
+- **What was implemented**: Added rate limiting to ALL endpoints (no bypasses)
+  - Removed `/metrics` and `/docs` from `RATE_LIMIT_BYPASS_PREFIXES`
+  - Replaced bypass mechanism with endpoint-specific rate limits
+  - Added `RATE_LIMIT_HEALTH_REQUESTS` config (default: 1000 req/min) for /health
+  - Added `RATE_LIMIT_METRICS_REQUESTS` config (default: 100 req/min) for /metrics
+  - Added `RATE_LIMIT_DOCS_REQUESTS` config (default: 60 req/min) for /docs
+  - Created `_get_endpoint_rate_limit_config()` to return appropriate config
+  - Updated `_determine_endpoint_type()` to detect health, metrics, docs types
+  - Removed `_should_bypass_rate_limit()` function entirely
+  - All 47 unit tests pass verifying no endpoints bypass rate limiting
+
+- **Files changed**:
+  - `Medic/Core/rate_limit_middleware.py` (refactored rate limit bypass to endpoint-specific limits)
+  - `tests/unit/test_rate_limit_middleware.py` (updated and added 47 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Security best practice: Never bypass rate limiting - use endpoint-specific limits instead
+  - When changing bypass behavior, integration tests need custom configs explicitly passed
+  - Endpoint type constants (`ENDPOINT_TYPE_*`) help maintain consistency across functions
+  - Rate limit middleware applies endpoint-specific config when no custom config provided
+  - Tests for "no bypass" should verify the check function IS called (not assert_not_called)
 
 ---
 
