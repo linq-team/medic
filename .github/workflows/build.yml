@@ -163,3 +163,65 @@ jobs:
         run: |
           helm template medic helm/medic > /dev/null
           echo "Helm template rendered successfully"
+
+  # ---------------------------------------------------------------------------
+  # Push to ECR Job - Multi-arch Docker Image Push (main branch only)
+  # ---------------------------------------------------------------------------
+  # Required secrets/variables:
+  #   - AWS_ROLE_ARN: IAM role ARN for OIDC authentication
+  #   - AWS_REGION: AWS region (e.g., us-east-1)
+  #   - ECR_REPOSITORY: Full ECR repository URI (e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com/medic)
+  # ---------------------------------------------------------------------------
+  push-ecr:
+    name: Push to ECR (Multi-arch)
+    runs-on: ubuntu-latest
+    # Only run on push to main, not on PRs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Wait for build job to pass before pushing
+    needs: [lint, test, build, helm-lint]
+
+    permissions:
+      id-token: write  # Required for OIDC authentication with AWS
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU for cross-platform builds
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.ECR_REPOSITORY }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true

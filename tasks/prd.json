@@ -545,7 +545,7 @@
         "Document required secrets: AWS_ROLE_ARN, AWS_REGION, ECR_REPOSITORY"
       ],
       "priority": 25,
-      "passes": false,
+      "passes": true,
       "notes": "Multi-arch build supports both x86 EC2/EKS and Graviton instances"
     },
     {

@@ -935,3 +935,43 @@
   - Use `actions/setup-python@v5` and `azure/setup-helm@v4` for latest stable versions
 
 ---
+
+## 2026-02-04 - US-025 - Linear Issue: SRE-52
+- **What was implemented**: GitHub Actions workflow for multi-arch ECR push
+  - Extended `.github/workflows/build.yml` with `push-ecr` job:
+    - Job runs only on push to main (not PRs) via `if: github.ref == 'refs/heads/main' && github.event_name == 'push'`
+    - Waits for lint, test, build, and helm-lint jobs to pass via `needs: [lint, test, build, helm-lint]`
+    - Configures AWS credentials via OIDC using `aws-actions/configure-aws-credentials@v4`
+    - Uses `role-to-assume` with OIDC (no static credentials needed)
+    - Logs in to ECR using `aws-actions/amazon-ecr-login@v2`
+    - Sets up QEMU for cross-platform emulation using `docker/setup-qemu-action@v3`
+    - Sets up Docker Buildx for multi-arch builds using `docker/setup-buildx-action@v3`
+    - Uses `docker/metadata-action@v5` to generate image tags (SHA and latest)
+    - Builds and pushes multi-arch manifest for `linux/amd64,linux/arm64`
+    - Uses `docker/build-push-action@v6` with buildx for the push
+    - Tags image with: git SHA (short), latest
+    - Enables provenance and SBOM attestations for supply chain security
+    - Uses GitHub Actions cache for Docker layers (`cache-from: type=gha`)
+  - Required GitHub repository variables documented in workflow comments:
+    - `AWS_ROLE_ARN`: IAM role ARN for OIDC authentication
+    - `AWS_REGION`: AWS region (e.g., us-east-1)
+    - `ECR_REPOSITORY`: Full ECR repository URI
+  - Uses repository variables (`vars.*`) instead of secrets for non-sensitive config
+  - Permissions configured: `id-token: write` for OIDC, `contents: read`
+  - Verified YAML syntax is valid
+
+- **Files changed**:
+  - `.github/workflows/build.yml` (extended with push-ecr job)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Use `aws-actions/configure-aws-credentials@v4` with `role-to-assume` for OIDC authentication
+  - OIDC requires `permissions: id-token: write` to request tokens
+  - Use `docker/metadata-action` for generating consistent image tags
+  - Multi-arch builds require QEMU for ARM64 emulation on x86 runners
+  - Use GitHub repository variables (`vars.*`) for non-sensitive config instead of secrets
+  - The `provenance: true` and `sbom: true` options enable supply chain attestations
+  - Condition `github.ref == 'refs/heads/main' && github.event_name == 'push'` prevents runs on PRs
+  - Use `needs: [job1, job2]` to wait for multiple jobs before running
+
+---
