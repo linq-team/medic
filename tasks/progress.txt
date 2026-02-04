@@ -21,7 +21,20 @@
 - Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
 
 - Provider components (e.g., ThemeProvider) export both component and hook - add ESLint override in eslint.config.js
+- Static assets (images, logos) go in ui/public/ and are served at root path (e.g., /assets/logo.png)
 
+---
+
+## 2026-02-04 - US-011 - Linear Issue: SRE-64
+- What was implemented: Created Header component with Medic logo and theme toggle
+- Files changed:
+  - ui/src/components/header.tsx (new - Header component with logo and ThemeToggle)
+  - ui/src/App.tsx (refactored to use Header component instead of inline header)
+  - ui/public/assets/medic-icon-all-green.png (new - copied from docs/assets/)
+- **Learnings for future iterations:**
+  - For Vite projects, static assets like logos should be copied to ui/public/ directory
+  - Assets in public/ are served at root path (e.g., /assets/medic-icon-all-green.png)
+  - Header component pattern: flex container with logo+title on left, actions (ThemeToggle) on right
 ---
 
 ## 2026-02-04 - US-010 - Linear Issue: SRE-64
