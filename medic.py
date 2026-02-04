@@ -40,7 +40,7 @@ def create_app() -> Flask:
     # Register routes
     Medic.Core.routes.exposeRoutes(app)
 
-    logger.info(f"Medic web server initialized")
+    logger.info("Medic web server initialized")
     logger.info(f"Base URL: {config.app.base_url}")
 
     return app

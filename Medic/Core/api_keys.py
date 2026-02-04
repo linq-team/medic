@@ -31,9 +31,7 @@ def generate_api_key() -> Tuple[str, str]:
         - full_key: The complete API key to give to the user (only shown once)
         - key_hash: The argon2 hash to store in the database
     """
-    # Generate 32 bytes (256 bits) of random data
-    random_bytes = secrets.token_bytes(MIN_KEY_BYTES)
-    # Convert to URL-safe base64 for the key
+    # Generate URL-safe base64 key from 32 bytes (256 bits) of random data
     key_body = secrets.token_urlsafe(MIN_KEY_BYTES)
 
     # Prefix the key for easy identification

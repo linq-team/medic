@@ -4,7 +4,7 @@ import psycopg2.extras
 import os
 import logging
 import json
-from typing import Optional, Any, List, Dict, Tuple, Union
+from typing import Optional, List, Tuple, Union
 
 import Medic.Helpers.logSettings as logLevel
 

@@ -34,7 +34,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -48,11 +48,9 @@ from Medic.Core.utils.datetime_helpers import (
     parse_datetime,
 )
 from Medic.Core.playbook_engine import (
-    ExecutionStatus,
     approve_playbook_execution,
     cancel_playbook_execution,
     get_execution,
-    update_execution_status,
 )
 
 # Import audit logging - use try/except for graceful degradation
