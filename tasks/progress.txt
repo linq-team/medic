@@ -80,6 +80,11 @@
 - Alert detail page pattern: fetch all alerts via useAlerts() and filter by alert_id since no single-alert API endpoint exists
 - formatRelativeTime() helper: calculate diff from now and show "X hours ago", "X minutes ago", etc.
 
+- Server-side pagination pattern: pass limit/offset to API, calculate totalPages from response's total_count
+- Audit logs use PaginatedResponse<T> wrapper with entries, total_count, limit, offset, has_more
+- Date input filter: use Input type="date" with pl-8 padding for Calendar icon
+- Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
+
 ---
 
 ## 2026-02-04 - US-026 - Linear Issue: SRE-93
@@ -474,4 +479,21 @@
   - Search searches both name and description fields
   - No pagination added (similar to Alerts page pattern)
   - Table columns: Name, Description, Trigger Type, Last Run, Status, Active
+---
+
+## 2026-02-04 - US-029 - Linear Issue: SRE-78
+- What was implemented: Created Audit Logs page with table, filtering, and server-side pagination
+- Files changed:
+  - ui/src/hooks/use-audit-logs.ts (new - useAuditLogs React Query hook)
+  - ui/src/hooks/index.ts (added useAuditLogs export)
+  - ui/src/pages/AuditLogs.tsx (replaced placeholder with full table implementation)
+- **Learnings for future iterations:**
+  - AuditLogEntry type includes: log_id, execution_id, action_type, details (Record<string,unknown>), actor, timestamp, created_at
+  - AuditActionType is union of: 'execution_started' | 'step_completed' | 'step_failed' | 'approval_requested' | 'approved' | 'rejected' | 'execution_completed' | 'execution_failed'
+  - getAuditLogs API returns PaginatedResponse<AuditLogEntry> with entries, total_count, limit, offset, has_more
+  - Server-side pagination: pass limit and offset to API, use totalCount from response for pagination calculation
+  - Date filter inputs use native HTML date type with pl-8 padding for Calendar icon
+  - Actor filter uses local state + debounce pattern (500ms) to avoid excessive API calls
+  - formatSummary() extracts meaningful fields from details JSON (step_name, playbook_name, message, error, result)
+  - Table columns: Timestamp (font-mono), Action Type (color-coded badge), Actor, Execution ID (font-mono), Summary (truncated)
 ---
