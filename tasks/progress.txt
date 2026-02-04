@@ -149,6 +149,42 @@
 - Audit logs use PaginatedResponse<T> wrapper with entries, total_count, limit, offset, has_more
 - Date input filter: use Input type="date" with pl-8 padding for Calendar icon
 - Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
+- **Service snapshots table**: Migration 017 creates medic.service_snapshots for backup/restore functionality
+
+---
+
+## 2026-02-04 - US-001 - Linear Issue: SRE-105
+- **What was implemented**: Database migration for service_snapshots table
+  - Created `migrations/017_create_service_snapshots.sql` with:
+    - snapshot_id (SERIAL PRIMARY KEY)
+    - service_id (INTEGER with FK to services, ON DELETE CASCADE)
+    - snapshot_data (JSONB for complete service state)
+    - action_type (TEXT with CHECK constraint for valid values)
+    - actor (TEXT, nullable for system actions)
+    - created_at (TIMESTAMP WITH TIME ZONE, default NOW())
+    - restored_at (TIMESTAMP WITH TIME ZONE, nullable)
+  - Indexes created:
+    - idx_service_snapshots_service_id (for service lookups)
+    - idx_service_snapshots_created_at (DESC for date sorting)
+    - idx_service_snapshots_service_action (composite for filtering)
+    - idx_service_snapshots_unrestored (partial index for undo functionality)
+  - CHECK constraint for action_type: deactivate, activate, mute, unmute, edit, bulk_edit, priority_change, team_change, delete
+  - Full COMMENT documentation on table and all columns
+  - Updated docs/ARCHITECTURE.md with new table schema
+
+- **Files changed**:
+  - `migrations/017_create_service_snapshots.sql` (new)
+  - `docs/ARCHITECTURE.md` (added service_snapshots table description)
+  - `tasks/prd.json` (marked US-001 as passes: true)
+
+- **Learnings for future iterations**:
+  - Migration naming: Use 3-digit zero-padded prefix (e.g., 017_create_*)
+  - All tables go in `medic` schema (CREATE TABLE IF NOT EXISTS medic.*)
+  - Use JSONB for flexible config/state storage
+  - Include both simple indexes (single column) and composite indexes for common query patterns
+  - Partial indexes (WHERE clause) are useful for filtering active/pending items
+  - Always add COMMENT documentation on tables and columns
+  - FK constraints should use ON DELETE CASCADE for child records
 
 ---
 

@@ -111,6 +111,12 @@ Stores all persistent data:
 - PagerDuty incident reference
 - Alert lifecycle tracking
 
+**service_snapshots**
+- Point-in-time snapshots of service configurations
+- Created before destructive actions (deactivate, edit, bulk operations)
+- Enables restore/undo functionality in the UI
+- Fields: snapshot_id, service_id, snapshot_data (JSONB), action_type, actor, created_at, restored_at
+
 ## Data Flow
 
 ### Heartbeat Flow
