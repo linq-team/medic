@@ -1,5 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
-import { ThemeToggle } from '@/components/theme-toggle'
+import { Header } from '@/components/header'
 import { Sidebar } from '@/components/sidebar'
 import {
   Dashboard,
@@ -19,12 +19,7 @@ function App() {
       {/* Main content area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="border-b border-border bg-card">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <h1 className="text-xl font-bold text-foreground">Medic UI</h1>
-            <ThemeToggle />
-          </div>
-        </header>
+        <Header />
 
         {/* Page content */}
         <main className="flex-1 p-6">
