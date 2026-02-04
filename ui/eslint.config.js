@@ -45,6 +45,7 @@ export default defineConfig([
       'src/components/*-pagination.tsx',
       'src/components/*-sort.tsx',
       'src/components/*-filter.tsx',
+      'src/components/*-search.tsx',
     ],
     rules: {
       'react-refresh/only-export-components': 'off',

@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
 import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
+import { SearchInput, useSearch } from '@/components/table-search'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
@@ -130,11 +131,20 @@ export function Services() {
     hasActiveFilters,
     filterItems,
   } = useFilter(SERVICE_FILTERS)
+  const {
+    inputValue,
+    setSearch,
+    clearSearch,
+    hasSearch,
+    hasInputValue,
+    searchItems,
+  } = useSearch('q', 300)
 
   const allServices = data?.results ?? []
 
-  // Filter first, then sort, then paginate
-  const filteredServices = filterItems(allServices)
+  // Search first, then filter, then sort, then paginate
+  const searchedServices = searchItems(allServices, ['service_name', 'heartbeat_name'])
+  const filteredServices = filterItems(searchedServices)
   const sortedServices = sortItems(filteredServices)
   const totalItems = sortedServices.length
 
@@ -160,15 +170,25 @@ export function Services() {
         </div>
       )}
 
-      {/* Filter controls */}
+      {/* Search and filter controls */}
       {!isLoading && allServices.length > 0 && (
-        <TableFilters
-          filters={SERVICE_FILTERS}
-          filterState={filterState}
-          onFilterChange={setFilter}
-          onClearFilters={clearFilters}
-          hasActiveFilters={hasActiveFilters}
-        />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+          <SearchInput
+            value={inputValue}
+            onChange={setSearch}
+            onClear={clearSearch}
+            showClear={hasInputValue}
+            placeholder="Search by service or heartbeat name..."
+          />
+          <TableFilters
+            filters={SERVICE_FILTERS}
+            filterState={filterState}
+            onFilterChange={setFilter}
+            onClearFilters={clearFilters}
+            hasActiveFilters={hasActiveFilters}
+            className="mb-0"
+          />
+        </div>
       )}
 
       {isLoading ? (
@@ -180,15 +200,27 @@ export function Services() {
           <Server className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium text-foreground mb-2">No matching services</h3>
           <p className="text-muted-foreground max-w-sm mb-4">
-            No services match your current filters. Try adjusting or clearing your filters.
+            No services match your current {hasSearch ? 'search' : ''}{hasSearch && hasActiveFilters ? ' or ' : ''}{hasActiveFilters ? 'filters' : ''}. Try adjusting or clearing {hasSearch && hasActiveFilters ? 'them' : hasSearch ? 'your search' : 'your filters'}.
           </p>
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="text-linq-blue hover:underline text-sm"
-            >
-              Clear all filters
-            </button>
+          {(hasSearch || hasActiveFilters) && (
+            <div className="flex items-center gap-3">
+              {hasSearch && (
+                <button
+                  onClick={clearSearch}
+                  className="text-linq-blue hover:underline text-sm"
+                >
+                  Clear search
+                </button>
+              )}
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="text-linq-blue hover:underline text-sm"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           )}
         </div>
       ) : (
