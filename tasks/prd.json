@@ -249,8 +249,8 @@
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed in SRE-61. Created ProtectedRoute component that checks isAuthenticated and redirects to /login. Wraps Layout route in App.tsx."
     },
     {
       "id": "US-017",

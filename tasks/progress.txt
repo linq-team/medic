@@ -35,7 +35,20 @@
 - Login page pattern: place standalone auth pages (Login) outside Layout Route in App.tsx
 - TypeScript verbatimModuleSyntax: use `type` keyword for type imports (e.g., `import { useState, type FormEvent }`)
 - shadcn/ui Input component uses CSS variable classes (border-input, ring, etc.) from index.css
+- ProtectedRoute pattern: wrap layout/routes with component that checks isAuthenticated and redirects to /login
 
+---
+
+## 2026-02-04 - US-016 - Linear Issue: SRE-61
+- What was implemented: Created ProtectedRoute component to redirect unauthenticated users to login
+- Files changed:
+  - ui/src/components/protected-route.tsx (new - ProtectedRoute component)
+  - ui/src/App.tsx (wrapped Layout route with ProtectedRoute)
+- **Learnings for future iterations:**
+  - ProtectedRoute pattern: check isAuthenticated from context, redirect with Navigate component
+  - Preserve attempted URL in location state for redirect after login (from: location)
+  - Wrap parent layout Route element, not individual child routes (DRY)
+  - Use `replace` on Navigate to avoid back button issues
 ---
 
 ## 2026-02-04 - US-015 - Linear Issue: SRE-61
