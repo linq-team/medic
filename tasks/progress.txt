@@ -14,6 +14,20 @@
 - API authentication via API key in Authorization header (Bearer token)
 - Store API key in sessionStorage, not localStorage
 
+- ESLint 9 uses flat config (eslint.config.js) instead of legacy .eslintrc.js
+
+---
+
+## 2026-02-04 - US-002 - Linear Issue: SRE-59
+- What was implemented: Verified ESLint and Prettier are already configured correctly
+- Files changed: None (already complete from prior work)
+- ESLint 9 flat config at ui/eslint.config.js with TypeScript, React Hooks, and Prettier integration
+- Prettier config at ui/.prettierrc with project conventions
+- npm scripts: `lint`, `lint:fix`, `format` all working
+- **Learnings for future iterations:**
+  - ESLint 9 uses eslint.config.js (flat config) instead of .eslintrc.js
+  - eslint-config-prettier disables ESLint formatting rules that conflict with Prettier
+  - Package @typescript-eslint handles TypeScript-specific linting
 ---
 
 ## 2026-02-04 - US-001 - Linear Issue: SRE-59

@@ -32,8 +32,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed in prior work. Using eslint.config.js (ESLint 9 flat config) instead of legacy .eslintrc.js."
     },
     {
       "id": "US-003",
