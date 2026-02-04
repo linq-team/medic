@@ -1,21 +1,29 @@
+import { useState, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Server, AlertTriangle, Eye, EyeOff } from 'lucide-react'
+import { Server, AlertTriangle, Plus } from 'lucide-react'
 import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
 import { TableFilters, useFilter, type FilterConfig } from '@/components/table-filter'
 import { SearchInput, useSearch } from '@/components/table-search'
+import { MuteToggle, ActiveToggle } from '@/components/service-toggle'
+import { PrioritySelector } from '@/components/priority-selector'
+import { ServiceCreateModal } from '@/components/service-create-modal'
+import { BulkActionsToolbar } from '@/components/bulk-actions-toolbar'
+import { ServiceRowActions } from '@/components/service-row-actions'
 import { useServices } from '@/hooks'
-import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 /** Default number of services to display per page */
 const PAGE_SIZE = 25
@@ -56,31 +64,6 @@ const SERVICE_FILTERS: FilterConfig[] = [
   },
 ]
 
-/**
- * Get status badge variant and label for a service
- */
-function getStatusBadge(service: Service): { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string } {
-  if (service.active === 0) {
-    return { variant: 'secondary', label: 'Inactive' }
-  }
-  return { variant: 'default', label: 'Active' }
-}
-
-/**
- * Get priority badge styling
- */
-function getPriorityBadge(priority: string): { className: string; label: string } {
-  switch (priority.toLowerCase()) {
-    case 'p1':
-      return { className: 'bg-status-error text-white', label: 'P1' }
-    case 'p2':
-      return { className: 'bg-status-warning text-black dark:text-white', label: 'P2' }
-    case 'p3':
-      return { className: 'bg-muted text-muted-foreground', label: 'P3' }
-    default:
-      return { className: 'bg-muted text-muted-foreground', label: priority.toUpperCase() }
-  }
-}
 
 /**
  * Loading skeleton for the table
@@ -116,6 +99,8 @@ function EmptyState() {
  * Services list page with table displaying all registered services
  */
 export function Services() {
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const { data, isLoading, error } = useServices()
   const { pageSize, offset } = usePagination('page', PAGE_SIZE)
   const { sortColumn, sortDirection, toggleSort, sortItems } = useSort(
@@ -140,7 +125,7 @@ export function Services() {
     searchItems,
   } = useSearch('q', 300)
 
-  const allServices = data?.results ?? []
+  const allServices = useMemo(() => data?.results ?? [], [data?.results])
 
   // Search first, then filter, then sort, then paginate
   const searchedServices = searchItems(allServices, ['service_name', 'heartbeat_name'])
@@ -151,12 +136,82 @@ export function Services() {
   // Paginate services client-side
   const services = sortedServices.slice(offset, offset + pageSize)
 
+  // Get selected services for bulk actions
+  const selectedServices = useMemo<Service[]>(() => {
+    return allServices.filter((s) => selectedIds.has(s.service_id))
+  }, [allServices, selectedIds])
+
+  // Check if all services on current page are selected
+  const allPageSelected = useMemo(() => {
+    if (services.length === 0) return false
+    return services.every((s) => selectedIds.has(s.service_id))
+  }, [services, selectedIds])
+
+  // Check if some (but not all) services on current page are selected
+  const somePageSelected = useMemo(() => {
+    if (services.length === 0) return false
+    const selectedOnPage = services.filter((s) => selectedIds.has(s.service_id))
+    return selectedOnPage.length > 0 && selectedOnPage.length < services.length
+  }, [services, selectedIds])
+
+  /**
+   * Toggle selection for a single service
+   */
+  const toggleSelection = useCallback((serviceId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(serviceId)) {
+        next.delete(serviceId)
+      } else {
+        next.add(serviceId)
+      }
+      return next
+    })
+  }, [])
+
+  /**
+   * Toggle selection for all services on current page
+   */
+  const toggleAllOnPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allPageSelected) {
+        // Deselect all on current page
+        services.forEach((s) => next.delete(s.service_id))
+      } else {
+        // Select all on current page
+        services.forEach((s) => next.add(s.service_id))
+      }
+      return next
+    })
+  }, [allPageSelected, services])
+
+  /**
+   * Clear all selections
+   */
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold text-foreground mb-2">Services</h1>
-      <p className="text-muted-foreground mb-8">
-        View and manage all registered services and their heartbeat status.
-      </p>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Services</h1>
+          <p className="text-muted-foreground">
+            View and manage all registered services and their heartbeat status.
+          </p>
+        </div>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Service
+        </Button>
+      </div>
+
+      <ServiceCreateModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+      />
 
       {error && (
         <div className="mb-6 p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
@@ -225,10 +280,29 @@ export function Services() {
         </div>
       ) : (
         <>
+          {/* Bulk actions toolbar */}
+          <BulkActionsToolbar
+            selectedServices={selectedServices}
+            onClearSelection={clearSelection}
+          />
+
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={allPageSelected}
+                      ref={(el) => {
+                        // Set indeterminate state via ref (not supported as prop)
+                        if (el) {
+                          (el as unknown as HTMLInputElement).indeterminate = somePageSelected
+                        }
+                      }}
+                      onCheckedChange={toggleAllOnPage}
+                      aria-label={allPageSelected ? 'Deselect all services on page' : 'Select all services on page'}
+                    />
+                  </TableHead>
                   <SortableTableHead
                     columnKey="service_name"
                     sortColumn={sortColumn}
@@ -285,81 +359,69 @@ export function Services() {
                   >
                     Priority
                   </SortableTableHead>
+                  <TableHead className="w-[60px]">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {services.map((service) => {
-                  const statusBadge = getStatusBadge(service)
-                  const priorityBadge = getPriorityBadge(service.priority)
-
-                  return (
-                    <TableRow key={service.service_id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          to={`/services/${encodeURIComponent(service.heartbeat_name)}`}
-                          className="hover:underline hover:text-linq-blue"
-                        >
-                          {service.service_name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {service.heartbeat_name}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusBadge.variant}>
-                          {statusBadge.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 text-sm font-medium',
-                            service.down === 1
-                              ? 'text-status-error'
-                              : 'text-status-healthy'
-                          )}
-                        >
-                          {service.down === 1 ? (
-                            <>
-                              <AlertTriangle className="h-4 w-4" />
-                              Yes
-                            </>
-                          ) : (
-                            'No'
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 text-sm',
-                            service.muted === 1
-                              ? 'text-muted-foreground'
-                              : 'text-foreground'
-                          )}
-                        >
-                          {service.muted === 1 ? (
-                            <>
-                              <EyeOff className="h-4 w-4" />
-                              Yes
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="h-4 w-4" />
-                              No
-                            </>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>{service.team || '—'}</TableCell>
-                      <TableCell>
-                        <Badge className={priorityBadge.className}>
-                          {priorityBadge.label}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                {services.map((service) => (
+                  <TableRow
+                    key={service.service_id}
+                    data-state={selectedIds.has(service.service_id) ? 'selected' : undefined}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(service.service_id)}
+                        onCheckedChange={() => toggleSelection(service.service_id)}
+                        aria-label={`Select ${service.service_name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        to={`/services/${encodeURIComponent(service.heartbeat_name)}`}
+                        className="hover:underline hover:text-linq-blue"
+                      >
+                        {service.service_name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {service.heartbeat_name}
+                    </TableCell>
+                    <TableCell>
+                      <ActiveToggle service={service} />
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 text-sm font-medium',
+                          service.down === 1
+                            ? 'text-status-error'
+                            : 'text-status-healthy'
+                        )}
+                      >
+                        {service.down === 1 ? (
+                          <>
+                            <AlertTriangle className="h-4 w-4" />
+                            Yes
+                          </>
+                        ) : (
+                          'No'
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <MuteToggle service={service} />
+                    </TableCell>
+                    <TableCell>{service.team || '—'}</TableCell>
+                    <TableCell>
+                      <PrioritySelector service={service} />
+                    </TableCell>
+                    <TableCell>
+                      <ServiceRowActions service={service} />
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

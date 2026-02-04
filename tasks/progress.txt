@@ -149,6 +149,157 @@
 - Audit logs use PaginatedResponse<T> wrapper with entries, total_count, limit, offset, has_more
 - Date input filter: use Input type="date" with pl-8 padding for Calendar icon
 - Text input filter with debounce: use local state + setTimeout pattern (500ms) to reduce API calls
+- **Service snapshots table**: Migration 017 creates medic.service_snapshots for backup/restore functionality
+- **Toast notifications**: Use sonner library via `import { toast } from "sonner"`, call `toast.success()`, `toast.error()`, `toast.warning()` for variants. Toaster component configured in main.tsx with 5s auto-dismiss.
+- **Service mutation hooks**: Use `useUpdateService`, `useCreateService`, `useBulkUpdateServices` from `@/hooks/use-service-mutations` for service CRUD operations with optimistic updates
+- **ServiceCreateModal pattern**: Modal for creating new services with heartbeat_name validation (alphanumeric + hyphens + underscores only), sensible defaults (priority=p3, alert_interval=5, threshold=1), and duplicate detection via error message parsing
+- **Quick action buttons**: ServiceDetail page has Mute/Unmute and Activate/Deactivate buttons in header with icons, using `useUpdateService` hook for mutations with toast notifications
+
+---
+
+## 2026-02-04 - US-011 - Linear Issue: SRE-119
+- **What was implemented**: Quick action buttons added to ServiceDetail page header
+  - Added Mute/Unmute button with VolumeX/Volume2 icons
+  - Added Activate/Deactivate button with Power/PowerOff icons
+  - Deactivation shows confirmation dialog with explanation of consequences
+  - Actions use `useUpdateService` hook with optimistic updates
+  - Toast notifications for success/failure
+  - Page refreshes after action via React Query cache invalidation
+  - Added 19 test cases covering:
+    - Mute/Unmute button rendering and click handling
+    - Activate/Deactivate button rendering
+    - Confirmation dialog for deactivation
+    - No confirmation needed for activation
+    - Toast notifications for success/failure
+    - Dialog closing after action
+
+- **Files changed**:
+  - `ui/src/pages/ServiceDetail.tsx` (added quick action buttons, state, handlers, deactivate dialog)
+  - `ui/src/pages/ServiceDetail.test.tsx` (extended with 19 new test cases for quick action buttons)
+  - `tasks/prd.json` (marked US-011 as passes: true)
+
+- **Learnings for future iterations**:
+  - Deactivation is a destructive action requiring confirmation dialog, activation is not
+  - Use icons from lucide-react for button affordance (VolumeX/Volume2 for mute, Power/PowerOff for active)
+  - Dialog footer should have Cancel and destructive action button with loading state
+  - When testing dialog interactions, use `within(dialog)` to scope button queries to the dialog
+  - Use regex `^Deactivate$` to match exact button text when multiple buttons have similar text
+  - Snapshot creation happens server-side on service updates (no client-side code needed)
+
+---
+
+## 2026-02-04 - US-010 - Linear Issue: SRE-120
+- **What was implemented**: Edit button added to ServiceDetail page header
+  - Added Edit button next to the Back button in the ServiceDetail header
+  - Button opens ServiceEditModal with current service data pre-populated
+  - Page automatically refreshes after successful edit via React Query's `invalidateQueries`
+  - Added comprehensive test suite with 9 test cases covering:
+    - Edit button rendering and visibility
+    - Modal opening with correct service data
+    - Modal closing behavior (Cancel and successful save)
+    - Data refresh after edit
+
+- **Files changed**:
+  - `ui/src/pages/ServiceDetail.tsx` (added Edit button, modal state, ServiceEditModal integration)
+  - `ui/src/pages/ServiceDetail.test.tsx` (new - test suite for Edit button functionality)
+  - `tasks/prd.json` (marked US-010 as passes: true)
+
+- **Learnings for future iterations**:
+  - ServiceEditModal already handles data refresh via useUpdateService hook's `onSettled` callback
+  - When testing pages with React Router, use MemoryRouter with Routes and Route for proper param handling
+  - The useService hook calls `apiClient.getServiceByHeartbeatName()` (not `getService()`)
+  - When multiple elements match the same text (e.g., "Test Service" in heading and detail row), use specific selectors like `getByRole('heading', { name: ... })`
+
+---
+
+## 2026-02-04 - US-009 - Linear Issue: SRE-70
+- **What was implemented**: ServiceCreateModal component for creating new services through the UI
+  - Created `ui/src/components/service-create-modal.tsx` with:
+    - Form fields: heartbeat_name, service_name, team, priority, alert_interval, threshold, runbook
+    - Sensible defaults: priority=P3, alert_interval=5, threshold=1
+    - Client-side validation including heartbeat_name format validation (alphanumeric + hyphens + underscores)
+    - Error handling for duplicate heartbeat_name detection
+    - Toast notifications for success/failure
+  - Added "Add Service" button to Services page header
+  - Modal closes on successful creation and invalidates services query cache
+  - Comprehensive test suite with 24 test cases
+
+- **Files changed**:
+  - `ui/src/components/service-create-modal.tsx` (new - modal component)
+  - `ui/src/components/service-create-modal.test.tsx` (new - tests)
+  - `ui/src/pages/Services.tsx` (added Add Service button and modal)
+  - `tasks/prd.json` (marked US-009 as passes: true)
+
+- **Learnings for future iterations**:
+  - Heartbeat names must follow identifier format (letters, numbers, hyphens, underscores) for API compatibility
+  - Use key prop on form component to reset state when modal opens (avoids useEffect for state reset)
+  - Detect duplicate name errors by checking error message content (e.g., "already exists" or "duplicate")
+  - For create modals, check hasRequiredFields instead of hasChanges for submit button enabling
+  - Optional fields should be converted to undefined when empty (not empty string) for API payload
+
+---
+
+## 2026-02-04 - US-005 - Linear Issue: SRE-109
+- **What was implemented**: React Query mutation hooks for service CRUD operations
+  - Created `ui/src/hooks/use-service-mutations.ts` with:
+    - `useUpdateService` hook with optimistic updates and rollback on error
+    - `useCreateService` hook for creating new services
+    - `useBulkUpdateServices` hook for bulk operations (returns succeeded/failed arrays)
+  - All hooks invalidate relevant queries on success
+  - Optimistic updates immediately reflect changes in UI
+  - Rollback mechanism restores previous state on error
+  - Exported types: `UpdateServiceInput`, `CreateServiceInput`, `BulkUpdateServicesInput`
+  - Added comprehensive test suite with 15 test cases
+
+- **Files changed**:
+  - `ui/src/hooks/use-service-mutations.ts` (new - mutation hooks)
+  - `ui/src/hooks/use-service-mutations.test.tsx` (new - tests)
+  - `ui/src/hooks/index.ts` (export new hooks)
+  - `tasks/prd.json` (marked US-005 as passes: true)
+
+- **Learnings for future iterations**:
+  - Use `useMutation` from React Query for all write operations
+  - Optimistic updates pattern: onMutate saves previous state, applies optimistic change, onError rolls back
+  - Always cancel outgoing queries before optimistic update to avoid race conditions
+  - Bulk operations should use Promise.allSettled to handle partial failures
+  - Test files using JSX/React components must use `.tsx` extension (not `.ts`)
+  - Return context from onMutate for rollback data in onError
+  - Query keys factory pattern (servicesKeys) ensures consistent cache invalidation
+
+---
+
+## 2026-02-04 - US-001 - Linear Issue: SRE-105
+- **What was implemented**: Database migration for service_snapshots table
+  - Created `migrations/017_create_service_snapshots.sql` with:
+    - snapshot_id (SERIAL PRIMARY KEY)
+    - service_id (INTEGER with FK to services, ON DELETE CASCADE)
+    - snapshot_data (JSONB for complete service state)
+    - action_type (TEXT with CHECK constraint for valid values)
+    - actor (TEXT, nullable for system actions)
+    - created_at (TIMESTAMP WITH TIME ZONE, default NOW())
+    - restored_at (TIMESTAMP WITH TIME ZONE, nullable)
+  - Indexes created:
+    - idx_service_snapshots_service_id (for service lookups)
+    - idx_service_snapshots_created_at (DESC for date sorting)
+    - idx_service_snapshots_service_action (composite for filtering)
+    - idx_service_snapshots_unrestored (partial index for undo functionality)
+  - CHECK constraint for action_type: deactivate, activate, mute, unmute, edit, bulk_edit, priority_change, team_change, delete
+  - Full COMMENT documentation on table and all columns
+  - Updated docs/ARCHITECTURE.md with new table schema
+
+- **Files changed**:
+  - `migrations/017_create_service_snapshots.sql` (new)
+  - `docs/ARCHITECTURE.md` (added service_snapshots table description)
+  - `tasks/prd.json` (marked US-001 as passes: true)
+
+- **Learnings for future iterations**:
+  - Migration naming: Use 3-digit zero-padded prefix (e.g., 017_create_*)
+  - All tables go in `medic` schema (CREATE TABLE IF NOT EXISTS medic.*)
+  - Use JSONB for flexible config/state storage
+  - Include both simple indexes (single column) and composite indexes for common query patterns
+  - Partial indexes (WHERE clause) are useful for filtering active/pending items
+  - Always add COMMENT documentation on tables and columns
+  - FK constraints should use ON DELETE CASCADE for child records
 
 ---
 
@@ -1814,4 +1965,294 @@
   - Include sessionStorage vs localStorage note for auth - sessionStorage clears on browser close
   - Project structure tree helps developers quickly navigate the codebase
   - Include troubleshooting section for common issues (API connection, build errors, style issues)
+---
+
+## 2026-02-04 - US-002 - Linear Issue: SRE-106
+- **What was implemented**: Snapshot REST API endpoints for backup/restore functionality
+  - Created `Medic/Core/snapshots.py` module with:
+    - `SnapshotActionType` enum for action types (deactivate, activate, mute, unmute, edit, bulk_edit, priority_change, team_change, delete)
+    - `ServiceSnapshot` and `SnapshotQueryResult` dataclasses with `to_dict()` methods
+    - `create_snapshot()` for capturing service state before destructive changes
+    - `get_snapshot_by_id()` for retrieving single snapshots
+    - `query_snapshots()` with pagination and filtering (service_id, action_type, date range)
+    - `restore_snapshot()` for reverting service to previous state
+  - Added API endpoints in `Medic/Core/routes.py`:
+    - `GET /v2/snapshots` - list snapshots with filters
+    - `GET /v2/snapshots/:id` - get single snapshot details
+    - `POST /v2/snapshots/:id/restore` - restore service to snapshot state
+  - Auto-create snapshots before destructive actions in `POST /service/:heartbeat_name`:
+    - Service deactivation (active=0) creates DEACTIVATE snapshot
+    - Service activation (active=1) creates ACTIVATE snapshot
+    - Mute (muted=1) creates MUTE snapshot
+    - Unmute (muted=0) creates UNMUTE snapshot
+    - Priority changes create PRIORITY_CHANGE snapshot
+    - Team changes create TEAM_CHANGE snapshot
+    - Other edits create EDIT snapshot
+  - Updated Swagger/OpenAPI documentation with snapshot endpoints and schemas
+  - Added comprehensive unit tests (34 tests, all passing)
+
+- **Files changed**:
+  - `Medic/Core/snapshots.py` (new - snapshot module)
+  - `Medic/Core/routes.py` (added snapshot endpoints + auto-snapshot creation)
+  - `Medic/Docs/swagger.json` (API documentation)
+  - `tests/unit/test_snapshots.py` (new - unit tests)
+  - `tasks/prd.json` (marked US-002 as passes: true)
+
+- **Learnings for future iterations**:
+  - Follow existing API response pattern: `{"success": bool, "message": str, "results": data}`
+  - Use dataclasses with `to_dict()` methods for consistent JSON serialization
+  - Pagination pattern: validate limits (min 1, max 250), return has_more flag
+  - Date filtering: parse ISO format with `.replace("Z", "+00:00")` for timezone handling
+  - Query pattern: build WHERE clause dynamically with conditions list and params list
+  - Use `db.query_db()` with `show_columns=True` for dict results, parse with `json.loads()`
+  - Use `db.insert_db()` for INSERT/UPDATE operations
+  - Import modules inside functions to avoid circular imports (e.g., import snapshots in routes.py)
+  - Test patterns: mock `db.query_db` with side_effect for sequential returns
+  - Optional request body parsing: use try/except for JSON decode errors
+  - X-Actor header pattern: pass actor context for audit/logging purposes
+
+---
+
+## 2026-02-04 - US-003 - Linear Issue: SRE-107
+- **What was implemented**: shadcn Dialog component for modal dialogs
+  - Installed Dialog component via `npx shadcn@latest add dialog`
+  - Component located at `ui/src/components/ui/dialog.tsx`
+  - Based on Radix UI Dialog primitive with full accessibility support:
+    - Focus trap (keeps focus within dialog)
+    - Escape key to close
+    - Proper ARIA attributes
+  - Exported components:
+    - Dialog (Root) - supports controlled open/close via `open` and `onOpenChange` props
+    - DialogTrigger - button to open dialog
+    - DialogPortal - renders dialog in portal
+    - DialogOverlay - backdrop overlay
+    - DialogClose - close button
+    - DialogContent - main dialog container
+    - DialogHeader - header section
+    - DialogFooter - footer section for actions
+    - DialogTitle - accessible title
+    - DialogDescription - accessible description
+
+- **Files changed**:
+  - `ui/src/components/ui/dialog.tsx` (new)
+  - `tasks/prd.json` (marked US-003 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn CLI creates files in literal `@/` directory - must move to `src/components/ui/`
+  - Radix UI primitives provide built-in accessibility (focus trap, escape to close, ARIA)
+  - Dialog supports controlled mode via `open` and `onOpenChange` props on Root component
+  - DialogContent automatically includes close button with X icon
+---
+
+## 2026-02-04 - US-004 - Linear Issue: SRE-108
+- **What was implemented**: Toast notification system using sonner library
+  - Installed sonner via `npx shadcn@latest add sonner` (shadcn deprecated native toast in favor of sonner)
+  - Component located at `ui/src/components/ui/sonner.tsx`
+  - Integrated Toaster in main.tsx inside ThemeProvider for theme-aware toasts
+  - Features:
+    - Success variant: `toast.success("Message")`
+    - Error variant: `toast.error("Message")`
+    - Warning variant: `toast.warning("Message")`
+    - Default variant: `toast("Message")`
+    - Auto-dismiss after 5 seconds (configurable via duration prop)
+    - Theme-aware (adapts to light/dark mode)
+    - Custom classNames for status colors using existing status-* color classes
+
+- **Files changed**:
+  - `ui/src/components/ui/sonner.tsx` (new) - Toaster wrapper component
+  - `ui/src/main.tsx` (modified) - Added Toaster import and component
+  - `ui/package.json` (modified) - Added sonner dependency
+  - `tasks/prd.json` (marked US-004 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn deprecated toast component in favor of sonner - use `npx shadcn@latest add sonner`
+  - Sonner toasts are called via `import { toast } from "sonner"` not from the component file
+  - The Toaster component must be inside ThemeProvider to access theme context via useTheme()
+  - shadcn CLI still creates files in literal `@/` directory - must move to `src/components/ui/`
+  - Sonner supports rich toast options: duration, dismissible, action buttons, descriptions
+---
+
+## 2026-02-04 - US-006 - Linear Issue: SRE-110
+- **What was implemented**: Inline toggle switches for mute and active status in Services table
+  - Created `ui/src/components/service-toggle.tsx` with:
+    - `MuteToggle` component - immediate toggle without confirmation
+    - `ActiveToggle` component - shows confirmation dialog before deactivating
+  - Added shadcn Switch component to `ui/src/components/ui/switch.tsx`
+  - Updated Services.tsx to use toggle switches instead of text display
+  - All toggles use useUpdateService hook with optimistic updates
+  - Toast notifications for success/error via sonner
+  - Comprehensive test suite with 13 test cases covering:
+    - Toggle state rendering
+    - Mute/unmute interactions
+    - Activation/deactivation with confirmation dialog
+    - Error handling
+
+- **Files changed**:
+  - `ui/src/components/ui/switch.tsx` (new - shadcn Switch component)
+  - `ui/src/components/service-toggle.tsx` (new - MuteToggle and ActiveToggle)
+  - `ui/src/components/service-toggle.test.tsx` (new - tests)
+  - `ui/src/pages/Services.tsx` (updated - replaced text with toggles)
+  - `tasks/prd.json` (marked US-006 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn CLI creates files in literal `@/` directory - must move to `src/components/ui/`
+  - Use `useState` for dialog open state management
+  - Confirmation dialogs should only appear for destructive actions (deactivate)
+  - Switch component has built-in checked/onCheckedChange props from Radix
+  - Test files using components need `.tsx` extension
+  - Use `userEvent` from @testing-library/user-event for realistic click interactions
+  - Dialog tests need to wait for dialog to appear with `waitFor`
+
+---
+
+## 2026-02-04 - US-007 - Linear Issue: SRE-111
+- **What was implemented**: Inline priority selector for Services table
+  - Created `ui/src/components/priority-selector.tsx` with:
+    - Compact dropdown selector using shadcn Select component
+    - Color-coded priority options: P1 (red/error), P2 (yellow/warning), P3 (gray/muted)
+    - Integration with `useUpdateService` hook for immediate updates
+    - Toast notifications on success/failure
+    - Case-insensitive priority handling (normalizes to uppercase display, lowercase API)
+  - Updated `ui/src/pages/Services.tsx` to:
+    - Replace Badge component with PrioritySelector in the table
+    - Removed unused `getPriorityBadge` function and Badge import
+  - Added comprehensive test suite with 10 test cases
+
+- **Files changed**:
+  - `ui/src/components/priority-selector.tsx` (new - inline priority selector component)
+  - `ui/src/components/priority-selector.test.tsx` (new - tests)
+  - `ui/src/pages/Services.tsx` (use PrioritySelector instead of Badge)
+  - `tasks/prd.json` (marked US-007 as passes: true)
+
+- **Learnings for future iterations**:
+  - Radix UI Select uses portals which have known testing limitations in jsdom
+  - Focus tests on initial render state and styling for portal-based components
+  - Complex dropdown interaction tests should be deferred to E2E tests
+  - Use `fireEvent` sparingly with Radix components - prefer render-state assertions
+  - Compact styling for inline selectors: `h-7 w-16 border-none bg-transparent shadow-none`
+  - Status color classes available: `text-status-error`, `text-status-warning`, `text-muted-foreground`
+
+---
+
+## 2026-02-04 - US-008 - Linear Issue: SRE-69
+- **What was implemented**: ServiceEditModal component for editing service properties
+  - Created `ui/src/components/service-edit-modal.tsx` with:
+    - Modal dialog with form for editing service_name, team, priority, alert_interval, threshold, runbook
+    - Current values pre-populated from service prop
+    - Client-side validation with error messages (required fields, URL validation, numeric ranges)
+    - Save button disabled while form is invalid or unchanged
+    - Toast notifications on success/failure via sonner
+    - Modal closes on successful save
+    - Uses key prop pattern to reset form state when modal opens (avoids setState in useEffect)
+  - Added `ui/src/components/ui/label.tsx` from shadcn/ui
+  - Created `ui/src/components/service-edit-modal.test.tsx` with 19 test cases covering:
+    - Rendering and pre-population of form fields
+    - Validation error display
+    - Form submission behavior
+    - Toast notifications
+    - Modal open/close behavior
+
+- **Files changed**:
+  - `ui/src/components/service-edit-modal.tsx` (new - modal component)
+  - `ui/src/components/service-edit-modal.test.tsx` (new - tests)
+  - `ui/src/components/ui/label.tsx` (new - shadcn label component)
+  - `ui/package.json` (added @radix-ui/react-label dependency)
+  - `tasks/prd.json` (marked US-008 as passes: true)
+
+- **Learnings for future iterations**:
+  - Avoid setState in useEffect per ESLint rules - use key prop pattern to reset component state instead
+  - Use useMemo for validation errors (derived state) instead of useState + useEffect
+  - Internal form component with key prop allows clean state reset without useEffect
+  - shadcn CLI creates components in literal @/ directory - need to move to src/components/ui/
+  - Form validation: use touched state to only show errors after user interaction
+  - Toast notifications use sonner library with toast.success/error() API
+
+---
+
+## 2026-02-04 - US-012 - Linear Issue: SRE-112
+- **What was implemented**: Row selection and bulk actions toolbar for Services table
+  - Added Checkbox component from shadcn
+  - Added checkbox column to Services table with select-all header functionality
+  - Created BulkActionsToolbar component with:
+    - Selected service count display
+    - Clear selection button
+    - Bulk action buttons: Mute, Unmute, Activate, Deactivate, Change Priority, Change Team
+  - Implemented confirmation dialogs for all bulk actions showing:
+    - Action title and description
+    - List of affected services
+    - Form fields for Change Priority (dropdown) and Change Team (text input)
+    - Destructive styling for deactivation
+  - Added progress indicator during bulk operations
+  - Uses existing `useBulkUpdateServices` hook with optimistic updates
+  - Toast notifications: success for all succeeded, warning for partial success, error for total failure
+  - Selection cleared automatically after successful action
+  - Added comprehensive test suite with 22 test cases covering:
+    - Toolbar rendering and selected count
+    - All action buttons and dialogs
+    - Confirmation flow for each action type
+    - Error handling (all fail, partial fail)
+    - Loading state indicators
+
+- **Files changed**:
+  - `ui/src/components/ui/checkbox.tsx` (new - shadcn Checkbox component)
+  - `ui/src/components/bulk-actions-toolbar.tsx` (new - BulkActionsToolbar component)
+  - `ui/src/components/bulk-actions-toolbar.test.tsx` (new - 22 test cases)
+  - `ui/src/pages/Services.tsx` (added checkbox column, selection state, BulkActionsToolbar integration)
+  - `tasks/prd.json` (marked US-012 as passes: true)
+
+- **Learnings for future iterations**:
+  - Use exact regex patterns like `/^Mute$/` to match button text, avoid `/mute/i` which matches "Unmute" too
+  - When both button and dialog title have same text, use `within(dialog)` to scope queries in tests
+  - Checkbox indeterminate state must be set via ref since it's not a native prop: `el.indeterminate = somePageSelected`
+  - Wrap `allServices` in `useMemo` to avoid ESLint exhaustive-deps warning when used in other useMemo hooks
+  - Radix Select has testing quirks - default value tests are more stable than interacting with dropdown
+  - BulkActionsToolbar pattern: opens dialog for ALL actions (not just destructive) to show service list preview
+
+---
+
+## 2026-02-04 - US-013 - Linear Issue: SRE-113
+- **What was implemented**: Bulk edit modal for team/priority - already implemented as part of US-012
+  - The BulkActionsToolbar created in US-012 includes "Change Priority" and "Change Team" buttons
+  - Modal shows list of selected services before applying changes
+  - Priority uses Select dropdown with P1/P2/P3 options
+  - Team uses text input field
+  - Toast notifications on completion
+  - Tests included in bulk-actions-toolbar.test.tsx
+
+- **Files changed**: None (functionality already delivered in US-012)
+
+- **Learnings for future iterations**:
+  - US-012 and US-013 had overlapping requirements - bulk actions toolbar included team/priority editing
+
+---
+
+## 2026-02-04 - US-014 - Linear Issue: SRE-118
+- **What was implemented**: Row actions menu added to Services table
+  - Added DropdownMenu component from shadcn
+  - Created ServiceRowActions component with three-dot trigger button
+  - Menu items include:
+    - View Details: Navigate to service detail page
+    - Edit: Opens ServiceEditModal
+    - Mute/Unmute: Toggle alert silencing with toast notification
+    - Activate/Deactivate: Toggle monitoring (deactivate shows confirmation dialog)
+    - View History: Navigate to /history with service filter
+  - Deactivate styled in red (text-destructive class)
+  - Fully keyboard accessible via Radix UI primitives
+  - Added 19 test cases covering all menu items and interactions
+
+- **Files changed**:
+  - `ui/src/components/ui/dropdown-menu.tsx` (new - shadcn DropdownMenu component)
+  - `ui/src/components/service-row-actions.tsx` (new - ServiceRowActions component)
+  - `ui/src/components/service-row-actions.test.tsx` (new - 19 test cases)
+  - `ui/src/pages/Services.tsx` (added Actions column and ServiceRowActions per row)
+  - `ui/package.json`, `ui/package-lock.json` (added @radix-ui/react-dropdown-menu)
+  - `tasks/prd.json` (marked US-014 as passes: true)
+
+- **Learnings for future iterations**:
+  - ServiceRowActions reuses ServiceEditModal for edit functionality
+  - View History navigates to /history page with service filter (page doesn't exist yet - US-017)
+  - Deactivate action requires confirmation dialog, activate does not
+  - Use `text-destructive focus:text-destructive` for destructive menu items
+  - Radix DropdownMenu provides keyboard accessibility out of the box
+
 ---

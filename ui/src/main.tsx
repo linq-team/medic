@@ -7,6 +7,7 @@ import App from './App.tsx'
 import { ThemeProvider } from './components/theme-provider'
 import { AuthProvider } from './components/auth-provider'
 import { SettingsProvider } from './components/settings-provider'
+import { Toaster } from './components/ui/sonner'
 
 /**
  * React Query client with sensible defaults for the Medic UI
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')!).render(
           <SettingsProvider>
             <AuthProvider>
               <App />
+              <Toaster />
             </AuthProvider>
           </SettingsProvider>
         </ThemeProvider>

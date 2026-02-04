@@ -3,6 +3,7 @@
 from flask import request, send_file, Response
 from flask_swagger_ui import get_swaggerui_blueprint
 from datetime import datetime
+from typing import Optional
 import pytz
 from cerberus import Validator
 import os
@@ -19,6 +20,38 @@ import Medic.Helpers.logSettings as logLevel
 # Log Setup
 logger = logging.getLogger(__name__)
 logger.setLevel(logLevel.logSetup())
+
+# Constants
+MAX_ACTOR_LENGTH = 255
+
+
+def validate_actor_header(actor: Optional[str]) -> Optional[str]:
+    """
+    Validate the X-Actor header value.
+
+    Args:
+        actor: The actor string from X-Actor header
+
+    Returns:
+        The validated actor string, or None if invalid
+    """
+    if actor is None:
+        return None
+
+    # Check length
+    if len(actor) > MAX_ACTOR_LENGTH:
+        return None
+
+    # Check for printable characters only (no control characters)
+    if not actor.isprintable():
+        return None
+
+    # Strip whitespace
+    actor = actor.strip()
+    if not actor:
+        return None
+
+    return actor
 
 
 def exposeRoutes(app):
@@ -427,6 +460,54 @@ def exposeRoutes(app):
                 "down": {"type": "integer", "required": False},
             }
             if validateRequestData(s_schema, jData):
+                # Import snapshot functionality for destructive actions
+                from Medic.Core.snapshots import (
+                    create_snapshot,
+                    SnapshotActionType,
+                )
+
+                # Determine action type and create snapshot before destructive changes
+                snapshot_action = None
+                if "active" in jData:
+                    if jData["active"] == 0:
+                        snapshot_action = SnapshotActionType.DEACTIVATE
+                    else:
+                        snapshot_action = SnapshotActionType.ACTIVATE
+                elif "muted" in jData:
+                    if jData["muted"] == 1:
+                        snapshot_action = SnapshotActionType.MUTE
+                    else:
+                        snapshot_action = SnapshotActionType.UNMUTE
+                elif "priority" in jData:
+                    snapshot_action = SnapshotActionType.PRIORITY_CHANGE
+                elif "team" in jData:
+                    snapshot_action = SnapshotActionType.TEAM_CHANGE
+                elif any(
+                    k in jData
+                    for k in [
+                        "service_name",
+                        "alert_interval",
+                        "threshold",
+                        "runbook",
+                    ]
+                ):
+                    snapshot_action = SnapshotActionType.EDIT
+
+                # Create snapshot before the update
+                if snapshot_action:
+                    actor = validate_actor_header(request.headers.get("X-Actor"))
+                    snapshot = create_snapshot(
+                        service_id=service_id,
+                        action_type=snapshot_action,
+                        actor=actor,
+                    )
+                    if snapshot:
+                        logger.log(
+                            level=10,
+                            msg=f"Created snapshot {snapshot.snapshot_id} before "
+                            f"{snapshot_action.value} for service {service_id}",
+                        )
+
                 # Build update dynamically using parameterized queries
                 updates = []
                 params = []
@@ -1397,6 +1478,230 @@ def exposeRoutes(app):
                 }
             ),
             201,
+        )
+
+    # =========================================================================
+    # Snapshot API Endpoints
+    # =========================================================================
+
+    @app.route("/v2/snapshots", methods=["GET"])
+    def list_snapshots():
+        """
+        Query service snapshots with flexible filtering.
+
+        Query parameters:
+            service_id: Filter by service ID
+            action_type: Filter by action type (e.g., deactivate, activate, mute)
+            start_date: Filter snapshots on or after this date (ISO format)
+            end_date: Filter snapshots on or before this date (ISO format)
+            limit: Maximum entries to return (default 50, max 250)
+            offset: Number of entries to skip for pagination
+
+        Returns:
+            JSON with entries, pagination info
+        """
+        from Medic.Core.snapshots import (
+            SnapshotActionType,
+            query_snapshots,
+        )
+
+        # Parse query parameters
+        service_id = request.args.get("service_id", type=int)
+        action_type = request.args.get("action_type")
+        start_date_str = request.args.get("start_date")
+        end_date_str = request.args.get("end_date")
+        limit = request.args.get("limit", default=50, type=int)
+        offset = request.args.get("offset", default=0, type=int)
+
+        # Validate action_type if provided
+        if action_type and not SnapshotActionType.is_valid(action_type):
+            valid_types = SnapshotActionType.values()
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Invalid action_type. Must be one of: "
+                        f"{', '.join(valid_types)}",
+                        "results": "",
+                    }
+                ),
+                400,
+            )
+
+        # Parse date parameters
+        start_date = None
+        end_date = None
+
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(
+                    start_date_str.replace("Z", "+00:00")
+                )
+            except ValueError:
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid start_date format. Use ISO format "
+                            "(e.g., 2026-01-01T00:00:00Z)",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
+
+        if end_date_str:
+            try:
+                end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+            except ValueError:
+                return (
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Invalid end_date format. Use ISO format "
+                            "(e.g., 2026-01-31T23:59:59Z)",
+                            "results": "",
+                        }
+                    ),
+                    400,
+                )
+
+        # Query snapshots
+        result = query_snapshots(
+            service_id=service_id,
+            action_type=action_type,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+
+        logger.log(
+            level=10,
+            msg=f"Snapshot query: count={len(result.entries)}, "
+            f"total={result.total_count}",
+        )
+
+        return (
+            json.dumps({"success": True, "message": "", "results": result.to_dict()}),
+            200,
+        )
+
+    @app.route("/v2/snapshots/<int:snapshot_id>", methods=["GET"])
+    def get_snapshot(snapshot_id):
+        """
+        Get a single snapshot by ID.
+
+        Returns:
+            JSON with snapshot details
+        """
+        from Medic.Core.snapshots import get_snapshot_by_id
+
+        snapshot = get_snapshot_by_id(snapshot_id)
+
+        if not snapshot:
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Snapshot ID {snapshot_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
+
+        return (
+            json.dumps(
+                {"success": True, "message": "", "results": snapshot.to_dict()}
+            ),
+            200,
+        )
+
+    @app.route("/v2/snapshots/<int:snapshot_id>/restore", methods=["POST"])
+    def restore_snapshot_endpoint(snapshot_id):
+        """
+        Restore a service to a snapshot state.
+
+        Request body (JSON):
+            actor: Optional user who performed the restore
+
+        Returns:
+            JSON with restored snapshot details
+        """
+        from Medic.Core.snapshots import get_snapshot_by_id, restore_snapshot
+
+        # Check if snapshot exists
+        snapshot = get_snapshot_by_id(snapshot_id)
+        if not snapshot:
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Snapshot ID {snapshot_id} not found.",
+                        "results": "",
+                    }
+                ),
+                404,
+            )
+
+        # Check if already restored
+        if snapshot.restored_at is not None:
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": f"Snapshot ID {snapshot_id} has already been restored.",
+                        "results": "",
+                    }
+                ),
+                400,
+            )
+
+        # Parse optional actor from X-Actor header or request body
+        actor = validate_actor_header(request.headers.get("X-Actor"))
+        if actor is None and request.data:
+            try:
+                jData = json.loads(request.data)
+                body_actor = jData.get("actor")
+                if isinstance(body_actor, str):
+                    actor = validate_actor_header(body_actor)
+            except (json.JSONDecodeError, ValueError):
+                pass  # actor is optional
+
+        # Perform restore
+        restored = restore_snapshot(snapshot_id, actor=actor)
+
+        if not restored:
+            logger.log(
+                level=40,
+                msg=f"Failed to restore snapshot {snapshot_id}",
+            )
+            return (
+                json.dumps(
+                    {
+                        "success": False,
+                        "message": "Failed to restore snapshot.",
+                        "results": "",
+                    }
+                ),
+                500,
+            )
+
+        logger.log(
+            level=20,
+            msg=f"Restored snapshot {snapshot_id} for service {restored.service_id}",
+        )
+
+        return (
+            json.dumps(
+                {
+                    "success": True,
+                    "message": "Snapshot restored successfully.",
+                    "results": restored.to_dict(),
+                }
+            ),
+            200,
         )
 
     @app.route("/v2/slack/interactions", methods=["POST"])

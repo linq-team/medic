@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   ArrowLeft,
   AlertTriangle,
@@ -9,12 +11,27 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Pencil,
+  VolumeX,
+  Volume2,
+  Power,
+  PowerOff,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ServiceEditModal } from '@/components/service-edit-modal'
 import { useService } from '@/hooks'
+import { useUpdateService } from '@/hooks/use-service-mutations'
 import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
 
@@ -162,9 +179,86 @@ function DetailRow({
 export function ServiceDetail() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, error } = useService(id ?? '')
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false)
+  const { mutate: updateService, isPending: isUpdating } = useUpdateService()
 
   // The API returns an array, get the first (and usually only) result
   const service = data?.results?.[0]
+
+  /**
+   * Handle mute/unmute toggle
+   */
+  const handleMuteToggle = () => {
+    if (!service) return
+    const newMuted = service.muted === 1 ? 0 : 1
+    const actionLabel = newMuted === 1 ? 'muted' : 'unmuted'
+
+    updateService(
+      {
+        heartbeatName: service.heartbeat_name,
+        updates: { muted: newMuted },
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            newMuted === 1
+              ? `${service.service_name} muted - alerts silenced`
+              : `${service.service_name} unmuted - alerts enabled`
+          )
+        },
+        onError: (error) => {
+          toast.error(`Failed to ${actionLabel} ${service.service_name}: ${error.message}`)
+        },
+      }
+    )
+  }
+
+  /**
+   * Handle activate action (no confirmation needed)
+   */
+  const handleActivate = () => {
+    if (!service) return
+
+    updateService(
+      {
+        heartbeatName: service.heartbeat_name,
+        updates: { active: 1 },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`${service.service_name} activated - monitoring resumed`)
+        },
+        onError: (error) => {
+          toast.error(`Failed to activate ${service.service_name}: ${error.message}`)
+        },
+      }
+    )
+  }
+
+  /**
+   * Handle deactivate action (after confirmation)
+   */
+  const handleDeactivate = () => {
+    if (!service) return
+
+    updateService(
+      {
+        heartbeatName: service.heartbeat_name,
+        updates: { active: 0 },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`${service.service_name} deactivated - monitoring paused`)
+          setShowDeactivateDialog(false)
+        },
+        onError: (error) => {
+          toast.error(`Failed to deactivate ${service.service_name}: ${error.message}`)
+          setShowDeactivateDialog(false)
+        },
+      }
+    )
+  }
 
   if (isLoading) {
     return (
@@ -207,14 +301,64 @@ export function ServiceDetail() {
 
   return (
     <div className="p-8">
-      {/* Header with back button */}
+      {/* Header with back button, edit button, and quick actions */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
-        <Link to="/services">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+        <div className="flex items-center gap-2">
+          <Link to="/services">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={() => setIsEditModalOpen(true)}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit
           </Button>
-        </Link>
+          {/* Mute/Unmute Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMuteToggle}
+            disabled={isUpdating}
+            className={service.muted === 1 ? 'text-muted-foreground' : ''}
+          >
+            {service.muted === 1 ? (
+              <>
+                <Volume2 className="h-4 w-4 mr-2" />
+                Unmute
+              </>
+            ) : (
+              <>
+                <VolumeX className="h-4 w-4 mr-2" />
+                Mute
+              </>
+            )}
+          </Button>
+          {/* Activate/Deactivate Button */}
+          {service.active === 1 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeactivateDialog(true)}
+              disabled={isUpdating}
+              className="text-destructive hover:text-destructive"
+            >
+              <PowerOff className="h-4 w-4 mr-2" />
+              Deactivate
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleActivate}
+              disabled={isUpdating}
+              className="text-status-healthy hover:text-status-healthy"
+            >
+              <Power className="h-4 w-4 mr-2" />
+              Activate
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-foreground">{service.service_name}</h1>
           <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
@@ -226,6 +370,54 @@ export function ServiceDetail() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <ServiceEditModal
+        service={service}
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+      />
+
+      {/* Deactivate Confirmation Dialog */}
+      <Dialog open={showDeactivateDialog} onOpenChange={setShowDeactivateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate Service</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to deactivate <strong>{service.service_name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Deactivating this service will:
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc list-inside">
+              <li>Stop monitoring heartbeats</li>
+              <li>Prevent new alerts from being created</li>
+              <li>Keep historical data intact</li>
+            </ul>
+            <p className="mt-3 text-sm text-muted-foreground">
+              A snapshot will be created so you can restore if needed.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeactivateDialog(false)}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeactivate}
+              disabled={isUpdating}
+            >
+              {isUpdating ? 'Deactivating...' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Main content grid */}
       <div className="grid gap-6 md:grid-cols-2">
