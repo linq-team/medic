@@ -3603,3 +3603,234 @@ class TestPlaybookExecutionMetrics:
         assert result is not None
         # Pending approval metric should NOT be called for running status
         mock_update_pending.assert_not_called()
+
+
+class TestExecuteWebhookStepSSRFPrevention:
+    """Tests for SSRF prevention in execute_webhook_step."""
+
+    @patch('Medic.Core.playbook_engine.validate_url')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_webhook_validates_url_before_request(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step validates URL before making request."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.return_value = True
+
+        # Mock HTTP client
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = 'OK'
+
+        def mock_request(**kwargs):
+            return mock_response
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="https://example.com/api",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        execute_webhook_step(step, execution, http_client=mock_request)
+
+        # Verify validate_url was called with the URL
+        mock_validate_url.assert_called_once_with("https://example.com/api")
+
+    @patch('Medic.Core.playbook_engine.validate_url')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_webhook_rejects_private_ip_127(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects localhost URLs (127.x.x.x)."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="http://127.0.0.1:8080/internal",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"
+
+    @patch('Medic.Core.playbook_engine.validate_url')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_webhook_rejects_private_ip_10(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects private IPs (10.x.x.x)."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="http://10.0.0.5/internal-service",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"
+
+    @patch('Medic.Core.playbook_engine.validate_url')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_webhook_rejects_metadata_endpoint(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects cloud metadata endpoints."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="http://169.254.169.254/latest/meta-data/",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"
+
+    @patch('Medic.Core.playbook_engine.validate_url')
+    @patch('Medic.Core.playbook_engine.update_step_result')
+    @patch('Medic.Core.playbook_engine.create_step_result')
+    @patch('Medic.Core.playbook_engine._build_webhook_context')
+    def test_webhook_rejects_file_scheme(
+        self,
+        mock_build_context,
+        mock_create,
+        mock_update,
+        mock_validate_url
+    ):
+        """Test that webhook step rejects file:// URLs."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            StepResultStatus,
+            execute_webhook_step,
+        )
+        from Medic.Core.playbook_parser import WebhookStep
+        from Medic.Core.url_validator import InvalidURLError
+
+        mock_build_context.return_value = {}
+        mock_create.return_value = MagicMock(result_id=1)
+        mock_update.return_value = True
+        mock_validate_url.side_effect = InvalidURLError("Invalid webhook URL")
+
+        step = WebhookStep(
+            name="test-webhook",
+            url="file:///etc/passwd",
+            success_codes=[200],
+        )
+        execution = PlaybookExecution(
+            execution_id=100,
+            playbook_id=10,
+            service_id=None,
+            status=ExecutionStatus.RUNNING,
+            current_step=0,
+        )
+
+        result = execute_webhook_step(step, execution)
+
+        assert result.status == StepResultStatus.FAILED
+        assert result.error_message == "Invalid webhook URL"

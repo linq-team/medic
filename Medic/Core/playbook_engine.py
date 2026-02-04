@@ -50,6 +50,7 @@ from Medic.Core.metrics import (
     record_playbook_execution_duration,
     update_pending_approval_count,
 )
+from Medic.Core.url_validator import InvalidURLError, validate_url
 
 # Import audit logging - use try/except for graceful degradation
 try:
@@ -1036,6 +1037,35 @@ def execute_webhook_step(
         logger.log(
             level=30,
             msg=f"Webhook step '{step.name}' failed: {error_msg}"
+        )
+
+        update_step_result(
+            result_id=result.result_id or 0,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            completed_at=completed_at,
+        )
+
+        return StepResult(
+            result_id=result.result_id,
+            execution_id=execution.execution_id or 0,
+            step_name=step.name,
+            step_index=step_index,
+            status=StepResultStatus.FAILED,
+            error_message=error_msg,
+            started_at=now,
+            completed_at=completed_at,
+        )
+
+    # Validate URL for SSRF prevention
+    try:
+        validate_url(url)
+    except InvalidURLError:
+        completed_at = _now()
+        error_msg = "Invalid webhook URL"
+        logger.log(
+            level=30,
+            msg=f"Webhook step '{step.name}' failed: URL validation failed"
         )
 
         update_step_result(
