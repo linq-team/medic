@@ -8,6 +8,7 @@ import logging
 from flask import Flask
 
 import Medic.Core.routes
+from Medic.Core.telemetry import init_telemetry
 from config import get_config
 
 # Configure logging
@@ -31,10 +32,15 @@ def create_app() -> Flask:
         for error in errors:
             logger.warning(f"Configuration warning: {error}")
 
+    # Initialize OpenTelemetry instrumentation
+    telemetry_enabled = os.environ.get("OTEL_ENABLED", "true").lower() == "true"
+    if telemetry_enabled:
+        init_telemetry(app)
+
     # Register routes
     Medic.Core.routes.exposeRoutes(app)
 
-    logger.info(f"Medic web server initialized")
+    logger.info("Medic web server initialized")
     logger.info(f"Base URL: {config.app.base_url}")
 
     return app

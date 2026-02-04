@@ -1,0 +1,69 @@
+Medic has been installed successfully!
+
+Release: {{ .Release.Name }}
+Namespace: {{ include "medic.namespace" . }}
+Chart Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+
+{{- if .Values.ingress.enabled }}
+
+Medic is accessible at:
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+
+{{- else }}
+
+To access Medic API, run:
+
+  kubectl port-forward svc/{{ include "medic.fullname" . }}-api {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ include "medic.namespace" . }}
+
+Then visit: http://localhost:{{ .Values.service.port }}
+
+{{- end }}
+
+API Health Check:
+  curl http://localhost:{{ .Values.service.port }}/health
+
+To view logs:
+  # API logs
+  kubectl logs -l app.kubernetes.io/name={{ include "medic.name" . }},app.kubernetes.io/component=api -n {{ include "medic.namespace" . }} -f
+
+  # Worker logs
+  kubectl logs -l app.kubernetes.io/name={{ include "medic.name" . }},app.kubernetes.io/component=worker -n {{ include "medic.namespace" . }} -f
+
+{{- if .Values.externalSecret.enabled }}
+
+Secrets are managed by External Secrets Operator.
+Verify secrets sync status:
+  kubectl get externalsecret {{ include "medic.fullname" . }}-secret -n {{ include "medic.namespace" . }}
+
+{{- else if .Values.secret.create }}
+
+Secrets are managed via Kubernetes Secret.
+Verify secret exists:
+  kubectl get secret {{ include "medic.secretName" . }} -n {{ include "medic.namespace" . }}
+
+{{- else }}
+
+WARNING: No secrets configured. Ensure you provide secrets via:
+  - Set secret.create=true and secret.values with your secrets
+  - Set externalSecret.enabled=true for External Secrets Operator
+  - Mount secrets from existing Kubernetes secrets
+
+{{- end }}
+
+{{- if .Values.metrics.serviceMonitor.enabled }}
+
+Prometheus ServiceMonitor is enabled.
+Metrics available at: /metrics
+
+{{- end }}
+
+{{- if .Values.migrations.enabled }}
+
+Database migrations run automatically as a pre-install/pre-upgrade hook.
+Check migration status:
+  kubectl get jobs -n {{ include "medic.namespace" . }} -l app.kubernetes.io/component=migration
+
+{{- end }}
+
+For more information, visit the Medic documentation.

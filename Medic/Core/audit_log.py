@@ -64,10 +64,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-import pytz
-
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
+from Medic.Core.utils.datetime_helpers import (
+    now as get_now,
+    parse_datetime,
+)
 
 # Log Setup
 logger = logging.getLogger(__name__)
@@ -121,28 +123,6 @@ class AuditLogEntry:
         }
 
 
-def _now() -> datetime:
-    """Get current time in Chicago timezone."""
-    return datetime.now(pytz.timezone('America/Chicago'))
-
-
-def _parse_datetime(dt_str: str) -> Optional[datetime]:
-    """Parse a datetime string in various formats."""
-    formats = [
-        "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%d %H:%M:%S %Z",
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S"
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(dt_str, fmt)
-        except ValueError:
-            continue
-    return None
-
-
 # ============================================================================
 # Core Logging Function
 # ============================================================================
@@ -167,8 +147,8 @@ def create_audit_log_entry(
     Returns:
         AuditLogEntry object on success, None on failure
     """
-    now = timestamp or _now()
-    created_at = _now()
+    now = timestamp or get_now()
+    created_at = get_now()
 
     # Serialize details to JSON
     details_json = json.dumps(details)
@@ -673,9 +653,9 @@ def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
 
         # Parse timestamps
         if isinstance(timestamp, str):
-            timestamp = _parse_datetime(timestamp)
+            timestamp = parse_datetime(timestamp)
         if isinstance(created_at, str):
-            created_at = _parse_datetime(created_at)
+            created_at = parse_datetime(created_at)
 
         # Parse details from JSON if needed
         if isinstance(details, str):
@@ -683,7 +663,7 @@ def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
 
         # timestamp should always be set; if parsing failed, use current time
         if timestamp is None:
-            timestamp = _now()
+            timestamp = get_now()
 
         return AuditLogEntry(
             log_id=data['log_id'],

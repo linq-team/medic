@@ -1,0 +1,39 @@
+{{- if .Values.metrics.podMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "medic.fullname" . }}-worker
+  namespace: {{ include "medic.namespace" . }}
+  labels:
+    {{- include "medic.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "medic.worker.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ include "medic.namespace" . }}
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      {{- if .Values.metrics.podMonitor.honorLabels }}
+      honorLabels: true
+      {{- end }}
+      {{- if .Values.metrics.podMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml .Values.metrics.podMonitor.metricRelabelings | nindent 8 }}
+      {{- end }}
+      relabelings:
+        {{- if .Values.metrics.podMonitor.relabelings }}
+        {{- toYaml .Values.metrics.podMonitor.relabelings | nindent 8 }}
+        {{- end }}
+        - sourceLabels: []
+          targetLabel: environment
+          replacement: {{ .Values.global.environment }}
+{{- end }}

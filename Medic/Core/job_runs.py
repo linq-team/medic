@@ -13,6 +13,7 @@ import pytz
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
+from Medic.Core.utils.datetime_helpers import now as get_now, parse_datetime
 
 # Log Setup
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def record_job_start(
         JobRun object on success, None on failure or duplicate
     """
     if started_at is None:
-        started_at = datetime.now(pytz.timezone('America/Chicago'))
+        started_at = get_now()
 
     # Check if run already exists
     existing = db.query_db(
@@ -141,7 +142,7 @@ def record_job_completion(
         return None
 
     if completed_at is None:
-        completed_at = datetime.now(pytz.timezone('America/Chicago'))
+        completed_at = get_now()
 
     # Find existing STARTED run
     import json
@@ -369,9 +370,9 @@ def _parse_job_run(data: Dict[str, Any]) -> Optional[JobRun]:
 
         # Parse datetime strings if needed
         if isinstance(started_at, str):
-            started_at = _parse_datetime(started_at)
+            started_at = parse_datetime(started_at)
         if isinstance(completed_at, str):
-            completed_at = _parse_datetime(completed_at)
+            completed_at = parse_datetime(completed_at)
 
         return JobRun(
             run_id_pk=data.get('run_id_pk'),
@@ -385,23 +386,6 @@ def _parse_job_run(data: Dict[str, Any]) -> Optional[JobRun]:
     except (KeyError, TypeError) as e:
         logger.log(level=30, msg=f"Failed to parse job run data: {e}")
         return None
-
-
-def _parse_datetime(dt_str: str) -> Optional[datetime]:
-    """Parse a datetime string in various formats."""
-    formats = [
-        "%Y-%m-%dT%H:%M:%S.%f%z",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%d %H:%M:%S %Z",
-        "%Y-%m-%d %H:%M:%S.%f",
-        "%Y-%m-%d %H:%M:%S"
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(dt_str, fmt)
-        except ValueError:
-            continue
-    return None
 
 
 @dataclass
@@ -662,7 +646,7 @@ def get_stale_runs_exceeding_max_duration(
     """
     import json
     if check_time is None:
-        check_time = datetime.now(pytz.timezone('America/Chicago'))
+        check_time = get_now()
 
     # Query for STARTED jobs with services that have max_duration configured
     # Join with services to get max_duration_ms and heartbeat_name
@@ -697,7 +681,7 @@ def get_stale_runs_exceeding_max_duration(
 
         # Parse started_at if string
         if isinstance(started_at, str):
-            started_at = _parse_datetime(started_at)
+            started_at = parse_datetime(started_at)
 
         if started_at is None:
             continue

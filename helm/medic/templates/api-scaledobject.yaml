@@ -1,0 +1,56 @@
+{{- if .Values.api.autoscaling.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "medic.fullname" . }}-api
+  namespace: {{ include "medic.namespace" . }}
+  labels:
+    {{- include "medic.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  annotations:
+    # Karpenter-friendly annotations for node scheduling
+    karpenter.sh/do-not-disrupt: "false"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "medic.fullname" . }}-api
+  minReplicaCount: {{ .Values.api.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.api.autoscaling.maxReplicas }}
+  cooldownPeriod: {{ .Values.api.autoscaling.cooldownPeriod }}
+  pollingInterval: {{ .Values.api.autoscaling.pollingInterval }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Percent
+              value: 10
+              periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 15
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 15
+            - type: Pods
+              value: 4
+              periodSeconds: 15
+          selectPolicy: Max
+  triggers:
+    # CPU trigger
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.api.autoscaling.triggers.cpu.threshold }}"
+    {{- if .Values.api.autoscaling.triggers.prometheus.enabled }}
+    # Prometheus trigger for custom metrics (e.g., request rate)
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.api.autoscaling.triggers.prometheus.serverAddress }}
+        metricName: {{ .Values.api.autoscaling.triggers.prometheus.metricName }}
+        threshold: {{ .Values.api.autoscaling.triggers.prometheus.threshold | quote }}
+        query: {{ .Values.api.autoscaling.triggers.prometheus.query }}
+    {{- end }}
+{{- end }}

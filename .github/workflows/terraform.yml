@@ -1,0 +1,263 @@
+# =============================================================================
+# Medic Terraform Pipeline - Infrastructure and Helm Deployment
+# =============================================================================
+# Triggers on changes to terraform/ directory and manual dispatch
+#
+# This workflow manages:
+#   - AWS infrastructure (RDS, ElastiCache, Secrets Manager, IAM)
+#   - Helm chart deployment via terraform helm_release
+#
+# Jobs:
+#   - terraform-plan: Validates and plans infrastructure changes
+#   - terraform-apply: Applies infrastructure changes (requires approval for prod)
+#
+# Required GitHub Environments:
+#   - dev: Development environment (auto-approval)
+#   - prod: Production environment (requires manual approval)
+#
+# Required Secrets/Variables per environment:
+#   - AWS_ROLE_ARN: IAM role ARN for OIDC authentication
+#   - AWS_REGION: AWS region (e.g., us-east-1)
+#   - TF_STATE_BUCKET: S3 bucket for Terraform state
+#   - TF_STATE_KEY: Key prefix for state file
+#   - TF_STATE_DYNAMODB_TABLE: DynamoDB table for state locking
+#
+# Optional Variables:
+#   - TF_VAR_*: Any Terraform input variables (set as environment variables)
+# =============================================================================
+
+name: Terraform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: plan
+
+env:
+  TERRAFORM_VERSION: "1.7.0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Terraform Plan Job
+  # ---------------------------------------------------------------------------
+  # Runs terraform init, validate, and plan
+  # Uploads plan artifact for review
+  # Comments plan output on PRs
+  # ---------------------------------------------------------------------------
+  terraform-plan:
+    name: Terraform Plan (${{ github.event.inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+
+    # Determine environment from workflow_dispatch input or default to dev
+    env:
+      TF_ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+
+    permissions:
+      id-token: write    # Required for OIDC authentication with AWS
+      contents: read
+      pull-requests: write  # Required for PR comments
+
+    outputs:
+      plan-exitcode: ${{ steps.plan.outputs.exitcode }}
+      environment: ${{ env.TF_ENVIRONMENT }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+
+      - name: Terraform Init
+        id: init
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}/${{ env.TF_ENVIRONMENT }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Format Check
+        id: fmt
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        id: validate
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: |
+          terraform plan \
+            -no-color \
+            -input=false \
+            -out=tfplan \
+            -detailed-exitcode || echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ env.TF_ENVIRONMENT }}-${{ github.sha }}
+          path: terraform/environments/${{ env.TF_ENVIRONMENT }}/tfplan
+          retention-days: 7
+
+      - name: Generate Plan Output
+        id: plan-output
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: |
+          terraform show -no-color tfplan > plan_output.txt
+          echo "plan<<EOF" >> $GITHUB_OUTPUT
+          cat plan_output.txt | head -c 60000 >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `### Terraform Plan - \`${{ env.TF_ENVIRONMENT }}\` Environment
+
+            #### Terraform Format and Style: \`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization: \`${{ steps.init.outcome }}\`
+            #### Terraform Validation: \`${{ steps.validate.outcome }}\`
+            #### Terraform Plan: \`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${{ steps.plan-output.outputs.plan }}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*
+            *Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  # ---------------------------------------------------------------------------
+  # Terraform Apply Job
+  # ---------------------------------------------------------------------------
+  # Applies infrastructure changes
+  # Requires approval for production environment
+  # Downloads plan artifact from plan job
+  # ---------------------------------------------------------------------------
+  terraform-apply:
+    name: Terraform Apply (${{ needs.terraform-plan.outputs.environment }})
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+
+    # Only run apply on:
+    # 1. Push to main (auto-deploy infrastructure changes)
+    # 2. Manual workflow_dispatch with action=apply
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+
+    # Use GitHub Environments for approval workflows
+    # Production requires manual approval configured in GitHub settings
+    environment:
+      name: ${{ needs.terraform-plan.outputs.environment }}
+
+    env:
+      TF_ENVIRONMENT: ${{ needs.terraform-plan.outputs.environment }}
+
+    permissions:
+      id-token: write    # Required for OIDC authentication with AWS
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+
+      - name: Terraform Init
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}/${{ env.TF_ENVIRONMENT }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ env.TF_ENVIRONMENT }}-${{ github.sha }}
+          path: terraform/environments/${{ env.TF_ENVIRONMENT }}
+
+      - name: Terraform Apply
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: terraform apply -auto-approve -input=false tfplan
+
+      - name: Output Deployment Info
+        id: outputs
+        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        run: |
+          echo "### Terraform Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          terraform output -no-color >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

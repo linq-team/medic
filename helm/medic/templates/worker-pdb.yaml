@@ -1,0 +1,19 @@
+{{- if .Values.worker.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "medic.fullname" . }}-worker
+  namespace: {{ include "medic.namespace" . }}
+  labels:
+    {{- include "medic.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+  annotations:
+    # Karpenter-friendly annotations for node scheduling
+    # Allows Karpenter to consider this PDB during node consolidation
+    karpenter.sh/do-not-disrupt: "false"
+spec:
+  minAvailable: {{ .Values.worker.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "medic.worker.selectorLabels" . | nindent 6 }}
+{{- end }}

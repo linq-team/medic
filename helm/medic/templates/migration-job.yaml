@@ -1,0 +1,95 @@
+{{- if .Values.migrations.enabled }}
+# =============================================================================
+# Database Migration Job
+# =============================================================================
+# Runs database migrations as a Helm pre-upgrade/pre-install hook.
+# Executes before the main application deployment to ensure schema is current.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "medic.fullname" . }}-migrations
+  namespace: {{ include "medic.namespace" . }}
+  labels:
+    {{- include "medic.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    # Helm hook annotations - run before install/upgrade
+    "helm.sh/hook": pre-install,pre-upgrade
+    # Run before the main application (lower weight = runs first)
+    "helm.sh/hook-weight": "-5"
+    # Delete job before creating new one, and delete after success
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  # Number of retries before considering the job failed
+  backoffLimit: {{ .Values.migrations.backoffLimit | default 3 }}
+  # Time limit for the job to complete
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds | default 300 }}
+  # TTL for cleanup after completion (requires TTLAfterFinished feature)
+  ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished | default 86400 }}
+  template:
+    metadata:
+      labels:
+        {{- include "medic.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+      annotations:
+        # Prevent Istio/Linkerd sidecar injection for job pods
+        sidecar.istio.io/inject: "false"
+        linkerd.io/inject: disabled
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "medic.serviceAccountName" . }}
+      securityContext:
+        {{- include "medic.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrations
+          image: {{ include "medic.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - python
+            - -m
+            - scripts.run_migrations
+          {{- with .Values.migrations.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            # Migration-specific environment variables
+            - name: MIGRATION_MODE
+              value: "true"
+            # Pod metadata for logging
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          # Load environment from ConfigMap and Secret
+          envFrom:
+            {{- include "medic.envFrom" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- include "medic.securityContext" . | nindent 12 }}
+          volumeMounts:
+            # Temp directory for apps that need write access
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

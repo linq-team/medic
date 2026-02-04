@@ -34,10 +34,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-import pytz
-
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
+from Medic.Core.utils.datetime_helpers import now as get_now
 
 # Log Setup
 logger = logging.getLogger(__name__)
@@ -84,11 +83,6 @@ class CircuitBreakerStatus:
 
 # Global configuration (can be overridden)
 _config: CircuitBreakerConfig = CircuitBreakerConfig()
-
-
-def _now() -> datetime:
-    """Get current time in Chicago timezone."""
-    return datetime.now(pytz.timezone('America/Chicago'))
 
 
 def get_config() -> CircuitBreakerConfig:
@@ -139,7 +133,7 @@ def get_execution_count_in_window(
     window = window_seconds or config.window_seconds
 
     # Calculate window start time
-    now = _now()
+    now = get_now()
     window_start = now - timedelta(seconds=window)
 
     # Query executions within window
@@ -223,7 +217,7 @@ def check_circuit_breaker(
     """
     cfg = config or get_config()
 
-    now = _now()
+    now = get_now()
     window_start = now - timedelta(seconds=cfg.window_seconds)
     window_end = now
 
@@ -299,7 +293,7 @@ def get_services_with_open_circuit() -> List[CircuitBreakerStatus]:
         List of CircuitBreakerStatus for services with open circuits
     """
     config = get_config()
-    now = _now()
+    now = get_now()
     window_start = now - timedelta(seconds=config.window_seconds)
 
     # Query services with high execution counts in window
