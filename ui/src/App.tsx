@@ -2,7 +2,7 @@ function App() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-linq-cream">
       <div className="text-center">
-        <h1 className="text-4xl font-bold text-linq-navy mb-4">Medic</h1>
+        <h1 className="text-4xl font-bold text-linq-navy mb-4">Medic UI</h1>
         <p className="text-lg text-linq-black">Heartbeat Monitoring Service</p>
         <p className="text-sm text-linq-sage mt-2">UI Coming Soon</p>
         <div className="mt-8 flex gap-2 justify-center">
