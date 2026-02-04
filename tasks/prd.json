@@ -86,7 +86,7 @@
         "Typecheck/lint passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Critical security fix - prevents secret leakage"
     },
     {

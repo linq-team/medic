@@ -2557,6 +2557,255 @@ class TestExecuteScriptStep:
         assert env['MEDIC_SERVICE_ID'] == '42'
 
 
+class TestGetScriptEnvSecurity:
+    """Tests for _get_script_env function - environment variable security.
+
+    SECURITY: These tests verify that sensitive environment variables
+    (DATABASE_URL, MEDIC_SECRETS_KEY, AWS credentials, etc.) are NOT
+    passed to script execution environments.
+    """
+
+    def test_secrets_key_not_passed_to_scripts(self):
+        """Test MEDIC_SECRETS_KEY is NOT passed to script environment."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'MEDIC_SECRETS_KEY': 'super-secret-encryption-key',
+            'PATH': '/usr/bin',
+            'HOME': '/home/user',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # SECURITY: MEDIC_SECRETS_KEY must NOT be in the environment
+            assert 'MEDIC_SECRETS_KEY' not in env
+            # Allowlisted variables should be present
+            assert env['PATH'] == '/usr/bin'
+            assert env['HOME'] == '/home/user'
+
+    def test_database_url_not_passed_to_scripts(self):
+        """Test DATABASE_URL is NOT passed to script environment."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'DATABASE_URL': 'postgresql://user:password@db.example.com/medic',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # SECURITY: DATABASE_URL must NOT be in the environment
+            assert 'DATABASE_URL' not in env
+            # Allowlisted variables should be present
+            assert env['PATH'] == '/usr/bin'
+
+    def test_aws_credentials_not_passed_to_scripts(self):
+        """Test AWS credentials are NOT passed to script environment."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'AWS_ACCESS_KEY_ID': 'AKIAIOSFODNN7EXAMPLE',
+            'AWS_SECRET_ACCESS_KEY': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            'AWS_SESSION_TOKEN': 'AQoDYXdzEJr...',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # SECURITY: AWS credentials must NOT be in the environment
+            assert 'AWS_ACCESS_KEY_ID' not in env
+            assert 'AWS_SECRET_ACCESS_KEY' not in env
+            assert 'AWS_SESSION_TOKEN' not in env
+
+    def test_only_allowlisted_vars_passed(self):
+        """Test only ALLOWED_SCRIPT_ENV_VARS are passed to scripts."""
+        from Medic.Core.playbook_engine import (
+            ALLOWED_SCRIPT_ENV_VARS,
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'PATH': '/usr/bin:/usr/local/bin',
+            'HOME': '/home/testuser',
+            'USER': 'testuser',
+            'LANG': 'en_US.UTF-8',
+            'LC_ALL': 'en_US.UTF-8',
+            'TZ': 'America/Chicago',
+            # Non-allowlisted vars
+            'SECRET_API_KEY': 'secret123',
+            'PRIVATE_TOKEN': 'token456',
+            'DB_PASSWORD': 'password789',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # All allowlisted vars should be present
+            for var in ALLOWED_SCRIPT_ENV_VARS:
+                if var in ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TZ']:
+                    assert var in env
+
+            # Non-allowlisted vars must NOT be present
+            assert 'SECRET_API_KEY' not in env
+            assert 'PRIVATE_TOKEN' not in env
+            assert 'DB_PASSWORD' not in env
+
+            # MEDIC context vars should always be present
+            assert env['MEDIC_EXECUTION_ID'] == '100'
+            assert env['MEDIC_PLAYBOOK_ID'] == '10'
+            assert env['MEDIC_SERVICE_ID'] == '42'
+
+    def test_medic_context_vars_always_present(self):
+        """Test MEDIC context variables are always added."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {}, clear=True):
+            execution = PlaybookExecution(
+                execution_id=200,
+                playbook_id=20,
+                service_id=5,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # MEDIC context vars should always be present
+            assert env['MEDIC_EXECUTION_ID'] == '200'
+            assert env['MEDIC_PLAYBOOK_ID'] == '20'
+            assert env['MEDIC_SERVICE_ID'] == '5'
+
+    def test_additional_env_vars_extends_allowlist(self):
+        """Test MEDIC_ADDITIONAL_SCRIPT_ENV_VARS extends allowlist."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'MEDIC_ADDITIONAL_SCRIPT_ENV_VARS': 'CUSTOM_VAR,ANOTHER_VAR',
+            'CUSTOM_VAR': 'custom_value',
+            'ANOTHER_VAR': 'another_value',
+            'STILL_NOT_ALLOWED': 'blocked',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # Additional vars from env should be allowed
+            assert env['CUSTOM_VAR'] == 'custom_value'
+            assert env['ANOTHER_VAR'] == 'another_value'
+            # Vars not in additional list still blocked
+            assert 'STILL_NOT_ALLOWED' not in env
+
+    def test_empty_additional_env_vars_handled(self):
+        """Test empty MEDIC_ADDITIONAL_SCRIPT_ENV_VARS is handled."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'MEDIC_ADDITIONAL_SCRIPT_ENV_VARS': '',
+            'SECRET_KEY': 'should_be_blocked',
+            'PATH': '/usr/bin',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # Empty additional vars should not break anything
+            assert 'SECRET_KEY' not in env
+            assert env['PATH'] == '/usr/bin'
+
+    def test_additional_env_vars_with_whitespace(self):
+        """Test MEDIC_ADDITIONAL_SCRIPT_ENV_VARS handles whitespace."""
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            PlaybookExecution,
+            _get_script_env,
+        )
+
+        with patch.dict('os.environ', {
+            'MEDIC_ADDITIONAL_SCRIPT_ENV_VARS': ' CUSTOM_VAR , ANOTHER_VAR ',
+            'CUSTOM_VAR': 'value1',
+            'ANOTHER_VAR': 'value2',
+        }):
+            execution = PlaybookExecution(
+                execution_id=100,
+                playbook_id=10,
+                service_id=42,
+                status=ExecutionStatus.RUNNING,
+                current_step=0,
+            )
+
+            env = _get_script_env(execution)
+
+            # Whitespace around var names should be trimmed
+            assert env['CUSTOM_VAR'] == 'value1'
+            assert env['ANOTHER_VAR'] == 'value2'
+
+
 class TestCheckHeartbeatReceived:
     """Tests for check_heartbeat_received function."""
 

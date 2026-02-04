@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Script env security: Only pass allowlisted vars (PATH, HOME, USER, LANG, LC_ALL, TZ) via _get_script_env()
 - Use `Medic.Helpers.logSettings.logSetup()` for logging configuration
 - Follow existing module docstring pattern with description, features, and usage example
 - Use `@dataclass` for configuration and status objects
@@ -88,5 +89,34 @@
   - The playbook_engine uses `StepResult` dataclass for return values with specific status codes
   - webhook_delivery uses `DeliveryResult` dataclass with `success` and `error_message` fields
   - When validation fails, HTTP client should NOT be called - verify with `mock_client.assert_not_called()`
+
+---
+
+## 2026-02-04 01:45 - US-004 - Linear Issue: SRE-31
+- **What was implemented**: Fixed script execution environment variable leak
+  - Created `ALLOWED_SCRIPT_ENV_VARS` constant with safe vars: PATH, HOME, USER, LANG, LC_ALL, TZ
+  - Created `_get_script_env(execution)` function to build safe environment dictionary
+  - Modified `execute_script_step()` to use `_get_script_env()` instead of `**dict(os.environ)`
+  - Added support for `MEDIC_ADDITIONAL_SCRIPT_ENV_VARS` env var to extend allowlist
+  - Added 8 unit tests in `TestGetScriptEnvSecurity` class verifying:
+    - MEDIC_SECRETS_KEY is NOT passed to scripts
+    - DATABASE_URL is NOT passed to scripts
+    - AWS credentials are NOT passed to scripts
+    - Only allowlisted variables are passed
+    - MEDIC context vars (MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID) always present
+    - MEDIC_ADDITIONAL_SCRIPT_ENV_VARS extends allowlist
+    - Empty/whitespace handling for additional vars
+
+- **Files changed**:
+  - `Medic/Core/playbook_engine.py` (added ALLOWED_SCRIPT_ENV_VARS, _get_script_env, modified execute_script_step)
+  - `tests/unit/test_playbook_engine.py` (new TestGetScriptEnvSecurity class with 8 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Environment variables passed to subprocess.run() via `env=` parameter replace the entire environment
+  - Using `**dict(os.environ)` is a security antipattern - it leaks all secrets to subprocesses
+  - Use `patch.dict('os.environ', {...})` for testing environment variables
+  - The forward reference `"PlaybookExecution"` in type hints requires quotes for circular import prevention
+  - Flake8 enforces 79 char line limit - keep comments under that limit
 
 ---

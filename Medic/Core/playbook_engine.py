@@ -1276,6 +1276,64 @@ MAX_SCRIPT_MEMORY_BYTES = 256 * 1024 * 1024
 # Maximum output size to capture (bytes)
 MAX_SCRIPT_OUTPUT_SIZE = 8192
 
+# Allowlist of environment variables that can be passed to scripts.
+# SECURITY: This prevents secrets (DATABASE_URL, MEDIC_SECRETS_KEY, API keys,
+# etc.) from leaking to script execution environments. Only basic system
+# variables and explicit MEDIC context variables are allowed.
+ALLOWED_SCRIPT_ENV_VARS: List[str] = [
+    'PATH',      # Required for finding executables
+    'HOME',      # User home directory
+    'USER',      # Current user name
+    'LANG',      # Locale settings
+    'LC_ALL',    # Locale override
+    'TZ',        # Timezone
+]
+
+
+def _get_script_env(execution: "PlaybookExecution") -> Dict[str, str]:
+    """
+    Build a safe environment dictionary for script execution.
+
+    SECURITY MODEL:
+    - Only allowlisted environment variables from parent process are passed
+    - This prevents secrets (DATABASE_URL, MEDIC_SECRETS_KEY, AWS creds,
+      etc.) from leaking to scripts
+    - Explicit MEDIC context variables are added for script awareness
+    - Additional vars can be added via MEDIC_ADDITIONAL_SCRIPT_ENV_VARS
+
+    Args:
+        execution: The current playbook execution context
+
+    Returns:
+        Dictionary of safe environment variables for subprocess execution
+    """
+    # Start with only allowlisted environment variables
+    safe_env: Dict[str, str] = {}
+
+    # Get the base allowlist
+    allowed_vars = set(ALLOWED_SCRIPT_ENV_VARS)
+
+    # Allow extending the allowlist via environment variable
+    # MEDIC_ADDITIONAL_SCRIPT_ENV_VARS is comma-separated list of var names
+    additional_vars = os.environ.get('MEDIC_ADDITIONAL_SCRIPT_ENV_VARS', '')
+    if additional_vars:
+        for var_name in additional_vars.split(','):
+            var_name = var_name.strip()
+            if var_name:
+                allowed_vars.add(var_name)
+
+    # Copy only allowed variables from the current environment
+    for var_name in allowed_vars:
+        if var_name in os.environ:
+            safe_env[var_name] = os.environ[var_name]
+
+    # Add explicit MEDIC context variables (these are always safe to expose)
+    safe_env['MEDIC_EXECUTION_ID'] = str(execution.execution_id or '')
+    safe_env['MEDIC_PLAYBOOK_ID'] = str(execution.playbook_id)
+    safe_env['MEDIC_SERVICE_ID'] = str(execution.service_id or '')
+
+    return safe_env
+
 
 @dataclass
 class RegisteredScript:
@@ -1544,18 +1602,16 @@ def execute_script_step(
                 pass
 
         # Execute the script
+        # Build safe environment (allowlisted vars only - see _get_script_env docstring)
+        script_env = _get_script_env(execution)
+
         proc = subprocess.run(
             interpreter_cmd + [script_path],
             capture_output=True,
             text=True,
             timeout=timeout,
             preexec_fn=set_limits,
-            env={
-                **dict(os.environ),
-                'MEDIC_EXECUTION_ID': str(execution.execution_id or ''),
-                'MEDIC_PLAYBOOK_ID': str(execution.playbook_id),
-                'MEDIC_SERVICE_ID': str(execution.service_id or ''),
-            }
+            env=script_env
         )
 
         # Clean up temp file
