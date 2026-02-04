@@ -51,8 +51,30 @@
 - Pagination pattern: usePagination hook with useSearchParams for URL state management
 - TablePagination component: reusable pagination with Previous, Next, page numbers
 - Client-side pagination: allItems.slice(offset, offset + pageSize) for paging
-- Components exporting hooks: add ESLint override in eslint.config.js (e.g., *-pagination.tsx)
+- Components exporting hooks: add ESLint override in eslint.config.js (e.g., *-pagination.tsx, *-sort.tsx)
+- Sorting pattern: useSort hook with useSearchParams for URL state management (?sort=column&dir=asc|desc)
+- SortableTableHead component: clickable headers with sort direction icons (ArrowUp/ArrowDown/ArrowUpDown)
+- Sort + pagination pattern: sort items first, then paginate (sortItems(allItems).slice(offset, offset + pageSize))
+- Reset pagination when sort changes: toggleSort deletes 'page' param to go back to page 1
 
+---
+
+## 2026-02-04 - US-021 - Linear Issue: SRE-90
+- What was implemented: Added sorting to Services table with clickable column headers
+- Files changed:
+  - ui/src/components/table-sort.tsx (new - reusable useSort hook and SortableTableHead component)
+  - ui/src/pages/Services.tsx (updated to use SortableTableHead for sortable columns)
+  - ui/eslint.config.js (added ESLint override for *-sort.tsx files)
+- **Learnings for future iterations:**
+  - useSort hook returns { sortColumn, sortDirection, toggleSort, sortItems } for managing sort state
+  - Sort state persists in URL via useSearchParams (e.g., ?sort=team&dir=desc)
+  - When clicking same column: asc -> desc -> back to default
+  - When clicking different column: switch to that column ascending
+  - SortableTableHead wraps TableHead with click handler and visual indicators
+  - Lucide icons: ArrowUp (ascending), ArrowDown (descending), ArrowUpDown (unsorted)
+  - Active sort column shows linq-blue icon, inactive columns show dimmed icon
+  - Sort before paginate: apply sortItems() to full list before slicing for pagination
+  - toggleSort automatically resets page param to avoid being on invalid page after resort
 ---
 
 ## 2026-02-04 - US-020 - Linear Issue: SRE-89

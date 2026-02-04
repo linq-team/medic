@@ -4,13 +4,13 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TablePagination, usePagination } from '@/components/table-pagination'
+import { SortableTableHead, useSort } from '@/components/table-sort'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
 import type { Service } from '@/lib/api'
@@ -80,12 +80,21 @@ function EmptyState() {
 export function Services() {
   const { data, isLoading, error } = useServices()
   const { pageSize, offset } = usePagination('page', PAGE_SIZE)
+  const { sortColumn, sortDirection, toggleSort, sortItems } = useSort(
+    'sort',
+    'dir',
+    'service_name', // default sort column
+    'asc' // default direction
+  )
 
   const allServices = data?.results ?? []
-  const totalItems = allServices.length
+
+  // Sort services first, then paginate
+  const sortedServices = sortItems(allServices)
+  const totalItems = sortedServices.length
 
   // Paginate services client-side
-  const services = allServices.slice(offset, offset + pageSize)
+  const services = sortedServices.slice(offset, offset + pageSize)
 
   return (
     <div className="p-8">
@@ -116,13 +125,62 @@ export function Services() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Service Name</TableHead>
-                  <TableHead>Heartbeat Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Down</TableHead>
-                  <TableHead>Muted</TableHead>
-                  <TableHead>Team</TableHead>
-                  <TableHead>Priority</TableHead>
+                  <SortableTableHead
+                    columnKey="service_name"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Service Name
+                  </SortableTableHead>
+                  <SortableTableHead
+                    columnKey="heartbeat_name"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Heartbeat Name
+                  </SortableTableHead>
+                  <SortableTableHead
+                    columnKey="active"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Status
+                  </SortableTableHead>
+                  <SortableTableHead
+                    columnKey="down"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Down
+                  </SortableTableHead>
+                  <SortableTableHead
+                    columnKey="muted"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Muted
+                  </SortableTableHead>
+                  <SortableTableHead
+                    columnKey="team"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Team
+                  </SortableTableHead>
+                  <SortableTableHead
+                    columnKey="priority"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={toggleSort}
+                  >
+                    Priority
+                  </SortableTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

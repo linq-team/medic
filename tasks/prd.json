@@ -326,8 +326,8 @@
         "Typecheck passes"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed in SRE-90. Created useSort hook and SortableTableHead component for URL-based sort state management. Sort icons (ArrowUp/ArrowDown/ArrowUpDown) indicate current sort direction. Default sort is service_name ascending."
     },
     {
       "id": "US-022",
