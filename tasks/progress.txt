@@ -41,6 +41,57 @@
 - **OpenTelemetry: Use `opentelemetry.exporter.otlp.proto.grpc.trace_exporter` for OTLP gRPC exporter**
 - **Telemetry init: Call `init_telemetry(app)` after Flask app creation but before route registration**
 - **Trace context: Use `get_current_trace_id()` from Flask g context for log correlation**
+- **Structured logging: Use `Medic.Core.logging_config.configure_logging()` for OTEL-compatible JSON logs**
+- **Log format env var: Use `MEDIC_LOG_FORMAT` ('json' default, 'text' for debug)**
+- **Log level env var: Use `MEDIC_LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR)**
+- **JSONFormatter: Includes TraceId, SpanId, Resource attributes, and request context**
+
+---
+
+## 2026-02-04 - US-020 - Linear Issue: SRE-47
+- **What was implemented**: Structured JSON logging with OpenTelemetry semantic conventions
+  - Created `Medic/Core/logging_config.py` module with:
+    - `JSONFormatter`: Formats logs as JSON with OTEL semantic conventions
+    - `TextFormatter`: Human-readable format with optional trace context
+    - `configure_logging()`: Configure logging system with JSON or text format
+    - `get_logger()`: Get a configured logger instance
+    - `get_trace_context()`: Extract trace_id/span_id from Flask g context
+    - `get_request_context()`: Extract HTTP request fields
+  - OTEL semantic conventions implemented:
+    - Timestamp in ISO 8601 format with UTC timezone
+    - SeverityText (DEBUG, INFO, WARN, ERROR, FATAL)
+    - SeverityNumber (5, 9, 13, 17, 21 per OTEL spec)
+    - Body (log message)
+    - Resource attributes (service.name, service.version, deployment.environment)
+    - TraceId and SpanId for log-to-trace correlation in Grafana
+    - InstrumentationScope (logger name)
+    - Attributes (http.method, http.route, code.filepath, code.lineno, etc.)
+  - Environment variables supported:
+    - `MEDIC_LOG_FORMAT`: 'json' (default) or 'text'
+    - `MEDIC_LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
+    - `OTEL_SERVICE_NAME`: Service name for logs (default: medic)
+    - `MEDIC_ENVIRONMENT`: Deployment environment (default: development)
+    - `MEDIC_VERSION`: Application version (default: unknown)
+  - Logs output to stdout for container collection by Alloy
+  - Exception info includes type, message, and stacktrace
+  - Extra fields from log calls are added to Attributes
+  - 41 unit tests covering all functionality
+  - Typecheck (mypy) and lint (flake8) pass
+
+- **Files changed**:
+  - `Medic/Core/logging_config.py` (new)
+  - `tests/unit/test_logging_config.py` (new, 41 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - OTEL log data model uses specific field names: Timestamp, SeverityText, SeverityNumber, Body, Resource, Attributes
+  - OTEL severity numbers follow spec: DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21
+  - Use `has_request_context()` to check if in Flask request before accessing g or request
+  - Use `getattr(g, "trace_id", None)` to safely access g attributes
+  - JSONFormatter should use `record.getMessage()` to get formatted message with args
+  - Include code location attributes (filepath, lineno, function) for debugging
+  - Text formatter can prepend trace_id to message for grep-friendly debugging
+  - Module-level `_configured` flag prevents double configuration
 
 ---
 
