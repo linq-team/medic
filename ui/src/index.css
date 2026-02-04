@@ -1,19 +1,41 @@
 @import 'tailwindcss';
 
+/* Geist Sans Font */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Geist Mono Font */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
+  /* Font Families */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
+
   /* Linq Brand Colors */
   --color-linq-black: #141414;
-  --color-linq-cream: #FCF9E9;
-  --color-linq-sage: #B0BFB7;
-  --color-linq-blue: #4F9FDF;
-  --color-linq-navy: #1B3D67;
-  --color-linq-green: #83B149;
-  --color-linq-lime: #E8DF6E;
+  --color-linq-cream: #fcf9e9;
+  --color-linq-sage: #b0bfb7;
+  --color-linq-blue: #4f9fdf;
+  --color-linq-navy: #1b3d67;
+  --color-linq-green: #83b149;
+  --color-linq-lime: #e8df6e;
 
   /* Status Colors for health indicators */
-  --color-status-healthy: #83B149;
-  --color-status-warning: #CA8A04;
-  --color-status-error: #DC2626;
-  --color-status-critical: #991B1B;
-  --color-status-muted: #6B7280;
+  --color-status-healthy: #83b149;
+  --color-status-warning: #ca8a04;
+  --color-status-error: #dc2626;
+  --color-status-critical: #991b1b;
+  --color-status-muted: #6b7280;
 }
