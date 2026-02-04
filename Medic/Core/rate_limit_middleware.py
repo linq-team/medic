@@ -1,6 +1,11 @@
-"""Rate limiting middleware for Medic API."""
+"""Rate limiting middleware for Medic API.
+
+All endpoints are rate limited to prevent abuse and DoS attacks.
+Endpoint-specific rate limits can be configured via environment variables.
+"""
 import json
 import logging
+import os
 from functools import wraps
 from typing import Optional, Callable, Any, Tuple
 
@@ -17,26 +22,55 @@ import Medic.Helpers.logSettings as logLevel
 logger = logging.getLogger(__name__)
 logger.setLevel(logLevel.logSetup())
 
-# Paths that bypass rate limiting (same as auth bypass)
-RATE_LIMIT_BYPASS_PREFIXES = (
-    "/health",
-    "/v1/healthcheck",
-    "/metrics",
-    "/docs",
+# Endpoint-specific rate limits (requests per minute).
+# These can be configured via environment variables.
+RATE_LIMIT_HEALTH_REQUESTS: int = int(
+    os.environ.get("RATE_LIMIT_HEALTH_REQUESTS", "1000")
+)
+RATE_LIMIT_METRICS_REQUESTS: int = int(
+    os.environ.get("RATE_LIMIT_METRICS_REQUESTS", "100")
+)
+RATE_LIMIT_DOCS_REQUESTS: int = int(
+    os.environ.get("RATE_LIMIT_DOCS_REQUESTS", "60")
 )
 
+# Endpoint types for rate limiting
+ENDPOINT_TYPE_HEALTH: str = "health"
+ENDPOINT_TYPE_METRICS: str = "metrics"
+ENDPOINT_TYPE_DOCS: str = "docs"
 
-def _should_bypass_rate_limit(path: str) -> bool:
+# NOTE: No endpoints bypass rate limiting. All endpoints have rate limits
+# applied, including health, metrics, and docs endpoints. This is a security
+# best practice to prevent abuse and DoS attacks.
+
+
+def _get_endpoint_rate_limit_config(endpoint_type: str) -> RateLimitConfig:
     """
-    Check if the request path should bypass rate limiting.
+    Get rate limit configuration for a specific endpoint type.
 
     Args:
-        path: The request path
+        endpoint_type: The type of endpoint (health, metrics, docs, etc.)
 
     Returns:
-        True if rate limiting should be bypassed, False otherwise
+        RateLimitConfig with appropriate limits for the endpoint type
     """
-    return any(path.startswith(prefix) for prefix in RATE_LIMIT_BYPASS_PREFIXES)
+    if endpoint_type == ENDPOINT_TYPE_HEALTH:
+        return RateLimitConfig(
+            management_limit=RATE_LIMIT_HEALTH_REQUESTS,
+            heartbeat_limit=RATE_LIMIT_HEALTH_REQUESTS,
+        )
+    elif endpoint_type == ENDPOINT_TYPE_METRICS:
+        return RateLimitConfig(
+            management_limit=RATE_LIMIT_METRICS_REQUESTS,
+            heartbeat_limit=RATE_LIMIT_METRICS_REQUESTS,
+        )
+    elif endpoint_type == ENDPOINT_TYPE_DOCS:
+        return RateLimitConfig(
+            management_limit=RATE_LIMIT_DOCS_REQUESTS,
+            heartbeat_limit=RATE_LIMIT_DOCS_REQUESTS,
+        )
+    # For heartbeat and management, use the default config
+    return RateLimitConfig()
 
 
 def _get_api_key_id() -> Optional[str]:
@@ -51,7 +85,9 @@ def _get_api_key_id() -> Optional[str]:
     return getattr(g, "api_key_id", None)
 
 
-def _create_rate_limit_response(result: RateLimitResult) -> Tuple[str, int, dict]:
+def _create_rate_limit_response(
+    result: RateLimitResult,
+) -> Tuple[str, int, dict]:
     """
     Create a 429 Too Many Requests response.
 
@@ -105,14 +141,30 @@ def _determine_endpoint_type(path: str) -> str:
         path: The request path
 
     Returns:
-        "heartbeat" for heartbeat endpoints, "management" otherwise
+        One of: "health", "metrics", "docs", "heartbeat", or "management"
     """
+    # Health endpoints (high rate limit for monitoring)
+    health_prefixes = (
+        "/health",
+        "/v1/healthcheck",
+    )
+    if any(path.startswith(prefix) for prefix in health_prefixes):
+        return ENDPOINT_TYPE_HEALTH
+
+    # Metrics endpoint (moderate rate limit for scraping)
+    if path.startswith("/metrics"):
+        return ENDPOINT_TYPE_METRICS
+
+    # Documentation endpoints (low rate limit)
+    if path.startswith("/docs"):
+        return ENDPOINT_TYPE_DOCS
+
+    # Heartbeat endpoints (default heartbeat rate limit)
     heartbeat_prefixes = (
         "/heartbeat",
         "/v1/heartbeat",
         "/v2/heartbeat",
     )
-
     if any(path.startswith(prefix) for prefix in heartbeat_prefixes):
         return "heartbeat"
 
@@ -129,9 +181,12 @@ def rate_limit(
     Should be applied AFTER authentication middleware so that
     the API key ID is available in Flask's g context.
 
+    All endpoints are rate limited - there are no bypasses. Different endpoint
+    types have different rate limits configured via environment variables.
+
     Args:
-        endpoint_type: Type of endpoint - "heartbeat" or "management".
-                      If None, auto-detects based on path.
+        endpoint_type: Type of endpoint - "health", "metrics", "docs",
+                      "heartbeat", or "management". If None, auto-detects.
         config: Optional custom rate limit configuration
 
     Returns:
@@ -152,19 +207,15 @@ def rate_limit(
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def decorated_function(*args: Any, **kwargs: Any) -> Any:
-            # Check if path should bypass rate limiting
-            if _should_bypass_rate_limit(request.path):
-                return f(*args, **kwargs)
-
             # Get API key ID for rate limiting bucket
             api_key_id = _get_api_key_id()
 
             if api_key_id is None:
-                # No API key - use IP address as fallback for rate limiting
-                # This handles unauthenticated requests that somehow bypass auth
+                # No API key - use IP address as fallback for rate limiting.
+                # This handles unauthenticated requests.
                 api_key_id = f"ip:{request.remote_addr}"
                 logger.debug(
-                    f"No API key found, using IP for rate limiting: {api_key_id}"
+                    f"No API key, using IP for rate limiting: {api_key_id}"
                 )
 
             # Determine endpoint type
@@ -172,8 +223,13 @@ def rate_limit(
             if etype is None:
                 etype = _determine_endpoint_type(request.path)
 
+            # Use custom config if provided, else get endpoint-specific config
+            effective_config = config
+            if effective_config is None:
+                effective_config = _get_endpoint_rate_limit_config(etype)
+
             # Check rate limit
-            result = check_rate_limit(str(api_key_id), etype, config)
+            result = check_rate_limit(str(api_key_id), etype, effective_config)
 
             if not result.allowed:
                 logger.debug(
@@ -181,7 +237,9 @@ def rate_limit(
                     f"Limit: {result.limit}, Reset: {result.reset_at}"
                 )
                 body, status, headers = _create_rate_limit_response(result)
-                response = Response(body, status=status, mimetype="application/json")
+                response = Response(
+                    body, status=status, mimetype="application/json"
+                )
                 for key, value in headers.items():
                     response.headers[key] = value
                 return response
@@ -211,7 +269,9 @@ def rate_limit(
             else:
                 # Plain string response - wrap it
                 headers = _create_rate_limit_headers(result)
-                resp = Response(response, status=200, mimetype="application/json")
+                resp = Response(
+                    response, status=200, mimetype="application/json"
+                )
                 for key, value in headers.items():
                     resp.headers[key] = value
                 return resp
@@ -246,9 +306,11 @@ def verify_rate_limit(
     Verify rate limit for the current request without using decorator.
 
     This can be called directly in route handlers for more control.
+    All endpoints are rate limited - no bypasses.
 
     Args:
-        endpoint_type: Type of endpoint - "heartbeat" or "management"
+        endpoint_type: Type of endpoint - "health", "metrics", "docs",
+                      "heartbeat", or "management"
         config: Optional custom rate limit configuration
         key_override: Optional override for the rate limit key (e.g., for
                      webhook endpoints that don't use API keys)
@@ -257,10 +319,6 @@ def verify_rate_limit(
         None if rate limit not exceeded,
         tuple of (response_body, status_code, headers) if exceeded
     """
-    # Check if path should bypass rate limiting
-    if _should_bypass_rate_limit(request.path):
-        return None
-
     # Determine rate limit key
     if key_override is not None:
         rate_key = key_override
@@ -277,8 +335,13 @@ def verify_rate_limit(
     if etype is None:
         etype = _determine_endpoint_type(request.path)
 
+    # Use custom config if provided, otherwise get endpoint-specific config
+    effective_config = config
+    if effective_config is None:
+        effective_config = _get_endpoint_rate_limit_config(etype)
+
     # Check rate limit
-    result = check_rate_limit(rate_key, etype, config)
+    result = check_rate_limit(rate_key, etype, effective_config)
 
     if not result.allowed:
         return _create_rate_limit_response(result)
