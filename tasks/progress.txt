@@ -29,6 +29,23 @@
 - tsconfig.app.json has erasableSyntaxOnly: true - don't use public constructor parameters in classes
 - API client factory pattern: createApiClient() returns object with methods, allows setApiKey() for runtime config
 
+- AuthProvider pattern: use useMemo for context value to avoid unnecessary re-renders
+- AuthContext syncs API key to apiClient.setApiKey() on login/logout for consistent API calls
+
+---
+
+## 2026-02-04 - US-014 - Linear Issue: SRE-61
+- What was implemented: Created AuthContext with authentication state and methods for API key management
+- Files changed:
+  - ui/src/components/auth-provider.tsx (new - AuthProvider context and useAuth hook)
+  - ui/src/main.tsx (wrapped App in AuthProvider)
+- **Learnings for future iterations:**
+  - AuthProvider follows same pattern as ThemeProvider with createContext + useContext
+  - sessionStorage used for API key (not localStorage) per security requirements
+  - useCallback for login/logout to prevent unnecessary re-renders
+  - useMemo for context value object to prevent unnecessary consumer re-renders
+  - apiClient.setApiKey() synced whenever API key changes (login/logout)
+  - ESLint rule override for *-provider.tsx files already in eslint.config.js
 ---
 
 ## 2026-02-04 - US-013 - Linear Issue: SRE-61
