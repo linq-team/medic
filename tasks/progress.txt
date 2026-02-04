@@ -14,6 +14,51 @@
 - **When local var shadows import name, alias the import (e.g., `now as get_now`) to avoid `now = now()` conflicts**
 - **Playbook package: Import models and db ops from `Medic.Core.playbook` (not playbook_engine)**
 - **Test patches: Use `Medic.Core.playbook.db.db` for db operations moved to playbook package, `Medic.Core.playbook_engine.db` for functions remaining in engine**
+- **Executor patches: When testing executor functions directly, patch at `Medic.Core.playbook.executors.<executor_name>.<function>` (e.g., `Medic.Core.playbook.executors.webhook.create_step_result`)**
+
+---
+
+## 2026-02-04 - US-008 - Linear Issue: SRE-35
+- **What was implemented**: Extracted playbook step executors to separate modules
+  - Created `Medic/Core/playbook/executors/` package directory
+  - Created `Medic/Core/playbook/executors/__init__.py` with exports for all executors
+  - Created `Medic/Core/playbook/executors/webhook.py` with:
+    - `execute_webhook_step()`: HTTP request execution with variable/secret substitution
+    - `substitute_variables()`: ${VAR_NAME} syntax substitution
+    - `substitute_all()`: Combined variable and secret substitution
+    - `_build_webhook_context()`: Build execution context for substitutions
+  - Created `Medic/Core/playbook/executors/script.py` with:
+    - `execute_script_step()`: Pre-registered script execution with resource limits
+    - `get_registered_script()`: Fetch script from database
+    - `RegisteredScript`: Dataclass for script metadata
+    - `_get_script_env()`: Build secure environment (allowlist-based)
+    - `_substitute_script_variables()`: Script content substitution
+  - Created `Medic/Core/playbook/executors/condition.py` with:
+    - `execute_condition_step()`: Condition polling with timeout
+    - `check_heartbeat_received()`: Heartbeat condition checker
+  - Created `Medic/Core/playbook/executors/wait.py` with:
+    - `execute_wait_step()`: Simple duration-based wait
+  - Updated `playbook_engine.py` to import from executors and re-export for backwards compatibility
+  - Updated 50+ test patches to use correct module paths
+
+- **Files changed**:
+  - `Medic/Core/playbook/executors/__init__.py` (new)
+  - `Medic/Core/playbook/executors/webhook.py` (new)
+  - `Medic/Core/playbook/executors/script.py` (new)
+  - `Medic/Core/playbook/executors/condition.py` (new)
+  - `Medic/Core/playbook/executors/wait.py` (new)
+  - `Medic/Core/playbook_engine.py` (refactored imports, removed executor code)
+  - `tests/unit/test_playbook_engine.py` (updated 50+ mock patches)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - When extracting functions to new modules, ALL patches must be updated to new locations
+  - Patches must target where functions are IMPORTED/USED, not where they're defined
+  - For executor functions, patch at `Medic.Core.playbook.executors.<executor>.<function>`
+  - Re-exports with `# noqa: F401` on import line maintains backwards compatibility
+  - Testing scripts that use db.query_db requires patching `Medic.Core.playbook.executors.<module>.db`
+  - Executor tests that directly call the function need patches at the executor module level
+  - Engine tests that use execute_step() may need patches at wait module for WaitStep tests
 
 ---
 
