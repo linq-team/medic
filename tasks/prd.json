@@ -632,8 +632,8 @@
         "Typecheck passes"
       ],
       "priority": 43,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented POST /v2/webhooks/playbooks/:id/trigger in Medic/Core/routes.py. Authentication via X-Webhook-Secret header (compared with MEDIC_WEBHOOK_SECRET env var using constant-time comparison). Rate limiting at 10 req/min per source IP via verify_rate_limit() with key_override. Added key_override parameter to verify_rate_limit() in rate_limit_middleware.py. 13 integration tests in tests/integration/test_api.py."
     },
     {
       "id": "US-044",

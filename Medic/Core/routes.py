@@ -929,6 +929,225 @@ def exposeRoutes(app):
     # Slack Interaction Webhook Endpoint
     # =========================================================================
 
+    # =========================================================================
+    # Webhook Playbook Trigger Endpoint
+    # =========================================================================
+
+    @app.route('/v2/webhooks/playbooks/<int:playbook_id>/trigger', methods=['POST'])
+    def webhook_trigger_playbook(playbook_id):
+        """
+        Trigger a playbook execution via webhook from external systems.
+
+        Authentication is via webhook secret in X-Webhook-Secret header.
+        The secret must match the MEDIC_WEBHOOK_SECRET environment variable.
+
+        Request body (JSON):
+            service_id: Optional service ID for the execution context
+            variables: Optional dictionary of variables to pass to playbook
+
+        Returns:
+            JSON with execution_id and status on success
+
+        Rate limited to 10 requests per minute per source IP.
+        """
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            get_playbook_by_id,
+            start_playbook_execution,
+        )
+        from Medic.Core.rate_limiter import RateLimitConfig
+        from Medic.Core.rate_limit_middleware import verify_rate_limit
+
+        # =====================================================================
+        # Authenticate via webhook secret
+        # =====================================================================
+        webhook_secret = os.environ.get("MEDIC_WEBHOOK_SECRET")
+        if not webhook_secret:
+            logger.log(
+                level=40,
+                msg="MEDIC_WEBHOOK_SECRET not configured for webhook endpoint"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Webhook endpoint not configured",
+                "results": ""
+            }), 503
+
+        # Get secret from header
+        provided_secret = request.headers.get("X-Webhook-Secret")
+        if not provided_secret:
+            logger.log(
+                level=30,
+                msg="Webhook trigger request missing X-Webhook-Secret header"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Missing X-Webhook-Secret header",
+                "results": ""
+            }), 401
+
+        # Use constant-time comparison to prevent timing attacks
+        import hmac
+        if not hmac.compare_digest(webhook_secret, provided_secret):
+            logger.log(
+                level=30,
+                msg="Webhook trigger request with invalid secret"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Invalid webhook secret",
+                "results": ""
+            }), 401
+
+        # =====================================================================
+        # Apply rate limiting: 10 req/min per IP for webhooks
+        # =====================================================================
+        webhook_rate_config = RateLimitConfig(
+            heartbeat_limit=100,  # Not used for this endpoint
+            management_limit=10,  # 10 req/min for webhook triggers
+            window_seconds=60,
+        )
+
+        # Use IP-based rate limiting for webhooks since no API key
+        remote_ip = request.remote_addr or "unknown"
+        rate_key = f"webhook:{remote_ip}"
+
+        rate_limit_response = verify_rate_limit(
+            endpoint_type="management",
+            config=webhook_rate_config,
+            key_override=rate_key,
+        )
+        if rate_limit_response is not None:
+            body, status, headers = rate_limit_response
+            return body, status, headers
+
+        # =====================================================================
+        # Verify playbook exists
+        # =====================================================================
+        playbook = get_playbook_by_id(playbook_id)
+        if not playbook:
+            logger.log(
+                level=30,
+                msg=f"Playbook ID {playbook_id} not found for webhook trigger"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Playbook ID {playbook_id} not found.",
+                "results": ""
+            }), 404
+
+        # =====================================================================
+        # Parse request body
+        # =====================================================================
+        service_id = None
+        variables = {}
+
+        if request.data:
+            try:
+                jData = json.loads(request.data)
+                service_id = jData.get('service_id')
+                variables = jData.get('variables', {})
+
+                # Validate service_id if provided
+                if service_id is not None:
+                    if not isinstance(service_id, int):
+                        try:
+                            service_id = int(service_id)
+                        except (ValueError, TypeError):
+                            return json.dumps({
+                                "success": False,
+                                "message": "service_id must be an integer.",
+                                "results": ""
+                            }), 400
+
+                    # Verify service exists if provided
+                    service_check = db.query_db(
+                        "SELECT service_id, heartbeat_name FROM services "
+                        "WHERE service_id = %s LIMIT 1",
+                        (service_id,),
+                        show_columns=True
+                    )
+                    if not service_check or service_check == '[]':
+                        return json.dumps({
+                            "success": False,
+                            "message": f"Service ID {service_id} not found.",
+                            "results": ""
+                        }), 404
+
+                # Validate variables is a dictionary
+                if variables and not isinstance(variables, dict):
+                    return json.dumps({
+                        "success": False,
+                        "message": "variables must be a dictionary.",
+                        "results": ""
+                    }), 400
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.log(
+                    level=30,
+                    msg=f"Invalid JSON in webhook trigger request: {e}"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid JSON in request body.",
+                    "results": ""
+                }), 400
+
+        # =====================================================================
+        # Build execution context and start playbook
+        # =====================================================================
+        context = dict(variables) if variables else {}
+        context['trigger'] = 'webhook'
+        context['source_ip'] = remote_ip
+
+        # Note: skip_approval=False so approval settings are respected
+        execution = start_playbook_execution(
+            playbook_id=playbook_id,
+            service_id=service_id,
+            context=context,
+            skip_approval=False,
+        )
+
+        if not execution:
+            logger.log(
+                level=40,
+                msg=f"Failed to start playbook execution via webhook for "
+                    f"playbook {playbook_id}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Failed to start playbook execution.",
+                "results": ""
+            }), 500
+
+        logger.log(
+            level=20,
+            msg=f"Started playbook execution {execution.execution_id} for "
+                f"playbook '{playbook.name}' via webhook from {remote_ip}"
+        )
+
+        # Build response
+        response_data = {
+            "execution_id": execution.execution_id,
+            "playbook_id": playbook_id,
+            "playbook_name": playbook.name,
+            "status": execution.status.value,
+            "service_id": service_id,
+        }
+
+        # Include approval info if pending
+        if execution.status == ExecutionStatus.PENDING_APPROVAL:
+            response_data["message"] = (
+                "Playbook requires approval before execution. "
+                "Approve via Slack or API."
+            )
+
+        return json.dumps({
+            "success": True,
+            "message": "Playbook execution started successfully.",
+            "results": response_data
+        }), 201
+
     @app.route('/v2/slack/interactions', methods=['POST'])
     def slack_interactions():
         """

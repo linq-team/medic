@@ -240,6 +240,7 @@ def require_rate_limit(
 def verify_rate_limit(
     endpoint_type: Optional[str] = None,
     config: Optional[RateLimitConfig] = None,
+    key_override: Optional[str] = None,
 ) -> Optional[Tuple[str, int, dict]]:
     """
     Verify rate limit for the current request without using decorator.
@@ -249,6 +250,8 @@ def verify_rate_limit(
     Args:
         endpoint_type: Type of endpoint - "heartbeat" or "management"
         config: Optional custom rate limit configuration
+        key_override: Optional override for the rate limit key (e.g., for
+                     webhook endpoints that don't use API keys)
 
     Returns:
         None if rate limit not exceeded,
@@ -258,11 +261,16 @@ def verify_rate_limit(
     if _should_bypass_rate_limit(request.path):
         return None
 
-    # Get API key ID for rate limiting bucket
-    api_key_id = _get_api_key_id()
-
-    if api_key_id is None:
-        api_key_id = f"ip:{request.remote_addr}"
+    # Determine rate limit key
+    if key_override is not None:
+        rate_key = key_override
+    else:
+        # Get API key ID for rate limiting bucket
+        api_key_id = _get_api_key_id()
+        if api_key_id is None:
+            rate_key = f"ip:{request.remote_addr}"
+        else:
+            rate_key = str(api_key_id)
 
     # Determine endpoint type
     etype = endpoint_type
@@ -270,7 +278,7 @@ def verify_rate_limit(
         etype = _determine_endpoint_type(request.path)
 
     # Check rate limit
-    result = check_rate_limit(str(api_key_id), etype, config)
+    result = check_rate_limit(rate_key, etype, config)
 
     if not result.allowed:
         return _create_rate_limit_response(result)

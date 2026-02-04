@@ -1,4 +1,5 @@
 """Integration tests for Medic API."""
+import os
 import pytest
 import json
 from unittest.mock import patch, MagicMock
@@ -1367,3 +1368,472 @@ class TestV2PlaybookExecute:
                     data = json.loads(response.data)
                     assert data["success"] is True
                     assert data["results"]["service_id"] == 42
+
+
+class TestWebhookTriggerPlaybook:
+    """Tests for POST /v2/webhooks/playbooks/:id/trigger endpoint."""
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_playbook_success(self, mock_rate, app, mock_env_vars):
+        """Test successful playbook execution via webhook."""
+        mock_rate.return_value = None  # Not rate limited
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test playbook for webhook",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=200,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.RUNNING,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/webhooks/playbooks/1/trigger",
+                    data=json.dumps({}),
+                    content_type="application/json",
+                    headers={"X-Webhook-Secret": "test-webhook-secret"}
+                )
+
+                assert response.status_code == 201
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["execution_id"] == 200
+                assert data["results"]["playbook_id"] == 1
+                assert data["results"]["playbook_name"] == "test-playbook"
+                assert data["results"]["status"] == "running"
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_missing_secret_header(
+        self, mock_rate, app, mock_env_vars
+    ):
+        """Test webhook trigger without X-Webhook-Secret header."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        response = client.post(
+            "/v2/webhooks/playbooks/1/trigger",
+            data=json.dumps({}),
+            content_type="application/json"
+            # No X-Webhook-Secret header
+        )
+
+        assert response.status_code == 401
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Missing X-Webhook-Secret" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_invalid_secret(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with invalid secret."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        response = client.post(
+            "/v2/webhooks/playbooks/1/trigger",
+            data=json.dumps({}),
+            content_type="application/json",
+            headers={"X-Webhook-Secret": "wrong-secret"}
+        )
+
+        assert response.status_code == 401
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Invalid webhook secret" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    def test_webhook_trigger_no_secret_configured(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger when MEDIC_WEBHOOK_SECRET not configured."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        # Ensure the env var is not set
+        with patch.dict(os.environ, {}, clear=False):
+            # Remove the key if it exists
+            if "MEDIC_WEBHOOK_SECRET" in os.environ:
+                del os.environ["MEDIC_WEBHOOK_SECRET"]
+
+            response = client.post(
+                "/v2/webhooks/playbooks/1/trigger",
+                data=json.dumps({}),
+                content_type="application/json",
+                headers={"X-Webhook-Secret": "some-secret"}
+            )
+
+            assert response.status_code == 503
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "not configured" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_playbook_not_found(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with non-existent playbook."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            mock_get.return_value = None
+
+            response = client.post(
+                "/v2/webhooks/playbooks/999/trigger",
+                data=json.dumps({}),
+                content_type="application/json",
+                headers={"X-Webhook-Secret": "test-webhook-secret"}
+            )
+
+            assert response.status_code == 404
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "not found" in data["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_with_service_id(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with service_id in body."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch("Medic.Core.routes.db.query_db") as mock_query:
+                mock_query.return_value = json.dumps([{
+                    "service_id": 42,
+                    "heartbeat_name": "test-service"
+                }])
+
+                with patch(
+                    "Medic.Core.playbook_engine.start_playbook_execution"
+                ) as mock_start:
+                    from Medic.Core.playbook_engine import (
+                        ExecutionStatus,
+                        PlaybookExecution,
+                    )
+                    mock_execution = PlaybookExecution(
+                        execution_id=201,
+                        playbook_id=1,
+                        service_id=42,
+                        status=ExecutionStatus.RUNNING,
+                    )
+                    mock_start.return_value = mock_execution
+
+                    response = client.post(
+                        "/v2/webhooks/playbooks/1/trigger",
+                        data=json.dumps({"service_id": 42}),
+                        content_type="application/json",
+                        headers={"X-Webhook-Secret": "test-webhook-secret"}
+                    )
+
+                    assert response.status_code == 201
+                    data = json.loads(response.data)
+                    assert data["success"] is True
+                    assert data["results"]["service_id"] == 42
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_with_variables(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with variables in body."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=202,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.RUNNING,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/webhooks/playbooks/1/trigger",
+                    data=json.dumps({
+                        "variables": {
+                            "ENV": "production",
+                            "TIMEOUT": 30
+                        }
+                    }),
+                    content_type="application/json",
+                    headers={"X-Webhook-Secret": "test-webhook-secret"}
+                )
+
+                assert response.status_code == 201
+                # Verify context was passed with variables and trigger type
+                call_kwargs = mock_start.call_args[1]
+                assert call_kwargs["context"]["ENV"] == "production"
+                assert call_kwargs["context"]["TIMEOUT"] == 30
+                assert call_kwargs["context"]["trigger"] == "webhook"
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_pending_approval(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with playbook requiring approval."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.REQUIRED,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                from Medic.Core.playbook_engine import (
+                    ExecutionStatus,
+                    PlaybookExecution,
+                )
+                mock_execution = PlaybookExecution(
+                    execution_id=203,
+                    playbook_id=1,
+                    service_id=None,
+                    status=ExecutionStatus.PENDING_APPROVAL,
+                )
+                mock_start.return_value = mock_execution
+
+                response = client.post(
+                    "/v2/webhooks/playbooks/1/trigger",
+                    data=json.dumps({}),
+                    content_type="application/json",
+                    headers={"X-Webhook-Secret": "test-webhook-secret"}
+                )
+
+                assert response.status_code == 201
+                data = json.loads(response.data)
+                assert data["success"] is True
+                assert data["results"]["status"] == "pending_approval"
+                assert "approval" in data["results"]["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_service_not_found(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with non-existent service_id."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch("Medic.Core.routes.db.query_db") as mock_query:
+                mock_query.return_value = "[]"  # Service not found
+
+                response = client.post(
+                    "/v2/webhooks/playbooks/1/trigger",
+                    data=json.dumps({"service_id": 999}),
+                    content_type="application/json",
+                    headers={"X-Webhook-Secret": "test-webhook-secret"}
+                )
+
+                assert response.status_code == 404
+                data = json.loads(response.data)
+                assert data["success"] is False
+                assert "Service ID 999 not found" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_invalid_json(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with invalid JSON body."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            response = client.post(
+                "/v2/webhooks/playbooks/1/trigger",
+                data="not valid json",
+                content_type="application/json",
+                headers={"X-Webhook-Secret": "test-webhook-secret"}
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "Invalid JSON" in data["message"]
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_invalid_service_id(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger with non-integer service_id."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            response = client.post(
+                "/v2/webhooks/playbooks/1/trigger",
+                data=json.dumps({"service_id": "not-an-int"}),
+                content_type="application/json",
+                headers={"X-Webhook-Secret": "test-webhook-secret"}
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert data["success"] is False
+            assert "integer" in data["message"].lower()
+
+    @patch("Medic.Core.rate_limit_middleware.verify_rate_limit")
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_execution_failure(self, mock_rate, app, mock_env_vars):
+        """Test webhook trigger when execution fails to start."""
+        mock_rate.return_value = None
+        client = app.test_client()
+
+        with patch("Medic.Core.playbook_engine.get_playbook_by_id") as mock_get:
+            from Medic.Core.playbook_parser import (
+                ApprovalMode,
+                Playbook,
+                WaitStep,
+            )
+            mock_playbook = Playbook(
+                name="test-playbook",
+                description="Test",
+                steps=[WaitStep(name="wait", duration_seconds=1)],
+                approval=ApprovalMode.NONE,
+            )
+            mock_get.return_value = mock_playbook
+
+            with patch(
+                "Medic.Core.playbook_engine.start_playbook_execution"
+            ) as mock_start:
+                mock_start.return_value = None  # Execution failed to start
+
+                response = client.post(
+                    "/v2/webhooks/playbooks/1/trigger",
+                    data=json.dumps({}),
+                    content_type="application/json",
+                    headers={"X-Webhook-Secret": "test-webhook-secret"}
+                )
+
+                assert response.status_code == 500
+                data = json.loads(response.data)
+                assert data["success"] is False
+                assert "Failed to start" in data["message"]
+
+    @patch.dict(os.environ, {"MEDIC_WEBHOOK_SECRET": "test-webhook-secret"})
+    def test_webhook_trigger_rate_limited(self, app, mock_env_vars):
+        """Test webhook trigger when rate limited."""
+        client = app.test_client()
+
+        with patch(
+            "Medic.Core.rate_limit_middleware.verify_rate_limit"
+        ) as mock_rate:
+            # Simulate rate limit exceeded
+            mock_rate.return_value = (
+                json.dumps({
+                    "success": False,
+                    "message": "Rate limit exceeded",
+                    "retry_after": 30
+                }),
+                429,
+                {"Retry-After": "30"}
+            )
+
+            response = client.post(
+                "/v2/webhooks/playbooks/1/trigger",
+                data=json.dumps({}),
+                content_type="application/json",
+                headers={"X-Webhook-Secret": "test-webhook-secret"}
+            )
+
+            assert response.status_code == 429
+            data = json.loads(response.data)
+            assert data["success"] is False
