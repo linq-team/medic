@@ -406,6 +406,217 @@ class TestRequireAuthAlias:
         assert callable(decorator2)
 
 
+class TestGetApiKeyFromDbTimingAttack:
+    """Tests for _get_api_key_from_db timing attack mitigation."""
+
+    def test_all_keys_checked_even_when_match_found_early(self):
+        """
+        Test that all keys are checked even when a match is found early.
+
+        This prevents timing attacks where attackers could measure response
+        time to determine if their key matched one early in the database.
+        """
+        from Medic.Core.auth_middleware import _get_api_key_from_db
+
+        # Create 5 API keys - the valid key will be the FIRST one
+        key_data = [
+            {
+                "api_key_id": 1,
+                "name": "key-1-match",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash1",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 2,
+                "name": "key-2",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash2",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 3,
+                "name": "key-3",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash3",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 4,
+                "name": "key-4",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash4",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 5,
+                "name": "key-5",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash5",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+        ]
+
+        with patch("Medic.Core.auth_middleware.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps(key_data)
+
+            with patch("Medic.Core.auth_middleware.verify_api_key") as mock_verify:
+                # First key matches, rest don't
+                mock_verify.side_effect = [True, False, False, False, False]
+
+                result = _get_api_key_from_db("mdk_test_key")
+
+                # Should return the matched key
+                assert result is not None
+                assert result["api_key_id"] == 1
+                assert result["name"] == "key-1-match"
+
+                # CRITICAL: verify_api_key should have been called for ALL 5 keys
+                # This is the timing attack mitigation - we must check all keys
+                assert mock_verify.call_count == 5, (
+                    f"Expected 5 calls to verify_api_key but got {mock_verify.call_count}. "
+                    "All keys must be checked to prevent timing attacks."
+                )
+
+    def test_all_keys_checked_when_match_in_middle(self):
+        """Test that all keys are checked when match is in the middle."""
+        from Medic.Core.auth_middleware import _get_api_key_from_db
+
+        key_data = [
+            {
+                "api_key_id": 1,
+                "name": "key-1",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash1",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 2,
+                "name": "key-2-match",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash2",
+                "scopes": ["write"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 3,
+                "name": "key-3",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash3",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+        ]
+
+        with patch("Medic.Core.auth_middleware.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps(key_data)
+
+            with patch("Medic.Core.auth_middleware.verify_api_key") as mock_verify:
+                # Second key matches
+                mock_verify.side_effect = [False, True, False]
+
+                result = _get_api_key_from_db("mdk_test_key")
+
+                assert result is not None
+                assert result["api_key_id"] == 2
+                assert result["name"] == "key-2-match"
+
+                # All 3 keys must be checked
+                assert mock_verify.call_count == 3
+
+    def test_all_keys_checked_when_no_match(self):
+        """Test that all keys are checked when no match found."""
+        from Medic.Core.auth_middleware import _get_api_key_from_db
+
+        key_data = [
+            {
+                "api_key_id": 1,
+                "name": "key-1",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash1",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 2,
+                "name": "key-2",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash2",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+        ]
+
+        with patch("Medic.Core.auth_middleware.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps(key_data)
+
+            with patch("Medic.Core.auth_middleware.verify_api_key") as mock_verify:
+                # No keys match
+                mock_verify.return_value = False
+
+                result = _get_api_key_from_db("mdk_invalid_key")
+
+                assert result is None
+                # Both keys must still be checked
+                assert mock_verify.call_count == 2
+
+    def test_returns_last_match_when_multiple_matches(self):
+        """Test behavior when multiple keys match (edge case)."""
+        from Medic.Core.auth_middleware import _get_api_key_from_db
+
+        # This shouldn't happen in practice, but test the behavior
+        key_data = [
+            {
+                "api_key_id": 1,
+                "name": "key-1-match",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash1",
+                "scopes": ["read"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "api_key_id": 2,
+                "name": "key-2-match",
+                "key_hash": "$argon2id$v=19$m=65536,t=3,p=4$hash2",
+                "scopes": ["write"],
+                "expires_at": None,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            },
+        ]
+
+        with patch("Medic.Core.auth_middleware.db.query_db") as mock_query:
+            mock_query.return_value = json.dumps(key_data)
+
+            with patch("Medic.Core.auth_middleware.verify_api_key") as mock_verify:
+                # Both keys match (edge case)
+                mock_verify.return_value = True
+
+                result = _get_api_key_from_db("mdk_test_key")
+
+                # Should return the last match (since we iterate through all)
+                assert result is not None
+                assert result["api_key_id"] == 2
+                assert mock_verify.call_count == 2
+
+
 class TestVerifyRequestAuth:
     """Tests for verify_request_auth function."""
 
