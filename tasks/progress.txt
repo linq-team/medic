@@ -36,7 +36,25 @@
 - TypeScript verbatimModuleSyntax: use `type` keyword for type imports (e.g., `import { useState, type FormEvent }`)
 - shadcn/ui Input component uses CSS variable classes (border-input, ring, etc.) from index.css
 - ProtectedRoute pattern: wrap layout/routes with component that checks isAuthenticated and redirects to /login
+- React Query hooks pattern: create query key factories (e.g., servicesKeys) for consistent cache key management
+- React Query hooks pattern: export filters interface and separate hooks for list/detail queries
 
+---
+
+## 2026-02-04 - US-017 - Linear Issue: SRE-88
+- What was implemented: Installed React Query and created QueryClient with sensible defaults for data fetching
+- Files changed:
+  - ui/package.json (added @tanstack/react-query dependency)
+  - ui/src/main.tsx (added QueryClient and QueryClientProvider)
+  - ui/src/hooks/use-services.ts (new - useServices and useService query hooks)
+  - ui/src/hooks/index.ts (new - barrel export for hooks)
+- **Learnings for future iterations:**
+  - React Query v5 renamed cacheTime to gcTime (garbage collection time)
+  - QueryClientProvider should wrap BrowserRouter and other providers for universal access
+  - Query key factory pattern: create object with all, lists, list(filters), details, detail(id) methods
+  - Use Omit<UseQueryOptions<...>, 'queryKey' | 'queryFn'> to allow custom options while enforcing core props
+  - staleTime: 30s is good default for dashboard data that doesn't change frequently
+  - gcTime: 5 minutes keeps unused data around for back navigation without refetch
 ---
 
 ## 2026-02-04 - US-016 - Linear Issue: SRE-61

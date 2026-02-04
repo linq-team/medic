@@ -264,8 +264,8 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed in SRE-88. Installed @tanstack/react-query, created QueryClient with 30s staleTime and 5m gcTime, added QueryClientProvider in main.tsx, created useServices and useService hooks in src/hooks/."
     },
     {
       "id": "US-018",
