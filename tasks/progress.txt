@@ -497,3 +497,19 @@
   - formatSummary() extracts meaningful fields from details JSON (step_name, playbook_name, message, error, result)
   - Table columns: Timestamp (font-mono), Action Type (color-coded badge), Actor, Execution ID (font-mono), Summary (truncated)
 ---
+
+## 2026-02-04 - US-030 - Linear Issue: SRE-81
+- What was implemented: Created Settings page for UI preferences with theme toggle and auto-refresh configuration
+- Files changed:
+  - ui/src/components/settings-provider.tsx (new - SettingsProvider context for auto-refresh interval)
+  - ui/src/pages/Settings.tsx (replaced placeholder with full implementation)
+  - ui/src/main.tsx (added SettingsProvider to provider hierarchy)
+- **Learnings for future iterations:**
+  - SettingsProvider follows same pattern as ThemeProvider - createContext + useContext + localStorage persistence
+  - RefreshInterval type is union of specific values: 0 | 15000 | 30000 | 60000 (milliseconds)
+  - Settings page uses Card components for grouping: Appearance, Auto-Refresh, Reset Settings
+  - Theme toggle uses custom button grid with visual icons (Sun/Moon/Monitor) rather than Select dropdown
+  - Auto-refresh interval uses Select dropdown with refreshIntervalOptions array
+  - resetToDefaults only resets SettingsProvider settings, not theme (theme managed separately by ThemeProvider)
+  - ESLint override for *-provider.tsx already existed, so no config change needed
+---
