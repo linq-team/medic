@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Server, AlertTriangle } from 'lucide-react'
+import { Server, AlertTriangle, Plus } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -7,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TablePagination, usePagination } from '@/components/table-pagination'
 import { SortableTableHead, useSort } from '@/components/table-sort'
@@ -14,6 +16,7 @@ import { TableFilters, useFilter, type FilterConfig } from '@/components/table-f
 import { SearchInput, useSearch } from '@/components/table-search'
 import { MuteToggle, ActiveToggle } from '@/components/service-toggle'
 import { PrioritySelector } from '@/components/priority-selector'
+import { ServiceCreateModal } from '@/components/service-create-modal'
 import { useServices } from '@/hooks'
 import { cn } from '@/lib/utils'
 
@@ -91,6 +94,7 @@ function EmptyState() {
  * Services list page with table displaying all registered services
  */
 export function Services() {
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const { data, isLoading, error } = useServices()
   const { pageSize, offset } = usePagination('page', PAGE_SIZE)
   const { sortColumn, sortDirection, toggleSort, sortItems } = useSort(
@@ -128,10 +132,23 @@ export function Services() {
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold text-foreground mb-2">Services</h1>
-      <p className="text-muted-foreground mb-8">
-        View and manage all registered services and their heartbeat status.
-      </p>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Services</h1>
+          <p className="text-muted-foreground">
+            View and manage all registered services and their heartbeat status.
+          </p>
+        </div>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Service
+        </Button>
+      </div>
+
+      <ServiceCreateModal
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+      />
 
       {error && (
         <div className="mb-6 p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
