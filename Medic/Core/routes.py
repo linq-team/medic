@@ -11,6 +11,7 @@ import logging
 import Medic.Core.database as db
 import Medic.Core.metrics as metrics
 import Medic.Core.health as health
+import Medic.Core.job_runs as job_runs
 import Medic.Helpers.heartbeat as hbeat
 import Medic.Helpers.logSettings as logLevel
 
@@ -432,6 +433,806 @@ def exposeRoutes(app):
                 "message": "Unable to load swagger file",
                 "results": ""
             }), 500
+
+    # V2 API Endpoints for Start/Complete/Fail Signals
+    @app.route('/v2/heartbeat/<int:service_id>/start', methods=['POST'])
+    def heartbeat_start(service_id):
+        """Record a STARTED status for a service with optional run_id."""
+        return _record_job_signal(
+            service_id,
+            hbeat.HeartbeatStatus.STARTED.value
+        )
+
+    @app.route('/v2/heartbeat/<int:service_id>/complete', methods=['POST'])
+    def heartbeat_complete(service_id):
+        """Record a COMPLETED status for a service with optional run_id."""
+        return _record_job_signal(
+            service_id,
+            hbeat.HeartbeatStatus.COMPLETED.value
+        )
+
+    @app.route('/v2/heartbeat/<int:service_id>/fail', methods=['POST'])
+    def heartbeat_fail(service_id):
+        """Record a FAILED status for a service with optional run_id."""
+        return _record_job_signal(
+            service_id,
+            hbeat.HeartbeatStatus.FAILED.value
+        )
+
+    @app.route('/v2/services/<int:service_id>/stats', methods=['GET'])
+    def service_duration_stats(service_id):
+        """
+        Get duration statistics for a service's job runs.
+
+        Returns avg, p50, p95, p99 durations from the last 100 completed runs.
+        Returns empty stats (null values) if fewer than 5 runs are available.
+        """
+        # Verify service exists
+        service_check = db.query_db(
+            "SELECT service_id, heartbeat_name FROM services "
+            "WHERE service_id = %s LIMIT 1",
+            (service_id,),
+            show_columns=True
+        )
+
+        if not service_check or service_check == '[]':
+            logger.log(
+                level=30,
+                msg=f"Service ID {service_id} not found for stats request"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Service ID {service_id} not found.",
+                "results": ""
+            }), 404
+
+        # Get duration statistics
+        stats = job_runs.get_duration_statistics(service_id)
+
+        logger.log(
+            level=10,
+            msg=f"Duration stats for service {service_id}: "
+                f"count={stats.run_count}"
+        )
+
+        return json.dumps({
+            "success": True,
+            "message": "",
+            "results": stats.to_dict()
+        }), 200
+
+    def _record_job_signal(service_id, status):
+        """
+        Internal helper to record a job signal (start/complete/fail).
+
+        Args:
+            service_id: The service ID to record the signal for
+            status: The HeartbeatStatus value (STARTED, COMPLETED, FAILED)
+
+        Returns:
+            JSON response tuple (body, status_code)
+        """
+        # Verify service exists and is active
+        service_check = db.query_db(
+            "SELECT service_id, heartbeat_name, active FROM services "
+            "WHERE service_id = %s LIMIT 1",
+            (service_id,),
+            show_columns=True
+        )
+
+        if not service_check or service_check == '[]':
+            logger.log(
+                level=30,
+                msg=f"Service ID {service_id} not found for job signal"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Service ID {service_id} not found.",
+                "results": ""
+            }), 404
+
+        service_data = json.loads(service_check)
+        if not service_data:
+            return json.dumps({
+                "success": False,
+                "message": f"Service ID {service_id} not found.",
+                "results": ""
+            }), 404
+
+        service = service_data[0]
+        heartbeat_name = service['heartbeat_name']
+        active = service['active']
+
+        if int(active) == 0:
+            logger.log(
+                level=30,
+                msg=f"Service {heartbeat_name} (ID: {service_id}) is inactive"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Service {heartbeat_name} is inactive.",
+                "results": ""
+            }), 400
+
+        # Parse optional run_id from request body
+        run_id = None
+        if request.data:
+            try:
+                jData = json.loads(request.data)
+                run_id = jData.get('run_id')
+            except (json.JSONDecodeError, ValueError):
+                pass  # run_id is optional, ignore parse errors
+
+        # Create and save heartbeat
+        my_heartbeat = hbeat.Heartbeat(
+            service_id,
+            heartbeat_name,
+            status,
+            run_id=run_id
+        )
+        res = hbeat.addHeartbeat(my_heartbeat)
+
+        if res:
+            # Track job run for duration statistics if run_id is provided
+            job_run_result = None
+            duration_alert = None
+            if run_id:
+                if status == hbeat.HeartbeatStatus.STARTED.value:
+                    job_run_result = job_runs.record_job_start(
+                        service_id, run_id
+                    )
+                elif status in (
+                    hbeat.HeartbeatStatus.COMPLETED.value,
+                    hbeat.HeartbeatStatus.FAILED.value
+                ):
+                    job_run_result = job_runs.record_job_completion(
+                        service_id, run_id, status
+                    )
+                    # Check duration threshold for completed jobs
+                    if job_run_result:
+                        duration_alert = job_runs.check_duration_threshold(
+                            job_run_result
+                        )
+                        if duration_alert:
+                            # Record metric for duration exceeded
+                            metrics.record_duration_alert("exceeded")
+
+            logger.log(
+                level=10,
+                msg=f"Job signal {status} recorded for {heartbeat_name}"
+                    f" (run_id: {run_id})"
+            )
+
+            # Build response with optional duration info
+            results = {
+                "service_id": service_id,
+                "heartbeat_name": heartbeat_name,
+                "status": status,
+                "run_id": run_id
+            }
+            if job_run_result and job_run_result.duration_ms is not None:
+                results["duration_ms"] = job_run_result.duration_ms
+            if duration_alert:
+                results["duration_alert"] = {
+                    "alert_type": duration_alert.alert_type,
+                    "max_duration_ms": duration_alert.max_duration_ms,
+                    "exceeded_by_ms": (
+                        (duration_alert.duration_ms or 0) -
+                        duration_alert.max_duration_ms
+                    )
+                }
+
+            return json.dumps({
+                "success": True,
+                "message": f"Job signal {status} recorded successfully.",
+                "results": results
+            }), 201
+        else:
+            logger.log(
+                level=40,
+                msg=f"Failed to record job signal {status} for {heartbeat_name}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Failed to record job signal {status}.",
+                "results": ""
+            }), 500
+
+    # =========================================================================
+    # Audit Log Query API
+    # =========================================================================
+
+    @app.route('/v2/audit-logs', methods=['GET'])
+    def audit_logs():
+        """
+        Query and export audit logs with flexible filtering.
+
+        Query parameters:
+            execution_id: Filter by execution ID
+            service_id: Filter by service ID
+            action_type: Filter by action type (e.g., execution_started,
+                         step_completed, approved)
+            actor: Filter by actor (user who performed action)
+            start_date: Filter logs on or after this date (ISO format)
+            end_date: Filter logs on or before this date (ISO format)
+            limit: Maximum entries to return (default 50, max 250)
+            offset: Number of entries to skip for pagination
+
+        Headers:
+            Accept: application/json (default) or text/csv for CSV export
+
+        Returns:
+            JSON with entries, pagination info, or CSV data
+        """
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            audit_logs_to_csv,
+            query_audit_logs,
+        )
+
+        # Parse query parameters
+        execution_id = request.args.get('execution_id', type=int)
+        service_id = request.args.get('service_id', type=int)
+        action_type = request.args.get('action_type')
+        actor = request.args.get('actor')
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        limit = request.args.get('limit', default=50, type=int)
+        offset = request.args.get('offset', default=0, type=int)
+
+        # Validate action_type if provided
+        if action_type and not AuditActionType.is_valid(action_type):
+            valid_types = [t.value for t in AuditActionType]
+            return json.dumps({
+                "success": False,
+                "message": f"Invalid action_type. Must be one of: "
+                           f"{', '.join(valid_types)}",
+                "results": ""
+            }), 400
+
+        # Parse date parameters
+        start_date = None
+        end_date = None
+
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(
+                    start_date_str.replace('Z', '+00:00')
+                )
+            except ValueError:
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid start_date format. Use ISO format "
+                               "(e.g., 2026-01-01T00:00:00Z)",
+                    "results": ""
+                }), 400
+
+        if end_date_str:
+            try:
+                end_date = datetime.fromisoformat(
+                    end_date_str.replace('Z', '+00:00')
+                )
+            except ValueError:
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid end_date format. Use ISO format "
+                               "(e.g., 2026-01-31T23:59:59Z)",
+                    "results": ""
+                }), 400
+
+        # Query audit logs
+        result = query_audit_logs(
+            execution_id=execution_id,
+            service_id=service_id,
+            action_type=action_type,
+            actor=actor,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+
+        logger.log(
+            level=10,
+            msg=f"Audit log query: count={len(result.entries)}, "
+                f"total={result.total_count}"
+        )
+
+        # Check Accept header for export format
+        accept_header = request.headers.get('Accept', 'application/json')
+
+        if 'text/csv' in accept_header:
+            # Return CSV format
+            csv_content = audit_logs_to_csv(result.entries)
+            return Response(
+                csv_content,
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition': 'attachment; '
+                                           'filename=audit_logs.csv',
+                    'X-Total-Count': str(result.total_count),
+                    'X-Limit': str(result.limit),
+                    'X-Offset': str(result.offset),
+                    'X-Has-More': str(result.has_more).lower(),
+                }
+            )
+
+        # Return JSON format (default)
+        return json.dumps({
+            "success": True,
+            "message": "",
+            "results": result.to_dict()
+        }), 200
+
+    # =========================================================================
+    # Playbook Execution API
+    # =========================================================================
+
+    @app.route('/v2/playbooks/<int:playbook_id>/execute', methods=['POST'])
+    def execute_playbook(playbook_id):
+        """
+        Trigger a playbook execution via API.
+
+        Request body (JSON):
+            service_id: Optional service ID for the execution context
+            variables: Optional dictionary of variables to pass to playbook
+
+        Returns:
+            JSON with execution_id and status on success
+
+        Rate limited to 10 requests per minute per API key.
+        """
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            get_playbook_by_id,
+            start_playbook_execution,
+        )
+        from Medic.Core.rate_limiter import RateLimitConfig
+        from Medic.Core.rate_limit_middleware import verify_rate_limit
+
+        # Apply rate limiting: 10 req/min for playbook executions
+        playbook_rate_config = RateLimitConfig(
+            heartbeat_limit=100,  # Not used for this endpoint
+            management_limit=10,  # 10 req/min for playbook executions
+            window_seconds=60,
+        )
+        rate_limit_response = verify_rate_limit(
+            endpoint_type="management",
+            config=playbook_rate_config,
+        )
+        if rate_limit_response is not None:
+            body, status, headers = rate_limit_response
+            return body, status, headers
+
+        # Verify playbook exists
+        playbook = get_playbook_by_id(playbook_id)
+        if not playbook:
+            logger.log(
+                level=30,
+                msg=f"Playbook ID {playbook_id} not found for API execution"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Playbook ID {playbook_id} not found.",
+                "results": ""
+            }), 404
+
+        # Parse request body
+        service_id = None
+        variables = {}
+
+        if request.data:
+            try:
+                jData = json.loads(request.data)
+                service_id = jData.get('service_id')
+                variables = jData.get('variables', {})
+
+                # Validate service_id if provided
+                if service_id is not None:
+                    if not isinstance(service_id, int):
+                        try:
+                            service_id = int(service_id)
+                        except (ValueError, TypeError):
+                            return json.dumps({
+                                "success": False,
+                                "message": "service_id must be an integer.",
+                                "results": ""
+                            }), 400
+
+                    # Verify service exists if provided
+                    service_check = db.query_db(
+                        "SELECT service_id, heartbeat_name FROM services "
+                        "WHERE service_id = %s LIMIT 1",
+                        (service_id,),
+                        show_columns=True
+                    )
+                    if not service_check or service_check == '[]':
+                        return json.dumps({
+                            "success": False,
+                            "message": f"Service ID {service_id} not found.",
+                            "results": ""
+                        }), 404
+
+                # Validate variables is a dictionary
+                if variables and not isinstance(variables, dict):
+                    return json.dumps({
+                        "success": False,
+                        "message": "variables must be a dictionary.",
+                        "results": ""
+                    }), 400
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.log(
+                    level=30,
+                    msg=f"Invalid JSON in playbook execute request: {e}"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid JSON in request body.",
+                    "results": ""
+                }), 400
+
+        # Build execution context from variables
+        context = dict(variables) if variables else {}
+        context['trigger'] = 'api'
+
+        # Start playbook execution
+        # Note: skip_approval=False so approval settings in playbook are respected
+        execution = start_playbook_execution(
+            playbook_id=playbook_id,
+            service_id=service_id,
+            context=context,
+            skip_approval=False,
+        )
+
+        if not execution:
+            logger.log(
+                level=40,
+                msg=f"Failed to start playbook execution for playbook "
+                    f"{playbook_id}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Failed to start playbook execution.",
+                "results": ""
+            }), 500
+
+        logger.log(
+            level=20,
+            msg=f"Started playbook execution {execution.execution_id} for "
+                f"playbook '{playbook.name}' via API"
+        )
+
+        # Build response
+        response_data = {
+            "execution_id": execution.execution_id,
+            "playbook_id": playbook_id,
+            "playbook_name": playbook.name,
+            "status": execution.status.value,
+            "service_id": service_id,
+        }
+
+        # Include approval info if pending
+        if execution.status == ExecutionStatus.PENDING_APPROVAL:
+            response_data["message"] = (
+                "Playbook requires approval before execution. "
+                "Approve via Slack or API."
+            )
+
+        return json.dumps({
+            "success": True,
+            "message": "Playbook execution started successfully.",
+            "results": response_data
+        }), 201
+
+    # =========================================================================
+    # Slack Interaction Webhook Endpoint
+    # =========================================================================
+
+    # =========================================================================
+    # Webhook Playbook Trigger Endpoint
+    # =========================================================================
+
+    @app.route('/v2/webhooks/playbooks/<int:playbook_id>/trigger', methods=['POST'])
+    def webhook_trigger_playbook(playbook_id):
+        """
+        Trigger a playbook execution via webhook from external systems.
+
+        Authentication is via webhook secret in X-Webhook-Secret header.
+        The secret must match the MEDIC_WEBHOOK_SECRET environment variable.
+
+        Request body (JSON):
+            service_id: Optional service ID for the execution context
+            variables: Optional dictionary of variables to pass to playbook
+
+        Returns:
+            JSON with execution_id and status on success
+
+        Rate limited to 10 requests per minute per source IP.
+        """
+        from Medic.Core.playbook_engine import (
+            ExecutionStatus,
+            get_playbook_by_id,
+            start_playbook_execution,
+        )
+        from Medic.Core.rate_limiter import RateLimitConfig
+        from Medic.Core.rate_limit_middleware import verify_rate_limit
+
+        # =====================================================================
+        # Authenticate via webhook secret
+        # =====================================================================
+        webhook_secret = os.environ.get("MEDIC_WEBHOOK_SECRET")
+        if not webhook_secret:
+            logger.log(
+                level=40,
+                msg="MEDIC_WEBHOOK_SECRET not configured for webhook endpoint"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Webhook endpoint not configured",
+                "results": ""
+            }), 503
+
+        # Get secret from header
+        provided_secret = request.headers.get("X-Webhook-Secret")
+        if not provided_secret:
+            logger.log(
+                level=30,
+                msg="Webhook trigger request missing X-Webhook-Secret header"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Missing X-Webhook-Secret header",
+                "results": ""
+            }), 401
+
+        # Use constant-time comparison to prevent timing attacks
+        import hmac
+        if not hmac.compare_digest(webhook_secret, provided_secret):
+            logger.log(
+                level=30,
+                msg="Webhook trigger request with invalid secret"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Invalid webhook secret",
+                "results": ""
+            }), 401
+
+        # =====================================================================
+        # Apply rate limiting: 10 req/min per IP for webhooks
+        # =====================================================================
+        webhook_rate_config = RateLimitConfig(
+            heartbeat_limit=100,  # Not used for this endpoint
+            management_limit=10,  # 10 req/min for webhook triggers
+            window_seconds=60,
+        )
+
+        # Use IP-based rate limiting for webhooks since no API key
+        remote_ip = request.remote_addr or "unknown"
+        rate_key = f"webhook:{remote_ip}"
+
+        rate_limit_response = verify_rate_limit(
+            endpoint_type="management",
+            config=webhook_rate_config,
+            key_override=rate_key,
+        )
+        if rate_limit_response is not None:
+            body, status, headers = rate_limit_response
+            return body, status, headers
+
+        # =====================================================================
+        # Verify playbook exists
+        # =====================================================================
+        playbook = get_playbook_by_id(playbook_id)
+        if not playbook:
+            logger.log(
+                level=30,
+                msg=f"Playbook ID {playbook_id} not found for webhook trigger"
+            )
+            return json.dumps({
+                "success": False,
+                "message": f"Playbook ID {playbook_id} not found.",
+                "results": ""
+            }), 404
+
+        # =====================================================================
+        # Parse request body
+        # =====================================================================
+        service_id = None
+        variables = {}
+
+        if request.data:
+            try:
+                jData = json.loads(request.data)
+                service_id = jData.get('service_id')
+                variables = jData.get('variables', {})
+
+                # Validate service_id if provided
+                if service_id is not None:
+                    if not isinstance(service_id, int):
+                        try:
+                            service_id = int(service_id)
+                        except (ValueError, TypeError):
+                            return json.dumps({
+                                "success": False,
+                                "message": "service_id must be an integer.",
+                                "results": ""
+                            }), 400
+
+                    # Verify service exists if provided
+                    service_check = db.query_db(
+                        "SELECT service_id, heartbeat_name FROM services "
+                        "WHERE service_id = %s LIMIT 1",
+                        (service_id,),
+                        show_columns=True
+                    )
+                    if not service_check or service_check == '[]':
+                        return json.dumps({
+                            "success": False,
+                            "message": f"Service ID {service_id} not found.",
+                            "results": ""
+                        }), 404
+
+                # Validate variables is a dictionary
+                if variables and not isinstance(variables, dict):
+                    return json.dumps({
+                        "success": False,
+                        "message": "variables must be a dictionary.",
+                        "results": ""
+                    }), 400
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.log(
+                    level=30,
+                    msg=f"Invalid JSON in webhook trigger request: {e}"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid JSON in request body.",
+                    "results": ""
+                }), 400
+
+        # =====================================================================
+        # Build execution context and start playbook
+        # =====================================================================
+        context = dict(variables) if variables else {}
+        context['trigger'] = 'webhook'
+        context['source_ip'] = remote_ip
+
+        # Note: skip_approval=False so approval settings are respected
+        execution = start_playbook_execution(
+            playbook_id=playbook_id,
+            service_id=service_id,
+            context=context,
+            skip_approval=False,
+        )
+
+        if not execution:
+            logger.log(
+                level=40,
+                msg=f"Failed to start playbook execution via webhook for "
+                    f"playbook {playbook_id}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Failed to start playbook execution.",
+                "results": ""
+            }), 500
+
+        logger.log(
+            level=20,
+            msg=f"Started playbook execution {execution.execution_id} for "
+                f"playbook '{playbook.name}' via webhook from {remote_ip}"
+        )
+
+        # Build response
+        response_data = {
+            "execution_id": execution.execution_id,
+            "playbook_id": playbook_id,
+            "playbook_name": playbook.name,
+            "status": execution.status.value,
+            "service_id": service_id,
+        }
+
+        # Include approval info if pending
+        if execution.status == ExecutionStatus.PENDING_APPROVAL:
+            response_data["message"] = (
+                "Playbook requires approval before execution. "
+                "Approve via Slack or API."
+            )
+
+        return json.dumps({
+            "success": True,
+            "message": "Playbook execution started successfully.",
+            "results": response_data
+        }), 201
+
+    @app.route('/v2/slack/interactions', methods=['POST'])
+    def slack_interactions():
+        """
+        Handle Slack interactive component callbacks.
+
+        This endpoint receives webhook callbacks when users click interactive
+        buttons in Slack messages, such as the approve/reject buttons for
+        playbook executions.
+
+        The payload comes as form-urlencoded data with a 'payload' field
+        containing JSON.
+
+        Slack signature verification is performed if SLACK_SIGNING_SECRET is
+        configured.
+        """
+        # Import here to avoid circular imports
+        from Medic.Core.slack_approval import (
+            get_slack_signing_secret,
+            handle_slack_interaction,
+            verify_slack_signature,
+        )
+
+        # Get raw body for signature verification
+        raw_body = request.get_data(as_text=True)
+
+        # Verify Slack signature if signing secret is configured
+        signing_secret = get_slack_signing_secret()
+        if signing_secret:
+            timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+            signature = request.headers.get('X-Slack-Signature', '')
+
+            if not verify_slack_signature(
+                signing_secret, timestamp, raw_body, signature
+            ):
+                logger.log(
+                    level=30,
+                    msg="Slack signature verification failed"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid signature"
+                }), 401
+
+        # Parse the payload
+        try:
+            # Slack sends the payload as form-urlencoded with a 'payload' field
+            payload_str = request.form.get('payload')
+            if not payload_str:
+                logger.log(
+                    level=30,
+                    msg="No payload in Slack interaction request"
+                )
+                return json.dumps({
+                    "success": False,
+                    "message": "Missing payload"
+                }), 400
+
+            payload = json.loads(payload_str)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.log(
+                level=30,
+                msg=f"Failed to parse Slack interaction payload: {e}"
+            )
+            return json.dumps({
+                "success": False,
+                "message": "Invalid payload format"
+            }), 400
+
+        # Handle the interaction
+        result = handle_slack_interaction(payload)
+
+        if result.success:
+            # Slack expects an empty 200 response for successful actions
+            # when we update the message ourselves
+            return '', 200
+        else:
+            logger.log(
+                level=30,
+                msg=f"Slack interaction handling failed: {result.message}"
+            )
+            # Return error message that will be shown to user
+            return json.dumps({
+                "response_type": "ephemeral",
+                "text": f"Error: {result.message}"
+            }), 200  # Slack expects 200 even for errors
 
 
 def validateRequestData(schema, jData):

@@ -88,6 +88,13 @@ DB_CONNECTION_ERRORS = Counter(
     'Total database connection errors'
 )
 
+# Authentication metrics
+AUTH_FAILURES = Counter(
+    'medic_auth_failures_total',
+    'Total authentication failures',
+    ['reason']
+)
+
 # External service metrics
 PAGERDUTY_REQUESTS = Counter(
     'medic_pagerduty_requests_total',
@@ -106,6 +113,49 @@ HEALTH_STATUS = Gauge(
     'medic_health_status',
     'Health status of Medic components',
     ['component']
+)
+
+# Duration threshold alerts
+DURATION_ALERTS = Counter(
+    'medic_duration_alerts_total',
+    'Total duration threshold alerts triggered',
+    ['alert_type']  # exceeded, stale
+)
+
+STALE_JOBS = Gauge(
+    'medic_stale_jobs_current',
+    'Number of currently stale jobs exceeding max duration'
+)
+
+# Circuit breaker metrics
+CIRCUIT_BREAKER_TRIPS = Counter(
+    'medic_circuit_breaker_trips_total',
+    'Total circuit breaker trips (blocked playbook executions)',
+    ['service_id']
+)
+
+CIRCUIT_BREAKER_OPEN = Gauge(
+    'medic_circuit_breaker_open',
+    'Number of services with open circuit breakers'
+)
+
+# Playbook execution metrics
+PLAYBOOK_EXECUTIONS = Counter(
+    'medic_playbook_executions_total',
+    'Total playbook executions',
+    ['playbook', 'status']
+)
+
+PLAYBOOK_EXECUTION_DURATION = Histogram(
+    'medic_playbook_execution_duration_seconds',
+    'Playbook execution duration in seconds',
+    ['playbook'],
+    buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0]
+)
+
+PLAYBOOK_EXECUTIONS_PENDING_APPROVAL = Gauge(
+    'medic_playbook_executions_pending_approval',
+    'Number of playbook executions pending approval'
 )
 
 
@@ -187,6 +237,19 @@ def record_slack_request(success: bool):
     SLACK_REQUESTS.labels(status='success' if success else 'failure').inc()
 
 
+def record_auth_failure(reason: str):
+    """
+    Record an authentication failure metric.
+
+    Args:
+        reason: The reason for the failure. Should be one of:
+                - 'invalid_key': API key not found or doesn't match
+                - 'expired_key': API key has expired
+                - 'insufficient_scope': API key lacks required scopes
+    """
+    AUTH_FAILURES.labels(reason=reason).inc()
+
+
 def update_service_counts(registered: int, active: int):
     """Update service count gauges."""
     HEARTBEAT_REGISTERED.set(registered)
@@ -196,6 +259,80 @@ def update_service_counts(registered: int, active: int):
 def update_health_status(component: str, healthy: bool):
     """Update health status gauge."""
     HEALTH_STATUS.labels(component=component).set(1 if healthy else 0)
+
+
+def record_duration_alert(alert_type: str):
+    """
+    Record a duration threshold alert metric.
+
+    Args:
+        alert_type: The type of alert. Should be one of:
+                   - 'exceeded': Job completed but exceeded max_duration
+                   - 'stale': Job started but hasn't completed within max_duration
+    """
+    DURATION_ALERTS.labels(alert_type=alert_type).inc()
+
+
+def update_stale_jobs_count(count: int):
+    """Update the current count of stale jobs."""
+    STALE_JOBS.set(count)
+
+
+def record_circuit_breaker_trip(service_id: int):
+    """
+    Record a circuit breaker trip metric.
+
+    Args:
+        service_id: The service ID that was blocked
+    """
+    CIRCUIT_BREAKER_TRIPS.labels(service_id=str(service_id)).inc()
+
+
+def update_circuit_breaker_open_count(count: int):
+    """
+    Update the count of services with open circuit breakers.
+
+    Args:
+        count: Number of services with open circuits
+    """
+    CIRCUIT_BREAKER_OPEN.set(count)
+
+
+def record_playbook_execution(playbook_name: str, status: str):
+    """
+    Record a playbook execution metric.
+
+    Args:
+        playbook_name: Name of the playbook that was executed
+        status: Final status of the execution (completed, failed, cancelled)
+    """
+    PLAYBOOK_EXECUTIONS.labels(playbook=playbook_name, status=status).inc()
+
+
+def record_playbook_execution_duration(
+    playbook_name: str,
+    duration_seconds: float
+):
+    """
+    Record the duration of a playbook execution.
+
+    Args:
+        playbook_name: Name of the playbook that was executed
+        duration_seconds: Duration of the execution in seconds
+    """
+    PLAYBOOK_EXECUTION_DURATION.labels(playbook=playbook_name).observe(
+        duration_seconds
+    )
+
+
+def update_pending_approval_count(count: int):
+    """
+    Update the count of playbook executions pending approval.
+
+    Args:
+        count: Number of executions currently pending approval
+    """
+    PLAYBOOK_EXECUTIONS_PENDING_APPROVAL.set(count)
 
 
 def get_metrics() -> bytes:

@@ -8,6 +8,50 @@ import psycopg2
 import slack_client as slack
 import pagerduty_client as pagerduty
 
+# Import maintenance window checker
+try:
+    from Medic.Core.maintenance_windows import (
+        is_service_in_maintenance,
+        get_active_maintenance_window_for_service,
+    )
+    MAINTENANCE_WINDOWS_AVAILABLE = True
+except ImportError:
+    MAINTENANCE_WINDOWS_AVAILABLE = False
+    is_service_in_maintenance = None  # type: ignore[misc, assignment]
+    get_active_maintenance_window_for_service = None  # type: ignore[misc, assignment]
+
+# Import duration threshold checker
+try:
+    from Medic.Core.job_runs import (
+        get_stale_runs_exceeding_max_duration,
+        mark_stale_run_alerted,
+        DurationAlert,
+    )
+    from Medic.Core.metrics import (
+        record_duration_alert,
+        update_stale_jobs_count,
+    )
+    DURATION_ALERTS_AVAILABLE = True
+except ImportError:
+    DURATION_ALERTS_AVAILABLE = False
+    get_stale_runs_exceeding_max_duration = None  # type: ignore[misc, assignment]
+    mark_stale_run_alerted = None  # type: ignore[misc, assignment]
+    DurationAlert = None  # type: ignore[misc, assignment]
+    record_duration_alert = None  # type: ignore[misc, assignment]
+    update_stale_jobs_count = None  # type: ignore[misc, assignment]
+
+# Import playbook alert integration
+try:
+    from Medic.Core.playbook_alert_integration import (
+        trigger_playbook_for_alert,
+        get_alert_consecutive_failures,
+    )
+    PLAYBOOK_TRIGGERS_AVAILABLE = True
+except ImportError:
+    PLAYBOOK_TRIGGERS_AVAILABLE = False
+    trigger_playbook_for_alert = None  # type: ignore[misc, assignment]
+    get_alert_consecutive_failures = None  # type: ignore[misc, assignment]
+
 # Log Setup
 logging.basicConfig(level=logging.WARNING, format='%(relativeCreated)6d %(threadName)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -104,6 +148,7 @@ def queryForNoHeartbeat():
         muted = heartbeat['muted']
         down = heartbeat['down']
         runbook = heartbeat.get('runbook')
+        grace_period = heartbeat.get('grace_period_seconds', 0) or 0
         fmt = "%Y-%m-%d %H:%M:%S"
         now_cdt = datetime.now(tz).strftime(fmt)
 
@@ -135,7 +180,37 @@ def queryForNoHeartbeat():
             lh_cvtd = (last_hbeat[0][0]).astimezone(tz).strftime(fmt)
 
             if int(last_hbeat_count) < int(threshold):
-                sendAlert(s_id, s_name, name, lh_cvtd, interval, team, priority, muted, now_cdt, runbook)
+                # Check grace period before alerting
+                # Grace period adds additional delay after expected heartbeat window
+                if grace_period > 0:
+                    last_hbeat_time = last_hbeat[0][0]
+                    now_utc = datetime.now(pytz.UTC)
+                    # Ensure last_hbeat_time is timezone-aware
+                    if last_hbeat_time.tzinfo is None:
+                        last_hbeat_time = pytz.UTC.localize(last_hbeat_time)
+                    time_since_last = (now_utc - last_hbeat_time).total_seconds()
+                    # Alert interval is in minutes, grace period is in seconds
+                    interval_seconds = int(interval) * 60
+                    required_delay = interval_seconds + grace_period
+                    if time_since_last < required_delay:
+                        grace_remaining = int(required_delay - time_since_last)
+                        logger.log(
+                            level=20,
+                            msg=f"Alert delayed for {name}: grace period "
+                                f"({grace_remaining}s remaining)"
+                        )
+                        continue
+
+                # Check if service is in maintenance window before alerting
+                if MAINTENANCE_WINDOWS_AVAILABLE and is_service_in_maintenance(s_id):
+                    window = get_active_maintenance_window_for_service(s_id)
+                    window_name = window.name if window else "Unknown"
+                    logger.log(
+                        level=20,
+                        msg=f"Alert suppressed for {name}: service is in maintenance window '{window_name}'"
+                    )
+                else:
+                    sendAlert(s_id, s_name, name, lh_cvtd, interval, team, priority, muted, now_cdt, runbook)
             elif int(last_hbeat_count) >= int(threshold) and down == 1:
                 logger.log(level=20, msg="Heartbeat: " + str(name) + " is current.")
                 closeAlert(name, s_name, s_id, lh_cvtd, team, muted, now_cdt)
@@ -165,6 +240,7 @@ def sendAlert(service_id, service_name, heartbeat_name, last_seen, interval, tea
             "INSERT INTO alerts(alert_name, service_id, active, alert_cycle, created_date) VALUES(%s, %s, 1, 1, %s)",
             (alert_message, service_id, current_time)
         )
+        alert_cycle = 1  # New alert starts at cycle 1
 
         if muted == 1:
             logger.log(level=20, msg=str(heartbeat_name) + " is muted. No alert will be sent.")
@@ -189,6 +265,11 @@ def sendAlert(service_id, service_name, heartbeat_name, last_seen, interval, tea
             # Send slack message
             message = ':broken_heart: No heartbeat has been detected for `' + str(heartbeat_name) + '` for service `' + str(service_name) + '` since ' + str(last_seen) + '. Alert is being routed to `' + str(team) + '`'
             slack.send_message(message)
+
+            # Check for playbook triggers
+            _check_playbook_triggers(
+                service_id, service_name, alert_cycle
+            )
     else:
         # Active alert exists
         alert_cycle = int(result[0][5])
@@ -207,6 +288,73 @@ def sendAlert(service_id, service_name, heartbeat_name, last_seen, interval, tea
             if alert_cycle % (interval_seconds / 15) == 0:
                 message = ':broken_heart: No heartbeat has been detected for `' + str(heartbeat_name) + '` for service `' + str(service_name) + '` since ' + str(last_seen) + '. Alert has been routed to `' + str(team) + '`'
                 slack.send_message(message)
+
+            # Check for playbook triggers on subsequent cycles
+            _check_playbook_triggers(
+                service_id, service_name, count
+            )
+
+
+def _check_playbook_triggers(service_id, service_name, alert_cycle):
+    """
+    Check if any playbook should be triggered for an alerting service.
+
+    This function checks the playbook triggers to find a matching playbook
+    and starts execution based on the playbook's approval settings:
+    - approval=none: Starts execution immediately
+    - approval=required: Creates pending_approval execution
+
+    Args:
+        service_id: ID of the alerting service
+        service_name: Name of the alerting service
+        alert_cycle: Current alert cycle count (consecutive failures)
+    """
+    if not PLAYBOOK_TRIGGERS_AVAILABLE:
+        return
+
+    try:
+        # Convert alert_cycle to consecutive failures
+        consecutive_failures = get_alert_consecutive_failures(alert_cycle)
+
+        # Try to trigger a playbook
+        result = trigger_playbook_for_alert(
+            service_id=service_id,
+            service_name=service_name,
+            consecutive_failures=consecutive_failures,
+            alert_context={
+                "ALERT_CYCLE": alert_cycle,
+            }
+        )
+
+        if result.triggered:
+            logger.log(
+                level=20,
+                msg=f"Playbook triggered for {service_name}: "
+                    f"{result.message} (execution_id: "
+                    f"{result.execution.execution_id if result.execution else 'N/A'})"
+            )
+
+            # Send Slack notification about playbook execution
+            if result.status == "running":
+                playbook_msg = (
+                    f":robot_face: Auto-remediation playbook "
+                    f"'{result.playbook.playbook_name}' started for "
+                    f"`{service_name}` (execution: {result.execution.execution_id})"
+                )
+                slack.send_message(playbook_msg)
+            elif result.status == "pending_approval":
+                playbook_msg = (
+                    f":hourglass: Auto-remediation playbook "
+                    f"'{result.playbook.playbook_name}' awaiting approval for "
+                    f"`{service_name}` (execution: {result.execution.execution_id})"
+                )
+                slack.send_message(playbook_msg)
+
+    except Exception as e:
+        logger.log(
+            level=40,
+            msg=f"Error checking playbook triggers for {service_name}: {str(e)}"
+        )
 
 
 def closeAlert(heartbeat_name, service_name, service_id, last_seen, team, muted, current_time):
@@ -250,10 +398,147 @@ def color_code(severity):
         return "#F35A00"
 
 
+def checkForStaleJobs():
+    """
+    Check for jobs that started but haven't completed within max_duration.
+
+    Sends alerts for stale jobs and marks them as alerted to prevent
+    duplicate notifications.
+    """
+    if not DURATION_ALERTS_AVAILABLE:
+        return
+
+    try:
+        stale_alerts = get_stale_runs_exceeding_max_duration()
+        update_stale_jobs_count(len(stale_alerts))
+
+        for alert in stale_alerts:
+            # Check if service is in maintenance window
+            if MAINTENANCE_WINDOWS_AVAILABLE and is_service_in_maintenance(
+                alert.service_id
+            ):
+                window = get_active_maintenance_window_for_service(
+                    alert.service_id
+                )
+                window_name = window.name if window else "Unknown"
+                logger.log(
+                    level=20,
+                    msg=f"Stale job alert suppressed for {alert.service_name}: "
+                        f"service is in maintenance window '{window_name}'"
+                )
+                continue
+
+            # Send alert for stale job
+            sendStaleJobAlert(alert)
+
+            # Mark as alerted to prevent duplicate alerts
+            mark_stale_run_alerted(alert.service_id, alert.run_id)
+
+            # Record metric
+            record_duration_alert("stale")
+
+    except Exception as e:
+        logger.log(
+            level=40,
+            msg=f"Error checking for stale jobs: {str(e)}"
+        )
+
+
+def sendStaleJobAlert(alert):
+    """
+    Send an alert for a stale job that has exceeded max_duration.
+
+    Args:
+        alert: DurationAlert object containing stale job information
+    """
+    # Get service info for team routing
+    service_info = query_db(
+        "SELECT team, priority, muted FROM services WHERE service_id = %s",
+        (alert.service_id,),
+        show_columns=True
+    )
+
+    if not service_info:
+        logger.log(
+            level=30,
+            msg=f"Could not find service info for stale job alert: "
+                f"service_id={alert.service_id}"
+        )
+        return
+
+    service = service_info[0]
+    team = service.get('team', 'site-reliability')
+    priority = service.get('priority', 'p3')
+    muted = service.get('muted', 0)
+
+    if muted == 1:
+        logger.log(
+            level=20,
+            msg=f"Stale job alert suppressed for {alert.service_name}: "
+                f"service is muted"
+        )
+        return
+
+    # Calculate elapsed time in human-readable format
+    elapsed_seconds = (alert.duration_ms or 0) // 1000
+    elapsed_minutes = elapsed_seconds // 60
+    elapsed_hours = elapsed_minutes // 60
+
+    if elapsed_hours > 0:
+        elapsed_str = f"{elapsed_hours}h {elapsed_minutes % 60}m"
+    elif elapsed_minutes > 0:
+        elapsed_str = f"{elapsed_minutes}m {elapsed_seconds % 60}s"
+    else:
+        elapsed_str = f"{elapsed_seconds}s"
+
+    max_seconds = alert.max_duration_ms // 1000
+    max_minutes = max_seconds // 60
+
+    if max_minutes > 0:
+        max_str = f"{max_minutes}m {max_seconds % 60}s"
+    else:
+        max_str = f"{max_seconds}s"
+
+    alert_message = (
+        f"Medic - Stale job detected for {alert.service_name}"
+    )
+
+    # Send PagerDuty alert
+    pd_key = pagerduty.create_alert(
+        alert_message=alert_message,
+        service_name=alert.service_name,
+        heartbeat_name=alert.service_name,
+        team=team,
+        priority=priority,
+        runbook=None
+    )
+
+    # Send Slack message
+    message = (
+        f":hourglass: Stale job detected for `{alert.service_name}` "
+        f"(run_id: `{alert.run_id}`). "
+        f"Job has been running for {elapsed_str}, "
+        f"exceeding max duration of {max_str}. "
+        f"Alert routed to `{team}`."
+    )
+    slack.send_message(message)
+
+    logger.log(
+        level=30,
+        msg=f"Stale job alert sent for {alert.service_name} "
+            f"(run_id: {alert.run_id})"
+    )
+
+
 def thread_function():
     t = threading.Thread(target=queryForNoHeartbeat)
     logger.log(level=20, msg="Thread starting.")
     t.start()
+
+    # Also check for stale jobs
+    if DURATION_ALERTS_AVAILABLE:
+        t2 = threading.Thread(target=checkForStaleJobs)
+        t2.start()
 
 
 if __name__ == "__main__":

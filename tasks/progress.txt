@@ -1,0 +1,669 @@
+## Codebase Patterns
+- Use argon2 for API key hashing (via argon2-cffi package)
+- Database queries use parameterized queries via psycopg2 with %s placeholders
+- Flask routes are registered via exposeRoutes() in Medic/Core/routes.py
+- Unit tests use pytest with fixtures defined in tests/conftest.py
+- Log levels use Medic.Helpers.logSettings.logSetup()
+- Return JSON responses as tuple (json_string, status_code)
+- Database returns JSON string when show_columns=True in query_db()
+- Health endpoints: /health, /health/live, /health/ready, /v1/healthcheck/network
+- API keys stored in medic.api_keys table with key_hash, scopes array, expires_at
+- Prometheus metrics: define Counter/Gauge/Histogram in Medic/Core/metrics.py, use record_*() helpers to increment
+- Rate limiting: Use InMemoryRateLimiter for single-instance, sliding window algorithm in Medic/Core/rate_limiter.py
+- Rate limit middleware: @rate_limit() decorator in Medic/Core/rate_limit_middleware.py, apply AFTER @authenticate_request()
+- Rate limit headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset (plus Retry-After when blocked)
+- Webhook delivery: Use WebhookDeliveryService in Medic/Core/webhook_delivery.py with deliver_webhook() convenience function
+- HTTP retries: Use exponential backoff with configurable delays (default: 1s, 5s, 30s) for webhook delivery
+- Alert routing: Use get_slack_channel_for_service(service_id) from Medic/Core/alert_routing.py to get team channel with fallback to default
+- Notification targets: medic.notification_targets table stores type-specific config in JSONB, ordered by priority (lower = higher priority)
+- Flexible alert routing: Use route_alert(service_id, payload, mode) with NotificationMode.NOTIFY_ALL or NOTIFY_UNTIL_SUCCESS
+- Notification sender: Pass custom sender callback to route_alert() or use default_notification_sender() placeholder
+- Working hours: medic.schedules table stores timezone (IANA format) and hours (JSONB with day/hour ranges). Services link via schedule_id FK.
+- Working hours evaluation: Use is_within_working_hours(schedule, check_time) from Medic/Core/working_hours.py. Uses zoneinfo for DST-aware timezone handling.
+- Service working hours: Use is_service_within_working_hours(service_id) which returns (bool, schedule_name) tuple. Returns (True, None) if no schedule (always in hours).
+- Period detection: Use get_current_period(schedule) or get_service_current_period(service_id) to get "during_hours" or "after_hours" string.
+- Working hours routing: Use route_alert_with_schedule(service_id, payload, mode, sender, check_time) for working hours-aware alert routing. Automatically uses correct targets based on service schedule.
+- Notification target periods: notification_targets.period column values: 'always' (default), 'during_hours', 'after_hours'. Targets with 'always' included in all routing.
+- Maintenance windows: Use is_service_in_maintenance(service_id, check_time) from Medic/Core/maintenance_windows.py. Returns True if service is in any active window.
+- Recurring maintenance: Cron expressions evaluated via croniter library. Window duration = end_time - start_time from original definition.
+- Maintenance window queries: Empty service_ids means ALL services. Query: WHERE service_ids = '{}' OR %s = ANY(service_ids)
+- Heartbeat status: HeartbeatStatus enum in Medic/Helpers/heartbeat.py defines valid values (UP, DOWN, STARTED, COMPLETED, FAILED). Use is_valid() to validate, is_job_status() to check job-related.
+- Job correlation: Heartbeat objects support optional run_id parameter for correlating STARTED/COMPLETED/FAILED events. Use queryHeartbeatsByRunId(run_id) to find correlated events.
+- V2 job signal endpoints: POST /v2/heartbeat/:id/start|complete|fail accepts service_id as path param, optional run_id in JSON body. Uses _record_job_signal() helper.
+- Job runs tracking: medic.job_runs table stores duration statistics. Use record_job_start() and record_job_completion() from Medic/Core/job_runs.py.
+- Duration calculation: Duration in milliseconds calculated as completed_at - started_at. Stored in job_runs.duration_ms column.
+- Job run queries: get_completed_runs_for_service(service_id, limit=100) returns runs ordered by completion time for stats. get_stale_runs() finds jobs that started but never completed.
+- Max duration: services.max_duration_ms column defines threshold for duration alerts (to be used by US-023).
+- Duration statistics: GET /v2/services/:id/stats returns DurationStatistics (avg, p50, p95, p99, min, max). Returns empty stats (null values) if fewer than 5 runs. Uses get_duration_statistics() from Medic/Core/job_runs.py.
+- Duration alerts: Use check_duration_threshold(job_run) to check if completed job exceeded max_duration_ms. Returns DurationAlert if exceeded, None otherwise.
+- Stale job detection: Use get_stale_runs_exceeding_max_duration() to find STARTED jobs that haven't completed within max_duration_ms. Returns list of DurationAlert objects.
+- Duration alert metrics: medic_duration_alerts_total{alert_type} (exceeded, stale), medic_stale_jobs_current gauge. Use record_duration_alert() and update_stale_jobs_count() helpers.
+- Stale run marking: Use mark_stale_run_alerted(service_id, run_id) to mark job as STALE_ALERTED and prevent duplicate alerts.
+- Grace periods: services.grace_period_seconds column delays alerting after missed heartbeat. Check in monitor.py with: required_delay = (interval * 60) + grace_period_seconds; if time_since_last < required_delay: continue.
+- Playbooks schema: medic.playbooks stores YAML definitions (playbook_id, name, description, yaml_content, version). medic.playbook_triggers defines conditions for triggering playbooks.
+- Playbook triggers: service_pattern uses glob syntax (e.g., "worker-*", "*"), consecutive_failures threshold, enabled boolean. Triggers link to playbooks via FK with CASCADE delete.
+- Playbook YAML parser: Use parse_playbook_yaml(yaml_content) from Medic/Core/playbook_parser.py to parse YAML into typed Playbook object.
+- Playbook step types: StepType enum has WEBHOOK, SCRIPT, WAIT, CONDITION. Each has corresponding dataclass (WebhookStep, etc.)
+- Playbook approval: ApprovalMode.parse() handles "none", "required", "timeout:Xm" formats. Returns (ApprovalMode, Optional[int]).
+- Duration parsing: _parse_duration() handles "30s", "5m", "1h" formats - plain integers default to seconds.
+- Playbook validation: Use validate_playbook_yaml() for error list or is_valid_playbook_yaml() for boolean check.
+- Playbook executions: medic.playbook_executions tracks execution state (pending_approval, running, waiting, completed, failed, cancelled). FK to playbooks with CASCADE, FK to services with SET NULL.
+- Step results: medic.playbook_step_results tracks individual step outcomes. step_index is zero-based. Unique constraint on (execution_id, step_index).
+- Execution engine: Use PlaybookExecutionEngine from Medic/Core/playbook_engine.py. start_execution(), resume_execution(), approve_execution(), cancel_execution() methods.
+- Execution status helpers: ExecutionStatus.is_terminal() checks for completed/failed/cancelled. ExecutionStatus.is_active() checks for running/waiting.
+- Step result status: StepResultStatus enum with PENDING, RUNNING, COMPLETED, FAILED, SKIPPED values.
+- Convenience functions: start_playbook_execution(), resume_playbook_execution(), approve_playbook_execution(), cancel_playbook_execution() use global engine singleton.
+- Wait step execution: execute_wait_step() uses time.sleep() for synchronous wait. Creates step result, sleeps, updates completion.
+- State persistence: Engine updates database after each step. Use get_active_executions() to resume after restart.
+- Webhook step execution: Use execute_webhook_step(step, execution, http_client) from Medic/Core/playbook_engine.py. Performs HTTP request with variable substitution.
+- Variable substitution: Use substitute_variables(value, context) for ${VAR_NAME} replacement. Handles strings, dicts, lists. Missing variables kept as-is.
+- Webhook context: _build_webhook_context(execution) provides standard variables: EXECUTION_ID, PLAYBOOK_ID, SERVICE_ID, SERVICE_NAME, PLAYBOOK_NAME, plus execution.context.
+- Webhook success: success_codes list on WebhookStep defines acceptable HTTP status codes. Default: [200, 201, 202].
+- Response truncation: MAX_RESPONSE_BODY_SIZE = 4096 bytes. Large responses truncated with "[truncated]" suffix.
+- Script step execution: Use execute_script_step(step, execution) from Medic/Core/playbook_engine.py. Looks up pre-registered scripts by name.
+- Registered scripts: get_registered_script(script_name) retrieves from medic.registered_scripts table. Returns None if not found.
+- Script interpreters: Only 'bash' and 'python' supported. bash uses '-e' (exit on error), python3 uses '-u' (unbuffered).
+- Script resource limits: preexec_fn sets RLIMIT_AS (256MB memory), RLIMIT_CPU (timeout + 5/10 seconds).
+- Script output: MAX_SCRIPT_OUTPUT_SIZE = 8192 bytes. Combines stdout and stderr (stderr prefixed with [STDERR]).
+- Script variables: _substitute_script_variables() merges context and parameters (params override). Uses ${VAR_NAME} syntax.
+- Script environment: MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID env vars available to scripts.
+- Condition step execution: Use execute_condition_step(step, execution) from Medic/Core/playbook_engine.py. Polls until condition met or timeout.
+- Condition check function: check_heartbeat_received(service_id, since, parameters) queries medic.heartbeatEvents for count since given time.
+- Condition polling: CONDITION_POLL_INTERVAL = 5 seconds. DEFAULT_CONDITION_TIMEOUT = 300 seconds (5 minutes).
+- Condition on_failure modes: OnFailureAction.FAIL (stop playbook), OnFailureAction.CONTINUE (mark completed, continue), OnFailureAction.ESCALATE (fail with escalation flag).
+- Condition parameters: min_count (default 1), status (filter by heartbeat status). Passed to check function.
+- Condition success: Output includes elapsed time and condition message. Status = COMPLETED.
+- Condition timeout: Output includes "[ESCALATE]" tag for escalate mode. Error message includes "Escalating to on-call".
+- Playbook trigger matching: Use find_playbook_for_alert(service_name, consecutive_failures) from Medic/Core/playbook_triggers.py. Returns MatchedPlaybook or None.
+- Trigger glob patterns: fnmatch library for *, ?, [seq] matching. Case-insensitive. Use matches_glob_pattern(pattern, value) for direct matching.
+- Trigger ordering: get_enabled_triggers() returns by consecutive_failures DESC. Higher thresholds matched first (more specific).
+- Service-based trigger lookup: find_playbook_for_service_alert(service_id) convenience function looks up name and failures from database.
+- Playbook alert integration: Use trigger_playbook_for_alert(service_id, service_name, consecutive_failures) from Medic/Core/playbook_alert_integration.py. Returns PlaybookTriggerResult.
+- Alert cycle to failures: get_alert_consecutive_failures(alert_cycle) converts alert cycle count to consecutive failures (min 1).
+- Playbook trigger result: PlaybookTriggerResult.triggered indicates if playbook was started. Check status for "running", "pending_approval", or "error".
+- Monitor playbook integration: _check_playbook_triggers() in monitor.py called after sendAlert() sends notifications. Wraps with error handling.
+- Playbook Slack notifications: :robot_face: for started playbooks, :hourglass: for pending_approval. Includes playbook name and execution ID.
+- Circuit breaker: Use is_circuit_open(service_id) or check_circuit_breaker(service_id) from Medic/Core/circuit_breaker.py before starting playbook executions.
+- Circuit breaker config: Default 5 executions per hour per service. Configure via set_config(CircuitBreakerConfig(window_seconds=X, max_executions=Y)).
+- Circuit breaker integration: Check integrated at START of trigger_playbook_for_alert() - runs before playbook matching. Returns status="circuit_breaker_open" when blocked.
+- Playbook metrics: medic_playbook_executions_total{playbook, status} Counter, medic_playbook_execution_duration_seconds{playbook} Histogram, medic_playbook_executions_pending_approval Gauge.
+- Playbook metrics helpers: record_playbook_execution(playbook_name, status), record_playbook_execution_duration(playbook_name, duration_seconds), update_pending_approval_count(count).
+- Playbook metrics integration: Metrics recorded in _complete_execution(), _fail_execution(), cancel_execution(). Pending approval updated when status changes.
+- Audit log: medic.remediation_audit_log table stores action history per execution. Action types: execution_started, step_completed, step_failed, approval_requested, approved, rejected, execution_completed, execution_failed.
+- Audit log details: JSONB details field stores action-specific context (step_name, output, error_message, etc.). Actor field nullable (NULL for automated, user ID for manual).
+- Audit log query API: GET /v2/audit-logs with filters for execution_id, service_id, action_type, actor, start_date, end_date. Use query_audit_logs() from Medic/Core/audit_log.py.
+- Audit log pagination: query_audit_logs() returns AuditLogQueryResult with entries, total_count, limit (default 50, max 250), offset, has_more.
+- Audit log CSV export: Use Accept: text/csv header to get CSV response. audit_logs_to_csv() converts entries to CSV format.
+- Playbook API execution: POST /v2/playbooks/:id/execute with optional service_id and variables. Use start_playbook_execution() from playbook_engine. Rate limit with verify_rate_limit() and custom RateLimitConfig.
+
+---
+
+## 2026-02-03 - US-003
+- Implemented authentication middleware in Medic/Core/auth_middleware.py
+- Files changed: Medic/Core/auth_middleware.py (new), tests/unit/test_auth_middleware.py (new)
+- **Learnings for future iterations:**
+  - query_db() returns Optional[Union[str, List]] - use str() cast before json.loads when show_columns=True
+  - Health endpoint bypass paths: /health, /v1/healthcheck, /metrics, /docs
+  - Flask g context is used to store authenticated key info (api_key_id, api_key_name, api_key_scopes)
+  - Admin scope grants all permissions (checked first in scope validation)
+  - Pre-existing test failures in tests/unit/test_monitor.py due to missing slack_client module - not related to this work
+---
+
+## 2026-02-03 - US-004
+- Added Prometheus metrics for authentication failures
+- Files changed: Medic/Core/metrics.py, Medic/Core/auth_middleware.py
+- **Learnings for future iterations:**
+  - Prometheus metrics use Counter from prometheus_client for incrementing counters
+  - Metrics are defined at module level (global) and imported where needed
+  - Use labels for categorizing metrics (e.g., reason: invalid_key, expired_key, insufficient_scope)
+  - record_*() helper functions are the pattern for incrementing metrics from other modules
+  - Pre-existing flake8 errors in metrics.py (unused import, unused variable) - not related to this work
+---
+
+## 2026-02-03 - US-005
+- Implemented rate limiting infrastructure in Medic/Core/rate_limiter.py
+- Files changed: Medic/Core/rate_limiter.py (new), tests/unit/test_rate_limiter.py (new)
+- **Learnings for future iterations:**
+  - RateLimiter is an abstract base class (ABC) with InMemoryRateLimiter and RedisRateLimiter (placeholder) implementations
+  - Sliding window algorithm tracks request timestamps per bucket (key:endpoint_type)
+  - Default limits: 100 req/min heartbeats, 20 req/min management (configurable via RateLimitConfig)
+  - Thread-safe with per-bucket locks (SlidingWindowEntry.lock) and global locks
+  - Use check_rate_limit() convenience function for global limiter access
+  - Per-key custom limits can be set via set_key_config() or set_key_rate_limit()
+  - RateLimitResult contains: allowed, limit, remaining, reset_at, retry_after
+  - Use get_rate_limiter() and set_rate_limiter() for global instance management
+---
+
+## 2026-02-03 - US-006
+- Implemented rate limiting middleware in Medic/Core/rate_limit_middleware.py
+- Files changed: Medic/Core/rate_limit_middleware.py (new), tests/unit/test_rate_limit_middleware.py (new)
+- **Learnings for future iterations:**
+  - @rate_limit() decorator should be applied AFTER @authenticate_request() so g.api_key_id is available
+  - Auto-detects endpoint type based on path: /heartbeat/* paths use heartbeat limits, others use management limits
+  - Falls back to IP-based rate limiting (ip:{remote_addr}) when no API key is present
+  - Returns 429 with JSON body containing success: false, message, and retry_after
+  - Headers always added: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+  - Retry-After header only added when rate limit is exceeded
+  - Health endpoints bypass rate limiting (same as auth): /health, /v1/healthcheck, /metrics, /docs
+  - verify_rate_limit() and get_rate_limit_headers() available for non-decorator usage
+---
+
+## 2026-02-03 - US-007
+- Created webhooks database schema migration in migrations/002_create_webhooks.sql
+- Files changed: migrations/002_create_webhooks.sql (new)
+- **Learnings for future iterations:**
+  - Foreign key references to services table use services(service_id) - not medic.services
+  - JSONB is preferred for flexible JSON data (headers, payload)
+  - Use CHECK constraints for enum-like values (status IN ('pending', 'success', 'failed', 'retrying'))
+  - Partial indexes (WHERE clause) are useful for common filtered queries
+  - ON DELETE CASCADE appropriate when child records should be deleted with parent
+  - SQL migrations are not type-checked by mypy - only Python code is
+---
+
+## 2026-02-03 - US-008
+- Implemented webhook delivery service in Medic/Core/webhook_delivery.py
+- Files changed: Medic/Core/webhook_delivery.py (new), tests/unit/test_webhook_delivery.py (new)
+- **Learnings for future iterations:**
+  - WebhookDeliveryService sends POST requests with JSON payload and custom headers
+  - Exponential backoff retry: 1s, 5s, 30s delays with max 3 attempts (configurable)
+  - Delivery tracking via webhook_deliveries table with status: pending, success, failed, retrying
+  - DeliveryStatus is a str Enum - can compare directly with strings (e.g., status == "pending")
+  - Use deliver_webhook() convenience function for global service access
+  - get_webhooks_for_service(service_id) returns webhooks for a service OR global webhooks
+  - Thread-safe parallel delivery via deliver_to_all() with async_delivery=True
+  - Response body truncated to 4096 bytes to prevent database bloat
+  - Flake8 line length limit is 79 chars - break long lines appropriately
+---
+
+## 2026-02-03 - US-009
+- Created teams database schema migration in migrations/003_create_teams.sql
+- Files changed: migrations/003_create_teams.sql (new)
+- **Learnings for future iterations:**
+  - Teams table: team_id, name (unique), slack_channel_id (optional), timestamps
+  - Services.team_id FK uses ON DELETE SET NULL (not CASCADE) - keeps service but clears team reference
+  - Pattern: ALTER TABLE to add columns to existing tables (services already exists)
+  - Partial index on slack_channel_id WHERE NOT NULL for efficient lookups
+  - Migration pattern follows existing 001/002 - use medic.tablename for new tables, no schema prefix for services
+---
+
+## 2026-02-03 - US-010
+- Implemented team-based alert routing in Medic/Core/alert_routing.py
+- Files changed: Medic/Core/alert_routing.py (new), tests/unit/test_alert_routing.py (new)
+- **Learnings for future iterations:**
+  - get_slack_channel_for_service(service_id) returns team's Slack channel or falls back to SLACK_CHANNEL_ID env var
+  - get_team_for_service(service_id) returns team dict with team_id, name, slack_channel_id or None
+  - Query joins medic.teams and services tables via team_id FK
+  - Empty string channel ("") is treated same as None - triggers fallback to default
+  - Pattern: routing priority is team channel > default channel
+---
+
+## 2026-02-03 - US-011 - Linear Issue: SRE-10
+- Created notification_targets database schema migration in migrations/004_create_notification_targets.sql
+- Files changed: migrations/004_create_notification_targets.sql (new)
+- **Learnings for future iterations:**
+  - notification_targets table: target_id, service_id, type (slack/pagerduty/webhook), config (jsonb), priority, enabled, timestamps
+  - Type constraint via CHECK ensures only valid types: slack, pagerduty, webhook
+  - Priority field (integer) used for ordering targets in notify_until_success mode - lower = higher priority
+  - Composite index on (service_id, priority) WHERE enabled = TRUE for common query pattern
+  - Config field stores type-specific JSON (channel_id for slack, service_key for pagerduty, url/headers for webhook)
+  - ON DELETE CASCADE from services - when service deleted, its targets are removed
+---
+
+## 2026-02-03 - US-012 - Linear Issue: SRE-10
+- Implemented flexible alert routing logic in Medic/Core/alert_routing.py
+- Files changed: Medic/Core/alert_routing.py (extended), tests/unit/test_alert_routing.py (extended)
+- **Learnings for future iterations:**
+  - NotificationMode enum: NOTIFY_ALL (send to all targets), NOTIFY_UNTIL_SUCCESS (stop after first success)
+  - NotificationType enum: SLACK, PAGERDUTY, WEBHOOK (matches notification_targets.type column)
+  - NotificationTarget dataclass: target_id, service_id, target_type, config, priority, enabled
+  - NotificationResult dataclass: target_id, target_type, success, error_message
+  - route_alert(service_id, payload, mode, sender) dispatches to all targets based on mode
+  - get_notification_targets_for_service() retrieves targets ordered by priority (lower first)
+  - Custom sender callback signature: (NotificationTarget, Dict[str, Any]) -> bool
+  - default_notification_sender() dispatches by type to placeholder _send_*_notification() functions
+  - Helper functions: has_notification_targets(), get_successful_results(), get_failed_results(), all_notifications_succeeded(), any_notification_succeeded()
+  - Disabled targets are skipped but still return a NotificationResult with success=False
+---
+
+## 2026-02-03 - US-013 - Linear Issue: SRE-12
+- Created schedules database schema migration in migrations/005_create_schedules.sql
+- Files changed: migrations/005_create_schedules.sql (new)
+- **Learnings for future iterations:**
+  - schedules table: schedule_id, name (unique), timezone, hours (JSONB), timestamps
+  - IANA timezone format enforced via CHECK constraint (Area/Location pattern, UTC, or Etc/ prefix)
+  - Hours field uses JSONB for flexible day/hour ranges: {"monday": [{"start": "09:00", "end": "17:00"}], ...}
+  - Services.schedule_id FK uses ON DELETE SET NULL (not CASCADE) - keeps service but clears schedule reference
+  - Pattern follows teams migration: ALTER TABLE to add FK column to services
+---
+
+## 2026-02-03 - US-014 - Linear Issue: SRE-12
+- Implemented working hours evaluation in Medic/Core/working_hours.py
+- Files changed: Medic/Core/working_hours.py (new), tests/unit/test_working_hours.py (new)
+- **Learnings for future iterations:**
+  - Use zoneinfo.ZoneInfo for IANA timezone handling (Python 3.9+ standard library)
+  - zoneinfo automatically handles DST transitions - just convert to local time and check
+  - TimeRange.contains() handles midnight-crossing ranges (e.g., 22:00 to 06:00 night shifts)
+  - Hours JSONB format: {"monday": [{"start": "09:00", "end": "17:00"}], ...}
+  - End time is exclusive (09:00-17:00 means 17:00 is outside hours)
+  - Empty timezone string causes ValueError in ZoneInfo - check with is_valid_timezone() first
+  - is_service_within_working_hours() returns (True, None) when no schedule - services without schedules are always "within hours"
+  - get_current_period() returns "during_hours" or "after_hours" for routing decisions
+  - Naive datetimes are assumed to be UTC
+---
+
+## 2026-02-03 - US-015 - Linear Issue: SRE-12
+- Implemented working hours-aware alert routing in Medic/Core/alert_routing.py
+- Files changed: Medic/Core/alert_routing.py (extended), tests/unit/test_alert_routing.py (extended), migrations/006_add_period_to_notification_targets.sql (new)
+- **Learnings for future iterations:**
+  - NotificationPeriod enum: ALWAYS (default), DURING_HOURS, AFTER_HOURS - matches database period column values
+  - Targets with period='always' are included in ALL routing decisions regardless of working hours
+  - get_notification_targets_for_service() now accepts optional period parameter to filter by working hours period
+  - SQL uses COALESCE(period, 'always') to handle NULL values from pre-migration data
+  - route_alert_with_schedule() uses local import of get_service_current_period to avoid circular imports
+  - When patching local imports in tests, patch at the source module (Medic.Core.working_hours.get_service_current_period), not the consuming module
+  - Migration adds period column with DEFAULT 'always' so existing targets continue to work unchanged
+---
+
+## 2026-02-03 - US-016 - Linear Issue: SRE-14
+- Created maintenance_windows database schema migration in migrations/007_create_maintenance_windows.sql
+- Files changed: migrations/007_create_maintenance_windows.sql (new)
+- **Learnings for future iterations:**
+  - maintenance_windows table: window_id, name (unique), start_time, end_time, recurrence (nullable cron), timezone (IANA), service_ids (integer array), timestamps
+  - Service_ids uses INTEGER[] array type with DEFAULT '{}' - empty array means "all services"
+  - GIN index on service_ids enables efficient array containment queries (e.g., WHERE service_id = ANY(service_ids))
+  - Recurrence field stores cron expression for recurring windows (NULL for one-time)
+  - end_time > start_time enforced via CHECK constraint
+  - IANA timezone constraint reused from schedules table pattern
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
+---
+
+## 2026-02-03 - US-017 - Linear Issue: SRE-14
+- Implemented maintenance window evaluation in Medic/Core/maintenance_windows.py
+- Files changed: Medic/Core/maintenance_windows.py (new), tests/unit/test_maintenance_windows.py (new), Medic/requirements.txt (added croniter)
+- **Learnings for future iterations:**
+  - MaintenanceWindow dataclass: window_id, name, start_time, end_time, timezone, recurrence, service_ids
+  - is_service_in_maintenance(service_id, check_time) is the primary function for alert suppression logic
+  - One-time windows: direct comparison of start_time <= check_time < end_time
+  - Recurring windows: use croniter to find prev occurrence, add duration to get window end
+  - croniter is optional - module works without it but recurring windows won't evaluate
+  - Type ignore comments needed for croniter import: # type: ignore[import-untyped]
+  - get_maintenance_status() returns detailed dict with window info and maintenance_end time
+  - Empty service_ids array means window applies to ALL services - query with WHERE service_ids = '{}' OR %s = ANY(service_ids)
+  - Feb 1, 2026 is a Sunday (weekday=6), Feb 2, 2026 is Monday (weekday=0) - always verify day calculations
+  - parse_maintenance_window() handles both string and datetime objects from database
+---
+
+## 2026-02-03 - US-018 - Linear Issue: SRE-14
+- Implemented maintenance window alert suppression in Medic/Worker/monitor.py
+- Files changed: Medic/Worker/monitor.py (modified), tests/unit/test_monitor.py (extended)
+- **Learnings for future iterations:**
+  - Monitor module runs in Medic/Worker directory - needs PYTHONPATH=$(pwd)/Medic/Worker for tests
+  - MAINTENANCE_WINDOWS_AVAILABLE flag allows graceful degradation if maintenance module not importable
+  - Maintenance check happens BEFORE sendAlert() - only new alerts are suppressed
+  - Recovery alerts (closeAlert) are NOT suppressed during maintenance - service can still recover
+  - Logger level 20 = INFO for maintenance suppression messages
+  - Pre-existing test failures in test_monitor.py due to slack_client module import - fixed with PYTHONPATH
+  - When patching module-level variables like MAINTENANCE_WINDOWS_AVAILABLE, use @patch decorator on the module path
+---
+
+## 2026-02-03 - US-019 - Linear Issue: SRE-15
+- Implemented start/complete signal statuses with HeartbeatStatus enum and run_id support
+- Files changed: Medic/Helpers/heartbeat.py (modified), tests/unit/test_heartbeat.py (extended), migrations/008_add_heartbeat_status_and_run_id.sql (new)
+- **Learnings for future iterations:**
+  - HeartbeatStatus is a str Enum (inherits from both str and Enum) - can compare directly with strings
+  - Use is_valid() class method to validate status strings, is_job_status() to check if job-related
+  - run_id is optional on Heartbeat class - defaults to None for backward compatibility
+  - heartbeatEvents table stores status as TEXT - enforcement is application-level not database-level
+  - Use partial indexes (WHERE run_id IS NOT NULL) for run_id column since most heartbeats won't have it
+  - Query functions updated to include run_id in SELECT - enables job correlation in results
+  - Pre-existing mypy type errors in heartbeat.py - query_db returns Union[str, List, None] but functions declare Optional[str]
+---
+
+## 2026-02-03 - US-020 - Linear Issue: SRE-15
+- Implemented V2 API endpoints for start/complete/fail signals
+- Files changed: Medic/Core/routes.py (modified), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - V2 endpoints use /v2/heartbeat/<int:service_id>/start|complete|fail pattern with service_id in URL path
+  - Shared logic extracted to _record_job_signal() helper function within exposeRoutes()
+  - run_id is optional in JSON body - gracefully handles missing or invalid JSON with run_id=None
+  - Response includes results dict with service_id, heartbeat_name, status, and run_id for caller verification
+  - Integration tests use patch("Medic.Core.routes.db.query_db") and patch("Medic.Core.routes.hbeat.addHeartbeat") for mocking
+  - Service validation checks: 1) service exists, 2) service is active (active != 0)
+  - Returns 404 for missing service, 400 for inactive service, 500 for database insert failure
+---
+
+## 2026-02-03 - US-021 - Linear Issue: SRE-16
+- Implemented duration tracking for job runs with medic.job_runs table and max_duration_ms column
+- Files changed: migrations/009_create_job_runs_and_max_duration.sql (new), Medic/Core/job_runs.py (new), Medic/Core/routes.py (modified), tests/unit/test_job_runs.py (new), tests/integration/test_api.py (modified)
+- **Learnings for future iterations:**
+  - JobRun dataclass: run_id_pk, service_id, run_id, started_at, completed_at, duration_ms, status
+  - record_job_start() creates new job_runs entry with STARTED status when run_id provided
+  - record_job_completion() calculates duration_ms from started_at to completed_at (in milliseconds)
+  - If no STARTED run exists when completing, creates a completion-only record with duration=0
+  - Duration calculated as int(delta.total_seconds() * 1000) for millisecond precision
+  - _record_job_signal() in routes.py integrates job_runs tracking after heartbeat is recorded
+  - Integration tests need to mock job_runs module when testing V2 endpoints: patch("Medic.Core.routes.job_runs")
+  - services.max_duration_ms column added for threshold-based alerting (to be implemented in US-023)
+  - Unique constraint on (service_id, run_id) prevents duplicate runs per service
+  - get_stale_runs() useful for finding jobs that started but never completed (hung jobs)
+---
+
+## 2026-02-03 - US-022 - Linear Issue: SRE-16
+- Implemented duration statistics API endpoint in Medic/Core/routes.py
+- Files changed: Medic/Core/job_runs.py (extended), Medic/Core/routes.py (extended), tests/unit/test_job_runs.py (extended), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - DurationStatistics dataclass provides structured response for stats endpoint
+  - get_duration_statistics() calculates avg, p50, p95, p99 from completed runs with valid duration_ms
+  - Minimum 5 runs required for meaningful statistics (returns nulls otherwise)
+  - _percentile() uses linear interpolation (same as numpy default)
+  - Percentile calculation: k = (n-1) * (p/100), then interpolate between floor and ceiling indices
+  - GET /v2/services/:id/stats verifies service exists before calculating stats
+  - Response includes min_duration_ms and max_duration_ms in addition to percentiles
+  - Filter out null and negative duration values before calculating statistics
+---
+
+## 2026-02-03 - US-023 - Linear Issue: SRE-16
+- Implemented duration threshold alerting for completed jobs and stale job detection
+- Files changed: Medic/Core/job_runs.py (extended), Medic/Core/metrics.py (extended), Medic/Core/routes.py (extended), Medic/Worker/monitor.py (extended), tests/unit/test_job_runs.py (extended)
+- **Learnings for future iterations:**
+  - DurationAlert dataclass holds alert info: service_id, service_name, run_id, alert_type (exceeded/stale), duration_ms, max_duration_ms
+  - check_duration_threshold(job_run) checks if completed job exceeded max_duration_ms, returns DurationAlert or None
+  - get_stale_runs_exceeding_max_duration() joins job_runs with services to find STARTED jobs where elapsed time > max_duration_ms
+  - mark_stale_run_alerted() sets status to STALE_ALERTED to prevent duplicate alerts
+  - Duration check integrated in routes.py _record_job_signal() after job_runs.record_job_completion() is called
+  - Stale job check added to monitor.py thread_function() - runs on same 15-second cycle as heartbeat monitoring
+  - Import guards (DURATION_ALERTS_AVAILABLE) allow graceful degradation if module imports fail
+  - Prometheus metrics: medic_duration_alerts_total (Counter with alert_type label), medic_stale_jobs_current (Gauge)
+  - Stale job alerts include human-readable elapsed time (hours/minutes/seconds) in Slack message
+---
+
+## 2026-02-03 - US-024 - Linear Issue: SRE-17
+- Implemented grace period support for heartbeat alert delays
+- Files changed: migrations/010_add_grace_period_to_services.sql (new), Medic/Worker/monitor.py (modified), tests/unit/test_monitor.py (extended)
+- **Learnings for future iterations:**
+  - grace_period_seconds column added to services table with DEFAULT 0 (no grace period)
+  - Grace period is checked before maintenance window check in queryForNoHeartbeat()
+  - Grace period calculation: required_delay = (interval_minutes * 60) + grace_period_seconds
+  - Alert delayed if time_since_last_heartbeat < required_delay
+  - Use `heartbeat.get('grace_period_seconds', 0) or 0` to handle None values from legacy data
+  - Naive datetimes are handled by localizing to UTC: `pytz.UTC.localize(last_hbeat_time)`
+  - Grace period does not affect recovery alerts - only initial alerts are delayed
+  - Use `continue` to skip to next service when within grace period
+---
+
+## 2026-02-03 - US-025 - Linear Issue: SRE-18
+- Created playbooks and playbook_triggers database schema migration
+- Files changed: migrations/011_create_playbooks.sql (new)
+- **Learnings for future iterations:**
+  - playbooks table: playbook_id, name (unique), description, yaml_content, version (default 1), timestamps
+  - playbook_triggers table: trigger_id, playbook_id (FK with CASCADE delete), service_pattern (glob), consecutive_failures (default 1, must be > 0), enabled (boolean, default TRUE), timestamps
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
+  - Service pattern uses glob syntax (e.g., "worker-*", "api-prod-*", "*") for flexible matching
+  - Version field on playbooks enables audit trail - increment on each update
+  - Composite index on (enabled, service_pattern, consecutive_failures) optimizes trigger matching queries
+  - Partial index on enabled WHERE TRUE for efficient filtering of active triggers
+---
+
+## 2026-02-03 - US-026 - Linear Issue: SRE-18
+- Implemented playbook YAML parser in Medic/Core/playbook_parser.py
+- Files changed: Medic/Core/playbook_parser.py (new), tests/unit/test_playbook_parser.py (new), Medic/requirements.txt (added PyYAML)
+- **Learnings for future iterations:**
+  - StepType enum: WEBHOOK, SCRIPT, WAIT, CONDITION - use StepType.is_valid() to validate step type strings
+  - ApprovalMode.parse() returns tuple of (ApprovalMode, Optional[int]) for timeout minutes
+  - Supported approval formats: "none", "required", "timeout:Xm" (e.g., "timeout:5m")
+  - _parse_duration() handles "30s", "5m", "1h" formats - plain integers default to seconds
+  - WebhookStep: url, method, headers, body, success_codes, timeout_seconds
+  - ScriptStep: script_name (use 'script' field in YAML), parameters, timeout_seconds
+  - WaitStep: duration_seconds
+  - ConditionStep: condition_type (heartbeat_received), on_failure (fail/continue/escalate), timeout_seconds
+  - PlaybookParseError includes field context for better error messages
+  - All step names must be unique within a playbook - enforced during parsing
+  - Extra YAML fields (not name/description/steps/approval/version) preserved in metadata dict
+  - URL validation allows ${VAR} syntax for variable substitution
+---
+
+## 2026-02-03 - US-027 - Linear Issue: SRE-23
+- Created playbook executions tracking schema in migrations/012_create_playbook_executions.sql
+- Files changed: migrations/012_create_playbook_executions.sql (new)
+- **Learnings for future iterations:**
+  - playbook_executions table: execution_id, playbook_id, service_id (nullable), status, current_step, started_at, completed_at, timestamps
+  - Execution statuses: pending_approval, running, waiting, completed, failed, cancelled - use CHECK constraint
+  - playbook_step_results table: result_id, execution_id, step_name, step_index, status, output, error_message, started_at, completed_at
+  - Step result statuses: pending, running, completed, failed, skipped
+  - FK to playbooks with CASCADE delete - when playbook deleted, all executions removed
+  - FK to services with SET NULL - when service deleted, executions preserved but service_id nulled
+  - Unique constraint on (execution_id, step_index) prevents duplicate step results
+  - Partial indexes for pending_approval (common query) and active executions (resume after restart)
+  - current_step is zero-based index into playbook steps array
+  - output column stores step execution output (webhook response, script stdout)
+  - error_message column separate from output for clarity on failure details
+---
+
+## 2026-02-03 - US-028 - Linear Issue: SRE-23
+- Implemented playbook execution engine core in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (new), tests/unit/test_playbook_engine.py (new)
+- **Learnings for future iterations:**
+  - PlaybookExecutionEngine class orchestrates sequential step execution with state persistence
+  - ExecutionStatus enum: PENDING_APPROVAL, RUNNING, WAITING, COMPLETED, FAILED, CANCELLED
+  - StepResultStatus enum: PENDING, RUNNING, COMPLETED, FAILED, SKIPPED
+  - create_execution() uses RETURNING clause to get execution_id from INSERT
+  - update_execution_status() dynamically builds SET clause based on provided parameters
+  - Wait step uses time.sleep() for synchronous execution - future: make async with scheduled resume
+  - Placeholder executors for webhook/script/condition return PENDING status until implemented
+  - State persisted via create_step_result() and update_step_result() after each step operation
+  - get_active_executions() queries for running/waiting status to support restart resume
+  - Global engine singleton via get_engine() for module-level convenience functions
+  - Output/error_message fields truncated to 4096/2048 chars to prevent database bloat
+---
+
+## 2026-02-03 - US-029 - Linear Issue: SRE-19
+- Implemented webhook step executor in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (modified), tests/unit/test_playbook_engine.py (extended)
+- **Learnings for future iterations:**
+  - execute_webhook_step() performs HTTP request with requests library, supports custom http_client for testing
+  - substitute_variables() handles ${VAR_NAME} substitution recursively for strings, dicts, and lists
+  - Missing variables in substitution are kept as-is (e.g., "${UNKNOWN}" remains unchanged)
+  - _build_webhook_context() provides standard context: EXECUTION_ID, PLAYBOOK_ID, SERVICE_ID, SERVICE_NAME (from DB), PLAYBOOK_NAME
+  - Execution context variables (ALERT_ID, RUN_ID, custom) are copied and merged with standard variables
+  - success_codes list on WebhookStep defines acceptable HTTP status codes (default: [200, 201, 202])
+  - Response body truncated to MAX_RESPONSE_BODY_SIZE (4096 bytes) to prevent database bloat
+  - requests.Timeout, requests.ConnectionError, requests.RequestException all result in FAILED step status
+  - Output includes full HTTP request/response details: method, URL, status code, response body
+  - Engine _execute_webhook() now calls execute_webhook_step() instead of placeholder
+---
+
+## 2026-02-03 - US-030 - Linear Issue: SRE-20
+- Created registered_scripts database schema migration in migrations/013_create_registered_scripts.sql
+- Files changed: migrations/013_create_registered_scripts.sql (new)
+- **Learnings for future iterations:**
+  - registered_scripts table: script_id, name (unique), content, interpreter (bash/python), timeout_seconds (default 30), timestamps
+  - Interpreter constraint via CHECK ensures only valid interpreters: bash, python
+  - Timeout must be positive (CHECK constraint timeout_seconds > 0)
+  - Scripts referenced by name in playbook YAML script steps
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE for times
+  - Security: only scripts in this table can be executed, preventing arbitrary code execution from playbooks
+---
+
+## 2026-02-03 - US-031 - Linear Issue: SRE-20
+- Implemented script step executor in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (modified), tests/unit/test_playbook_engine.py (extended)
+- **Learnings for future iterations:**
+  - RegisteredScript dataclass: script_id, name, content, interpreter, timeout_seconds
+  - get_registered_script(script_name) retrieves scripts from medic.registered_scripts by name, returns None if not found
+  - execute_script_step() is the main function - rejects unregistered scripts with clear error message
+  - Only bash and python interpreters supported - bash uses '-e' flag (exit on error), python3 uses '-u' (unbuffered output)
+  - Resource limits via subprocess preexec_fn: memory limit (RLIMIT_AS = 256MB), CPU time limit (timeout + 5/10 seconds)
+  - Script content written to temp file, executed, temp file deleted (cleanup in try/finally)
+  - _substitute_script_variables() merges context and parameters (parameters override), uses existing substitute_variables()
+  - Output captures both stdout and stderr, stderr prefixed with [STDERR] in combined output
+  - Output truncated to MAX_SCRIPT_OUTPUT_SIZE (8192 bytes) with "[output truncated]" suffix
+  - MEDIC_* environment variables set for scripts: MEDIC_EXECUTION_ID, MEDIC_PLAYBOOK_ID, MEDIC_SERVICE_ID
+  - Step timeout can be overridden at step level (step.timeout_seconds) - falls back to script.timeout_seconds or DEFAULT_SCRIPT_TIMEOUT (30s)
+  - subprocess.TimeoutExpired handled separately from generic exceptions for clear error messages
+  - Engine _execute_script() now calls execute_script_step() instead of placeholder
+---
+
+## 2026-02-03 - US-032 - Linear Issue: SRE-23
+- Implemented condition step executor in Medic/Core/playbook_engine.py
+- Files changed: Medic/Core/playbook_engine.py (modified), tests/unit/test_playbook_engine.py (extended)
+- **Learnings for future iterations:**
+  - execute_condition_step() replaces execute_condition_step_placeholder() - now fully implemented
+  - check_heartbeat_received(service_id, since, parameters) queries medic.heartbeatEvents for heartbeat count since a given time
+  - Condition polling: CONDITION_POLL_INTERVAL = 5 seconds between checks, DEFAULT_CONDITION_TIMEOUT = 300 seconds (5 minutes)
+  - OnFailureAction enum (FAIL, CONTINUE, ESCALATE) determines behavior when condition times out:
+    - FAIL: Step fails, playbook stops (default)
+    - CONTINUE: Step returns COMPLETED, playbook continues (useful for optional checks)
+    - ESCALATE: Step fails with "[ESCALATE]" tag in output for downstream processing
+  - Condition parameters: min_count (minimum heartbeats required, default 1), status (filter by heartbeat status)
+  - service_id can come from execution.service_id or step.parameters['service_id'] - flexibility for multi-service playbooks
+  - ConditionType enum from playbook_parser.py defines check types (currently only HEARTBEAT_RECEIVED)
+  - Removed old placeholder test - replaced with 19 comprehensive unit tests covering all paths
+---
+
+## 2026-02-03 - US-033 - Linear Issue: SRE-23
+- Implemented playbook trigger matching in Medic/Core/playbook_triggers.py
+- Files changed: Medic/Core/playbook_triggers.py (new), tests/unit/test_playbook_triggers.py (new)
+- **Learnings for future iterations:**
+  - PlaybookTrigger dataclass with trigger_id, playbook_id, service_pattern, consecutive_failures, enabled
+  - Glob pattern matching uses fnmatch library - supports *, ?, [seq], [!seq] patterns
+  - matches_service() is case-insensitive (both pattern and service name lowercased)
+  - meets_failure_threshold() returns True when failure_count >= consecutive_failures
+  - matches() combines enabled check, service pattern match, and failure threshold check
+  - get_enabled_triggers() returns triggers ordered by consecutive_failures DESC (most specific first)
+  - find_matching_trigger() iterates triggers in order and returns first match
+  - find_playbook_for_alert() returns MatchedPlaybook with full playbook details (name, trigger info)
+  - find_playbook_for_service_alert() convenience function looks up service name and failure count
+  - get_consecutive_failures_for_service() retrieves from services table (returns 0 if null/not found)
+  - matches_glob_pattern() utility function for direct pattern matching
+---
+
+## 2026-02-03 - US-034 - Linear Issue: SRE-23
+- Integrated playbook triggering with alert system in monitor.py
+- Files changed: Medic/Core/playbook_alert_integration.py (new), Medic/Worker/monitor.py (modified), tests/unit/test_playbook_alert_integration.py (new)
+- **Learnings for future iterations:**
+  - PlaybookTriggerResult dataclass returned by trigger_playbook_for_alert() contains triggered, execution, playbook, status, message
+  - trigger_playbook_for_alert() checks for matching playbook, loads it, and starts execution with appropriate approval status
+  - Approval handling: approval=none starts immediately (skip_approval=True), approval=required creates pending_approval
+  - Alert context variables passed to playbook execution: SERVICE_ID, SERVICE_NAME, CONSECUTIVE_FAILURES, TRIGGER_ID, ALERT_CYCLE
+  - get_alert_consecutive_failures() converts alert_cycle to consecutive failures for trigger matching
+  - _check_playbook_triggers() helper in monitor.py wraps the integration with error handling
+  - Slack notifications sent when playbook triggers: :robot_face: for running, :hourglass: for pending_approval
+  - PLAYBOOK_TRIGGERS_AVAILABLE flag allows graceful degradation if integration module not importable
+  - Integration called in sendAlert() after alerts/notifications are sent (both new alerts and subsequent cycles)
+  - Monitor.py requires mocking slack_client and pagerduty_client modules for unit tests
+---
+
+## 2026-02-03 - US-037 - Linear Issue: SRE-23
+- Implemented circuit breaker for playbook executions
+- Files changed: Medic/Core/circuit_breaker.py (new), Medic/Core/metrics.py (modified), Medic/Core/playbook_alert_integration.py (modified), tests/unit/test_circuit_breaker.py (new), tests/unit/test_playbook_alert_integration.py (modified)
+- **Learnings for future iterations:**
+  - CircuitBreakerConfig dataclass holds window_seconds (default 3600) and max_executions (default 5)
+  - is_circuit_open(service_id) returns True if service exceeds threshold in window
+  - check_circuit_breaker(service_id) returns full CircuitBreakerStatus with count, times, message
+  - get_execution_count_in_window() queries medic.playbook_executions table for count since window start
+  - Circuit breaker check integrated at the START of trigger_playbook_for_alert() - runs before playbook matching
+  - CIRCUIT_BREAKER_AVAILABLE flag allows graceful degradation if module not importable
+  - Prometheus metrics: medic_circuit_breaker_trips_total (Counter by service_id), medic_circuit_breaker_open (Gauge)
+  - record_circuit_breaker_trip() logs at level 40 (ERROR) and records metric
+  - get_services_with_open_circuit() useful for monitoring dashboard
+  - When mocking circuit breaker in tests, mock check_circuit_breaker to return a CircuitBreakerStatus with is_open=False
+---
+
+## 2026-02-03 - US-038 - Linear Issue: SRE-23
+- Implemented playbook execution Prometheus metrics for monitoring
+- Files changed: Medic/Core/metrics.py, Medic/Core/playbook_engine.py, tests/unit/test_playbook_engine.py
+- **Learnings for future iterations:**
+  - PLAYBOOK_EXECUTIONS Counter with playbook/status labels for tracking execution counts
+  - PLAYBOOK_EXECUTION_DURATION Histogram with playbook label and buckets [1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600] seconds for duration distribution
+  - PLAYBOOK_EXECUTIONS_PENDING_APPROVAL Gauge for real-time pending approval count
+  - Metrics recorded at terminal states: _complete_execution(), _fail_execution(), cancel_execution()
+  - Pending approval gauge updated via get_pending_approval_count() -> _update_pending_approval_metric()
+  - Use record_playbook_execution(playbook_name, status) where status is "completed", "failed", or "cancelled"
+  - Duration only recorded if execution.started_at is set (skip for executions with no start time)
+  - When playbook is None, use "unknown" as playbook_name for metrics
+  - When adding metrics integration, remember to mock the metric recording functions in existing tests to prevent DB calls
+---
+
+## 2026-02-03 - US-039 - Linear Issue: SRE-24
+- Created remediation_audit_log database schema migration in migrations/015_create_remediation_audit_log.sql
+- Files changed: migrations/015_create_remediation_audit_log.sql (new)
+- **Learnings for future iterations:**
+  - remediation_audit_log table: log_id, execution_id (FK to playbook_executions with CASCADE delete), action_type, details (JSONB), actor (nullable), timestamp, created_at
+  - Action types enforced via CHECK constraint: execution_started, step_completed, step_failed, approval_requested, approved, rejected, execution_completed, execution_failed
+  - Actor is nullable - NULL for automated actions, user ID for manual actions (approvals/rejections)
+  - Details JSONB stores action-specific context (step name, output, error message, etc.)
+  - GIN index on details enables flexible JSONB queries (e.g., details->>'step_name' = 'restart')
+  - Composite index on (execution_id, timestamp ASC) for efficient execution timeline queries
+  - Partial index on actor WHERE NOT NULL for efficient user action queries
+  - Pattern follows earlier migrations: medic.tablename, SERIAL for ID, TIMESTAMP WITH TIME ZONE
+---
+
+## 2026-02-03 - US-040 - Linear Issue: SRE-24
+- Implemented audit logging in execution engine with comprehensive coverage of all action types
+- Files changed: Medic/Core/audit_log.py (new), Medic/Core/playbook_engine.py, Medic/Core/slack_approval.py, tests/unit/test_audit_log.py (new), tests/unit/test_playbook_engine.py
+- **Learnings for future iterations:**
+  - Audit logging module: Medic/Core/audit_log.py with AuditActionType enum and create_audit_log_entry() core function
+  - Convenience functions for each action type: log_execution_started(), log_step_completed(), log_step_failed(), log_approval_requested(), log_approved(), log_rejected(), log_execution_completed(), log_execution_failed()
+  - Query functions: get_audit_logs_for_execution(), get_audit_logs_by_action_type(), get_audit_logs_by_actor()
+  - AUDIT_LOG_AVAILABLE flag pattern for graceful degradation when audit_log module unavailable
+  - Use try/except ImportError at module load time to set AUDIT_LOG_AVAILABLE = True/False
+  - All audit logging calls wrapped in: if AUDIT_LOG_AVAILABLE: log_X(...)
+  - Service name lookup via db.query_db() for richer context in audit logs
+  - Truncation for long values: MAX_OUTPUT_LENGTH = 8192, MAX_ERROR_LENGTH = 4096 for step outputs/errors
+  - Details field includes all relevant context: playbook_name, service_name, step_type, duration_ms, etc.
+  - Integration points in playbook_engine.py: start_execution(), _execute_steps() (completion and failure), _complete_execution(), _fail_execution()
+  - Integration points in slack_approval.py: send_approval_request(), approve_request(), reject_request()
+  - When adding new integration points that call db.query_db(), mock AUDIT_LOG_AVAILABLE = False in existing tests to avoid database connection errors
+  - Pattern: @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False) decorator on tests that don't mock the service lookup
+---
+
+## 2026-02-03 - US-041 - Linear Issue: SRE-24
+- Implemented audit log query API with GET /v2/audit-logs endpoint
+- Files changed: Medic/Core/audit_log.py (extended), Medic/Core/routes.py (extended), tests/unit/test_audit_log.py (extended), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - Audit log query API: GET /v2/audit-logs with filters for execution_id, service_id, action_type, actor, start_date, end_date
+  - AuditLogQueryResult dataclass holds entries list, total_count, limit, offset, has_more for pagination support
+  - query_audit_logs() builds WHERE clause dynamically from provided filters using list of conditions and params
+  - Service ID filter uses JSONB extraction: (details->>'service_id')::int = %s to filter on the details field
+  - Limit capped at 250, offset clamped to minimum 0 for safety
+  - Invalid action_type is silently ignored in query_audit_logs() but returns 400 from API endpoint
+  - CSV export via Accept: text/csv header - uses audit_logs_to_csv() function with csv.writer
+  - CSV export includes X-Total-Count, X-Limit, X-Offset, X-Has-More headers for pagination info
+  - Date parameters accept ISO-8601 format with 'Z' suffix replaced with '+00:00' for Python parsing
+  - When mocking functions imported inside a route handler, mock at the source module (Medic.Core.audit_log.query_audit_logs) not the routes module
+---
+
+## 2026-02-03 - US-042 - Linear Issue: SRE-24
+- Implemented POST /v2/playbooks/:id/execute API endpoint for triggering playbooks
+- Files changed: Medic/Core/routes.py (extended), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - Playbook execute API: POST /v2/playbooks/:id/execute accepts optional service_id and variables in JSON body
+  - Rate limiting: Use verify_rate_limit() with custom RateLimitConfig(management_limit=10) for 10 req/min
+  - Rate limit check happens BEFORE playbook lookup for early rejection
+  - Response includes execution_id, playbook_id, playbook_name, status, service_id
+  - If status is pending_approval, response includes message about approval requirement
+  - Playbook lookup uses get_playbook_by_id() from playbook_engine module
+  - Service validation: If service_id provided, verify it exists before starting execution
+  - String service_id values are converted to int if possible (e.g., "42" -> 42)
+  - Context passed to playbook includes all variables plus trigger='api'
+  - skip_approval=False so playbook's approval setting is respected
+  - When testing rate-limited endpoints, use @patch decorator on verify_rate_limit returning None to bypass
+  - Webhook trigger API: POST /v2/webhooks/playbooks/:id/trigger authenticates via X-Webhook-Secret header against MEDIC_WEBHOOK_SECRET env var
+  - Use hmac.compare_digest() for constant-time comparison of webhook secrets to prevent timing attacks
+  - verify_rate_limit() supports key_override parameter for custom rate limit keys (e.g., webhook endpoints that don't use API keys)
+  - Webhook rate limiting uses IP-based keys: f"webhook:{remote_ip}" with 10 req/min limit
+
+---
+
+## 2026-02-03 - US-043 - Linear Issue: SRE-25
+- Implemented POST /v2/webhooks/playbooks/:id/trigger endpoint for external system playbook triggering
+- Files changed: Medic/Core/routes.py, Medic/Core/rate_limit_middleware.py, tests/integration/test_api.py
+- **Learnings for future iterations:**
+  - Webhook authentication uses X-Webhook-Secret header compared against MEDIC_WEBHOOK_SECRET env var
+  - Always use hmac.compare_digest() for secret comparison to prevent timing attacks
+  - verify_rate_limit() now accepts key_override parameter for custom rate limit keys
+  - For webhook endpoints without API keys, use IP-based rate limiting: f"webhook:{request.remote_addr}"
+  - When MEDIC_WEBHOOK_SECRET is not configured, return 503 (Service Unavailable) not 401
+  - Webhook context includes trigger='webhook' and source_ip for audit trail
+  - Pattern: import hmac within function to use compare_digest for one-time use
+---
