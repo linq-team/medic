@@ -15,7 +15,24 @@
 - Store API key in sessionStorage, not localStorage
 
 - ESLint 9 uses flat config (eslint.config.js) instead of legacy .eslintrc.js
+- For custom fonts in Vite, copy font files to public/fonts/ and reference via /fonts/ path in CSS
 
+---
+
+## 2026-02-04 - US-006 - Linear Issue: SRE-60
+- What was implemented: Installed Geist font family for brand-compliant typography
+- Files changed:
+  - ui/package.json (added geist dependency)
+  - ui/public/fonts/Geist-Variable.woff2 (new)
+  - ui/public/fonts/GeistMono-Variable.woff2 (new)
+  - ui/src/index.css (added @font-face declarations and --font-sans/--font-mono CSS variables)
+  - ui/tailwind.config.js (added fontFamily configuration)
+  - ui/src/App.tsx (added font-sans class and font-mono demo)
+- **Learnings for future iterations:**
+  - The `geist` npm package is designed for Next.js - for Vite projects, copy font files to public/fonts/
+  - Use variable fonts (Geist-Variable.woff2) for flexibility with font-weight 100-900
+  - In Tailwind v4, configure fonts in @theme block with --font-sans and --font-mono CSS variables
+  - Also add fontFamily to tailwind.config.js for IDE/TypeScript support
 ---
 
 ## 2026-02-04 - US-002 - Linear Issue: SRE-59
