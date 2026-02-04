@@ -269,9 +269,11 @@ grafana:
       tempo: tempo
       loki: loki
 
-# Database migration job
+# Database migration job (runs as Helm pre-upgrade/pre-install hook)
 migrations:
+  # Enable migration job
   enabled: false
+  # Resource requests and limits for the migration job
   resources:
     requests:
       cpu: 100m
@@ -279,3 +281,12 @@ migrations:
     limits:
       cpu: 500m
       memory: 512Mi
+  # Number of retries before considering the job failed
+  backoffLimit: 3
+  # Maximum time (seconds) for the job to complete
+  activeDeadlineSeconds: 300
+  # TTL (seconds) after job completion for automatic cleanup
+  ttlSecondsAfterFinished: 86400
+  # Additional command arguments for the migration script
+  args: []
+  # Example: ["--verbose"]

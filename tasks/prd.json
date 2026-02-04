@@ -675,7 +675,7 @@
         "Document migration workflow in README"
       ],
       "priority": 31,
-      "passes": false,
+      "passes": true,
       "notes": "Migrations run as Helm pre-upgrade hook"
     }
   ]
