@@ -41,6 +41,30 @@
 
 ---
 
+## 2026-02-04 00:30 - US-003 - Linear Issue: SRE-30
+- **What was implemented**: Fixed timing attack vulnerability in API key verification
+  - Modified `_get_api_key_from_db()` in `auth_middleware.py` to prevent timing attacks
+  - Instead of returning immediately when a match is found, the function now:
+    - Stores matched key in a variable
+    - Continues iterating through ALL keys
+    - Returns matched key only after complete iteration
+  - Added detailed code comment explaining the timing attack mitigation
+  - Added 4 unit tests verifying all keys are checked regardless of match position
+
+- **Files changed**:
+  - `Medic/Core/auth_middleware.py` (modified _get_api_key_from_db function)
+  - `tests/unit/test_auth_middleware.py` (new TestGetApiKeyFromDbTimingAttack class with 4 tests)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - Timing attacks can be used to enumerate API keys by measuring response times
+  - Always iterate through all items in security-sensitive comparisons to maintain constant time
+  - Use `mock.side_effect = [True, False, False, ...]` to simulate different match positions in tests
+  - Verify timing attack mitigation by asserting `mock.call_count == total_items`
+  - Pre-existing lint errors (E501 line-too-long) are in the codebase - flake8 config may need updating
+
+---
+
 ## 2026-02-03 23:15 - US-002 - Linear Issue: SRE-29
 - **What was implemented**: Integrated URL validator into webhook execution
   - Added `from Medic.Core.url_validator import InvalidURLError, validate_url` to `playbook_engine.py`
