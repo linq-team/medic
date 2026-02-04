@@ -117,7 +117,10 @@ ingress:
   host: medic.example.com
   tls:
     enabled: false
+    # AWS Certificate Manager ARN (for ALB)
     certificateArn: ""
+    # Kubernetes TLS secret name (for non-ALB ingress controllers)
+    secretName: ""
 
 # ConfigMap for non-sensitive configuration
 config:

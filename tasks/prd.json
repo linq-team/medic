@@ -342,7 +342,7 @@
         "Verify `helm template` renders valid service and ingress"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "External access via ALB"
     },
     {
