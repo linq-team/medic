@@ -56,7 +56,31 @@
 - SortableTableHead component: clickable headers with sort direction icons (ArrowUp/ArrowDown/ArrowUpDown)
 - Sort + pagination pattern: sort items first, then paginate (sortItems(allItems).slice(offset, offset + pageSize))
 - Reset pagination when sort changes: toggleSort deletes 'page' param to go back to page 1
+- Filtering pattern: useFilter hook with useSearchParams for URL state management (?active=1&muted=0&down=1)
+- TableFilters component: dropdown selects for each filter with Clear filters button
+- Filter + sort + pagination pattern: filter first, then sort, then paginate (filterItems(allItems) → sortItems → slice)
+- FilterConfig type: { param, label, options, placeholder } for configurable filter dropdowns
+- Filter options use 'all' value for "show all" (not null/empty) for cleaner Select handling
 
+---
+
+## 2026-02-04 - US-022 - Linear Issue: SRE-91
+- What was implemented: Added filtering to Services table with filter dropdowns for Status, Muted, and Health
+- Files changed:
+  - ui/src/components/table-filter.tsx (new - reusable useFilter hook and TableFilters component)
+  - ui/src/components/ui/select.tsx (new - shadcn/ui Select component)
+  - ui/src/pages/Services.tsx (updated to use TableFilters for client-side filtering)
+  - ui/eslint.config.js (added ESLint override for *-filter.tsx files)
+- **Learnings for future iterations:**
+  - useFilter hook returns { filterState, setFilter, clearFilters, hasActiveFilters, filterItems } for managing filter state
+  - Filter state persists in URL via useSearchParams (e.g., ?active=1&muted=0)
+  - Multiple filters combine with AND logic - all conditions must match
+  - Filter before sort before paginate: filterItems() → sortItems() → slice()
+  - setFilter and clearFilters automatically reset page param to go back to page 1
+  - FilterConfig interface for declarative filter configuration (param, label, options, placeholder)
+  - Use 'all' as special value for "show all" option - easier than handling null in Select
+  - shadcn/ui Select component installed via CLI, moved from @/ to src/components/ui/
+  - Handle empty filtered results with separate UI state from empty unfiltered state
 ---
 
 ## 2026-02-04 - US-021 - Linear Issue: SRE-90
