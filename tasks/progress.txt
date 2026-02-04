@@ -43,7 +43,27 @@
 - Skeleton component for loading states: use animate-pulse with bg-primary/10
 - Status color classes: text-status-healthy, text-status-error for conditional coloring
 - shadcn CLI creates files in literal @/ directory - must move to src/components/ui/
+- Services table pattern: use Table component with TableHeader, TableBody, TableRow, TableHead, TableCell
+- Badge component for status indicators: variant="default" for active, variant="secondary" for inactive
+- Priority badge styling: use custom className for P1 (error), P2 (warning), P3 (muted)
+- Empty state pattern: centered flex column with icon, heading, and description
+- Table loading state: use Skeleton components for entire rows
 
+---
+
+## 2026-02-04 - US-019 - Linear Issue: SRE-67
+- What was implemented: Created Services list page with table displaying all registered services
+- Files changed:
+  - ui/src/pages/Services.tsx (replaced placeholder with full table implementation)
+  - ui/src/components/ui/table.tsx (new - shadcn/ui Table component)
+  - ui/src/components/ui/badge.tsx (new - shadcn/ui Badge component)
+- **Learnings for future iterations:**
+  - Table component from shadcn/ui wraps table in div with overflow-auto for responsive scrolling
+  - Use font-mono for heartbeat_name column for better readability of identifiers
+  - Link to detail pages with react-router-dom Link component
+  - Eye/EyeOff icons from lucide-react for muted status
+  - Service type from api.ts can be imported with `import type { Service }` for type-only usage
+  - Status colors: text-status-healthy for green, text-status-error for red
 ---
 
 ## 2026-02-04 - US-018 - Linear Issue: SRE-66
