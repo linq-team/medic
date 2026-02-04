@@ -639,6 +639,132 @@ def exposeRoutes(app):
             }), 500
 
     # =========================================================================
+    # Audit Log Query API
+    # =========================================================================
+
+    @app.route('/v2/audit-logs', methods=['GET'])
+    def audit_logs():
+        """
+        Query and export audit logs with flexible filtering.
+
+        Query parameters:
+            execution_id: Filter by execution ID
+            service_id: Filter by service ID
+            action_type: Filter by action type (e.g., execution_started,
+                         step_completed, approved)
+            actor: Filter by actor (user who performed action)
+            start_date: Filter logs on or after this date (ISO format)
+            end_date: Filter logs on or before this date (ISO format)
+            limit: Maximum entries to return (default 50, max 250)
+            offset: Number of entries to skip for pagination
+
+        Headers:
+            Accept: application/json (default) or text/csv for CSV export
+
+        Returns:
+            JSON with entries, pagination info, or CSV data
+        """
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            audit_logs_to_csv,
+            query_audit_logs,
+        )
+
+        # Parse query parameters
+        execution_id = request.args.get('execution_id', type=int)
+        service_id = request.args.get('service_id', type=int)
+        action_type = request.args.get('action_type')
+        actor = request.args.get('actor')
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        limit = request.args.get('limit', default=50, type=int)
+        offset = request.args.get('offset', default=0, type=int)
+
+        # Validate action_type if provided
+        if action_type and not AuditActionType.is_valid(action_type):
+            valid_types = [t.value for t in AuditActionType]
+            return json.dumps({
+                "success": False,
+                "message": f"Invalid action_type. Must be one of: "
+                           f"{', '.join(valid_types)}",
+                "results": ""
+            }), 400
+
+        # Parse date parameters
+        start_date = None
+        end_date = None
+
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(
+                    start_date_str.replace('Z', '+00:00')
+                )
+            except ValueError:
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid start_date format. Use ISO format "
+                               "(e.g., 2026-01-01T00:00:00Z)",
+                    "results": ""
+                }), 400
+
+        if end_date_str:
+            try:
+                end_date = datetime.fromisoformat(
+                    end_date_str.replace('Z', '+00:00')
+                )
+            except ValueError:
+                return json.dumps({
+                    "success": False,
+                    "message": "Invalid end_date format. Use ISO format "
+                               "(e.g., 2026-01-31T23:59:59Z)",
+                    "results": ""
+                }), 400
+
+        # Query audit logs
+        result = query_audit_logs(
+            execution_id=execution_id,
+            service_id=service_id,
+            action_type=action_type,
+            actor=actor,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+
+        logger.log(
+            level=10,
+            msg=f"Audit log query: count={len(result.entries)}, "
+                f"total={result.total_count}"
+        )
+
+        # Check Accept header for export format
+        accept_header = request.headers.get('Accept', 'application/json')
+
+        if 'text/csv' in accept_header:
+            # Return CSV format
+            csv_content = audit_logs_to_csv(result.entries)
+            return Response(
+                csv_content,
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition': 'attachment; '
+                                           'filename=audit_logs.csv',
+                    'X-Total-Count': str(result.total_count),
+                    'X-Limit': str(result.limit),
+                    'X-Offset': str(result.offset),
+                    'X-Has-More': str(result.has_more).lower(),
+                }
+            )
+
+        # Return JSON format (default)
+        return json.dumps({
+            "success": True,
+            "message": "",
+            "results": result.to_dict()
+        }), 200
+
+    # =========================================================================
     # Slack Interaction Webhook Endpoint
     # =========================================================================
 

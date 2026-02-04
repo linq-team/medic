@@ -25,6 +25,7 @@ Usage:
         log_execution_completed,
         log_execution_failed,
         get_audit_logs_for_execution,
+        query_audit_logs,
     )
 
     # Log execution start
@@ -44,6 +45,16 @@ Usage:
         step_index=0,
         output="Service restarted successfully",
         duration_ms=1500,
+    )
+
+    # Query audit logs with filters
+    results = query_audit_logs(
+        execution_id=123,
+        action_type="step_completed",
+        start_date=datetime(2026, 1, 1),
+        end_date=datetime(2026, 1, 31),
+        limit=50,
+        offset=0,
     )
 """
 import json
@@ -686,3 +697,213 @@ def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
     except (KeyError, ValueError, TypeError, json.JSONDecodeError) as e:
         logger.log(level=30, msg=f"Failed to parse audit log entry data: {e}")
         return None
+
+
+# ============================================================================
+# Comprehensive Query Functions for API
+# ============================================================================
+
+@dataclass
+class AuditLogQueryResult:
+    """Result of an audit log query with pagination info."""
+
+    entries: List[AuditLogEntry]
+    total_count: int
+    limit: int
+    offset: int
+    has_more: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "entries": [entry.to_dict() for entry in self.entries],
+            "total_count": self.total_count,
+            "limit": self.limit,
+            "offset": self.offset,
+            "has_more": self.has_more,
+        }
+
+
+def query_audit_logs(
+    execution_id: Optional[int] = None,
+    service_id: Optional[int] = None,
+    action_type: Optional[str] = None,
+    actor: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 50,
+    offset: int = 0
+) -> AuditLogQueryResult:
+    """
+    Query audit logs with flexible filtering and pagination.
+
+    Args:
+        execution_id: Filter by execution ID
+        service_id: Filter by service ID (via details->>'service_id')
+        action_type: Filter by action type (must be a valid AuditActionType value)
+        actor: Filter by actor (user who performed action)
+        start_date: Filter logs on or after this date
+        end_date: Filter logs on or before this date
+        limit: Maximum number of entries to return (default 50, max 250)
+        offset: Number of entries to skip for pagination (default 0)
+
+    Returns:
+        AuditLogQueryResult with entries, total count, and pagination info
+    """
+    # Validate and cap limits
+    limit = min(max(1, limit), 250)
+    offset = max(0, offset)
+
+    # Build the WHERE clause dynamically
+    conditions: List[str] = []
+    params: List[Any] = []
+
+    if execution_id is not None:
+        conditions.append("execution_id = %s")
+        params.append(execution_id)
+
+    if service_id is not None:
+        # Service ID is stored in the details JSONB field
+        conditions.append("(details->>'service_id')::int = %s")
+        params.append(service_id)
+
+    if action_type is not None:
+        # Validate action type
+        if AuditActionType.is_valid(action_type):
+            conditions.append("action_type = %s")
+            params.append(action_type)
+
+    if actor is not None:
+        conditions.append("actor = %s")
+        params.append(actor)
+
+    if start_date is not None:
+        conditions.append("timestamp >= %s")
+        params.append(start_date)
+
+    if end_date is not None:
+        conditions.append("timestamp <= %s")
+        params.append(end_date)
+
+    # Build WHERE clause
+    where_clause = ""
+    if conditions:
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+    # Get total count for pagination
+    count_query = f"""
+        SELECT COUNT(*) as total
+        FROM medic.remediation_audit_log
+        {where_clause}
+    """
+
+    count_result = db.query_db(count_query, tuple(params), show_columns=True)
+    total_count = 0
+    if count_result and count_result != '[]':
+        count_rows = json.loads(str(count_result))
+        if count_rows:
+            total_count = count_rows[0].get('total', 0)
+
+    # Get the actual entries
+    data_query = f"""
+        SELECT log_id, execution_id, action_type, details, actor, timestamp,
+               created_at
+        FROM medic.remediation_audit_log
+        {where_clause}
+        ORDER BY timestamp DESC
+        LIMIT %s OFFSET %s
+    """
+
+    data_params = list(params) + [limit, offset]
+    data_result = db.query_db(data_query, tuple(data_params), show_columns=True)
+
+    entries: List[AuditLogEntry] = []
+    if data_result and data_result != '[]':
+        rows = json.loads(str(data_result))
+        entries = [
+            entry for entry in (_parse_audit_log_entry(r) for r in rows if r)
+            if entry is not None
+        ]
+
+    has_more = (offset + len(entries)) < total_count
+
+    return AuditLogQueryResult(
+        entries=entries,
+        total_count=total_count,
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
+    )
+
+
+def audit_logs_to_csv(entries: List[AuditLogEntry]) -> str:
+    """
+    Convert audit log entries to CSV format.
+
+    Args:
+        entries: List of AuditLogEntry objects
+
+    Returns:
+        CSV string with headers and data rows
+    """
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Write header
+    writer.writerow([
+        'log_id',
+        'execution_id',
+        'action_type',
+        'actor',
+        'timestamp',
+        'created_at',
+        'details'
+    ])
+
+    # Write data rows
+    for entry in entries:
+        writer.writerow([
+            entry.log_id,
+            entry.execution_id,
+            entry.action_type.value,
+            entry.actor or '',
+            entry.timestamp.isoformat() if entry.timestamp else '',
+            entry.created_at.isoformat() if entry.created_at else '',
+            json.dumps(entry.details) if entry.details else ''
+        ])
+
+    return output.getvalue()
+
+
+def get_service_id_for_execution(execution_id: int) -> Optional[int]:
+    """
+    Get the service ID associated with a playbook execution.
+
+    Args:
+        execution_id: The playbook execution ID
+
+    Returns:
+        Service ID if found, None otherwise
+    """
+    result = db.query_db(
+        """
+        SELECT service_id
+        FROM medic.playbook_executions
+        WHERE execution_id = %s
+        LIMIT 1
+        """,
+        (execution_id,),
+        show_columns=True
+    )
+
+    if not result or result == '[]':
+        return None
+
+    rows = json.loads(str(result))
+    if not rows:
+        return None
+
+    return rows[0].get('service_id')

@@ -543,3 +543,316 @@ class TestV2DurationStatistics:
             assert response.status_code == 404
             data = json.loads(response.data)
             assert data["success"] is False
+
+
+@pytest.mark.integration
+class TestV2AuditLogs:
+    """Integration tests for V2 audit logs query endpoint."""
+
+    def test_audit_logs_query_no_filters(self, app, mock_env_vars):
+        """Test querying audit logs without any filters."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=0,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get("/v2/audit-logs")
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["success"] is True
+            assert data["results"]["total_count"] == 0
+            assert data["results"]["limit"] == 50
+            assert data["results"]["offset"] == 0
+            assert data["results"]["has_more"] is False
+
+    def test_audit_logs_query_with_execution_id(self, app, mock_env_vars):
+        """Test querying audit logs by execution_id."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import (
+                AuditActionType,
+                AuditLogEntry,
+                AuditLogQueryResult,
+            )
+            from datetime import datetime
+            import pytz
+
+            now = datetime.now(pytz.timezone('America/Chicago'))
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[
+                    AuditLogEntry(
+                        log_id=1,
+                        execution_id=100,
+                        action_type=AuditActionType.EXECUTION_STARTED,
+                        details={"playbook_name": "test"},
+                        actor=None,
+                        timestamp=now,
+                    )
+                ],
+                total_count=1,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get("/v2/audit-logs?execution_id=100")
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["success"] is True
+            assert data["results"]["total_count"] == 1
+            assert len(data["results"]["entries"]) == 1
+            assert data["results"]["entries"][0]["execution_id"] == 100
+
+            # Verify query was called with correct params
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["execution_id"] == 100
+
+    def test_audit_logs_query_with_service_id(self, app, mock_env_vars):
+        """Test querying audit logs by service_id."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=0,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get("/v2/audit-logs?service_id=42")
+
+            assert response.status_code == 200
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["service_id"] == 42
+
+    def test_audit_logs_query_with_action_type(self, app, mock_env_vars):
+        """Test querying audit logs by action_type."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=0,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get("/v2/audit-logs?action_type=approved")
+
+            assert response.status_code == 200
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["action_type"] == "approved"
+
+    def test_audit_logs_query_with_invalid_action_type(self, app, mock_env_vars):
+        """Test querying audit logs with invalid action_type."""
+        client = app.test_client()
+
+        response = client.get("/v2/audit-logs?action_type=invalid_type")
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Invalid action_type" in data["message"]
+
+    def test_audit_logs_query_with_date_range(self, app, mock_env_vars):
+        """Test querying audit logs with date range."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=0,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get(
+                "/v2/audit-logs?"
+                "start_date=2026-01-01T00:00:00Z&"
+                "end_date=2026-01-31T23:59:59Z"
+            )
+
+            assert response.status_code == 200
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["start_date"] is not None
+            assert call_kwargs["end_date"] is not None
+
+    def test_audit_logs_query_with_invalid_start_date(self, app, mock_env_vars):
+        """Test querying audit logs with invalid start_date format."""
+        client = app.test_client()
+
+        response = client.get("/v2/audit-logs?start_date=not-a-date")
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Invalid start_date format" in data["message"]
+
+    def test_audit_logs_query_with_invalid_end_date(self, app, mock_env_vars):
+        """Test querying audit logs with invalid end_date format."""
+        client = app.test_client()
+
+        response = client.get("/v2/audit-logs?end_date=2026/01/31")
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Invalid end_date format" in data["message"]
+
+    def test_audit_logs_query_with_pagination(self, app, mock_env_vars):
+        """Test querying audit logs with pagination."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=100,
+                limit=10,
+                offset=50,
+                has_more=True,
+            )
+
+            response = client.get("/v2/audit-logs?limit=10&offset=50")
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["results"]["limit"] == 10
+            assert data["results"]["offset"] == 50
+            assert data["results"]["has_more"] is True
+
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["limit"] == 10
+            assert call_kwargs["offset"] == 50
+
+    def test_audit_logs_csv_export(self, app, mock_env_vars):
+        """Test exporting audit logs as CSV."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import (
+                AuditActionType,
+                AuditLogEntry,
+                AuditLogQueryResult,
+            )
+            from datetime import datetime
+            import pytz
+
+            now = datetime.now(pytz.timezone('America/Chicago'))
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[
+                    AuditLogEntry(
+                        log_id=1,
+                        execution_id=100,
+                        action_type=AuditActionType.EXECUTION_STARTED,
+                        details={"playbook_name": "test"},
+                        actor=None,
+                        timestamp=now,
+                    ),
+                    AuditLogEntry(
+                        log_id=2,
+                        execution_id=100,
+                        action_type=AuditActionType.APPROVED,
+                        details={},
+                        actor="user123",
+                        timestamp=now,
+                    ),
+                ],
+                total_count=2,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get(
+                "/v2/audit-logs",
+                headers={"Accept": "text/csv"}
+            )
+
+            assert response.status_code == 200
+            assert response.content_type == "text/csv; charset=utf-8"
+            assert (
+                response.headers.get("Content-Disposition") ==
+                "attachment; filename=audit_logs.csv"
+            )
+            assert response.headers.get("X-Total-Count") == "2"
+            assert response.headers.get("X-Has-More") == "false"
+
+            # Verify CSV content
+            csv_content = response.data.decode("utf-8")
+            assert "log_id" in csv_content  # Header
+            assert "execution_started" in csv_content
+            assert "approved" in csv_content
+            assert "user123" in csv_content
+
+    def test_audit_logs_query_with_actor(self, app, mock_env_vars):
+        """Test querying audit logs by actor."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=0,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get("/v2/audit-logs?actor=user123")
+
+            assert response.status_code == 200
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["actor"] == "user123"
+
+    def test_audit_logs_query_multiple_filters(self, app, mock_env_vars):
+        """Test querying audit logs with multiple filters."""
+        client = app.test_client()
+
+        with patch("Medic.Core.audit_log.query_audit_logs") as mock_query:
+            from Medic.Core.audit_log import AuditLogQueryResult
+            mock_query.return_value = AuditLogQueryResult(
+                entries=[],
+                total_count=0,
+                limit=50,
+                offset=0,
+                has_more=False,
+            )
+
+            response = client.get(
+                "/v2/audit-logs?"
+                "execution_id=100&"
+                "service_id=42&"
+                "action_type=approved&"
+                "actor=user123"
+            )
+
+            assert response.status_code == 200
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args[1]
+            assert call_kwargs["execution_id"] == 100
+            assert call_kwargs["service_id"] == 42
+            assert call_kwargs["action_type"] == "approved"
+            assert call_kwargs["actor"] == "user123"

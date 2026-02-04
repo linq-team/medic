@@ -813,3 +813,550 @@ class TestParseAuditLogEntry:
         result = _parse_audit_log_entry(data)
 
         assert result is None
+
+
+class TestAuditLogQueryResult:
+    """Tests for AuditLogQueryResult dataclass."""
+
+    def test_audit_log_query_result_creation(self):
+        """Test creating an AuditLogQueryResult object."""
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            AuditLogEntry,
+            AuditLogQueryResult,
+        )
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        entry = AuditLogEntry(
+            log_id=1,
+            execution_id=100,
+            action_type=AuditActionType.EXECUTION_STARTED,
+            details={"playbook_name": "test"},
+            actor=None,
+            timestamp=now,
+        )
+
+        result = AuditLogQueryResult(
+            entries=[entry],
+            total_count=10,
+            limit=50,
+            offset=0,
+            has_more=False,
+        )
+
+        assert len(result.entries) == 1
+        assert result.total_count == 10
+        assert result.limit == 50
+        assert result.offset == 0
+        assert result.has_more is False
+
+    def test_audit_log_query_result_to_dict(self):
+        """Test converting AuditLogQueryResult to dictionary."""
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            AuditLogEntry,
+            AuditLogQueryResult,
+        )
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        entry = AuditLogEntry(
+            log_id=1,
+            execution_id=100,
+            action_type=AuditActionType.APPROVED,
+            details={},
+            actor="user123",
+            timestamp=now,
+        )
+
+        result = AuditLogQueryResult(
+            entries=[entry],
+            total_count=100,
+            limit=50,
+            offset=50,
+            has_more=True,
+        )
+
+        result_dict = result.to_dict()
+
+        assert len(result_dict["entries"]) == 1
+        assert result_dict["total_count"] == 100
+        assert result_dict["limit"] == 50
+        assert result_dict["offset"] == 50
+        assert result_dict["has_more"] is True
+
+
+class TestQueryAuditLogs:
+    """Tests for query_audit_logs function."""
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_no_filters(self, mock_query_db):
+        """Test querying audit logs without any filters."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        # First call returns count, second returns data
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 2}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "execution_started",
+                    "details": {},
+                    "actor": None,
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+                {
+                    "log_id": 2,
+                    "execution_id": 100,
+                    "action_type": "step_completed",
+                    "details": {},
+                    "actor": None,
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs()
+
+        assert len(result.entries) == 2
+        assert result.total_count == 2
+        assert result.limit == 50
+        assert result.offset == 0
+        assert result.has_more is False
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_execution_id(self, mock_query_db):
+        """Test querying audit logs filtered by execution_id."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 1}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "execution_started",
+                    "details": {},
+                    "actor": None,
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(execution_id=100)
+
+        assert len(result.entries) == 1
+        assert result.entries[0].execution_id == 100
+
+        # Verify the query included the filter
+        count_call = mock_query_db.call_args_list[0]
+        assert "execution_id = %s" in count_call[0][0]
+        assert 100 in count_call[0][1]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_service_id(self, mock_query_db):
+        """Test querying audit logs filtered by service_id."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 1}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "execution_started",
+                    "details": {"service_id": 42},
+                    "actor": None,
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(service_id=42)
+
+        assert len(result.entries) == 1
+
+        # Verify the query included the JSONB filter
+        count_call = mock_query_db.call_args_list[0]
+        assert "(details->>'service_id')::int = %s" in count_call[0][0]
+        assert 42 in count_call[0][1]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_action_type(self, mock_query_db):
+        """Test querying audit logs filtered by action_type."""
+        from Medic.Core.audit_log import AuditActionType, query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 1}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "approved",
+                    "details": {},
+                    "actor": "user123",
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(action_type="approved")
+
+        assert len(result.entries) == 1
+        assert result.entries[0].action_type == AuditActionType.APPROVED
+
+        # Verify the query included the filter
+        count_call = mock_query_db.call_args_list[0]
+        assert "action_type = %s" in count_call[0][0]
+        assert "approved" in count_call[0][1]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_invalid_action_type(self, mock_query_db):
+        """Test that invalid action_type is ignored."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 0}]),
+            json.dumps([])
+        ]
+
+        # Invalid action type should be ignored (not added to filters)
+        query_audit_logs(action_type="invalid_type")
+
+        # Verify the query did NOT include the filter
+        count_call = mock_query_db.call_args_list[0]
+        assert "action_type = %s" not in count_call[0][0]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_actor(self, mock_query_db):
+        """Test querying audit logs filtered by actor."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 1}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "approved",
+                    "details": {},
+                    "actor": "user123",
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(actor="user123")
+
+        assert len(result.entries) == 1
+        assert result.entries[0].actor == "user123"
+
+        # Verify the query included the filter
+        count_call = mock_query_db.call_args_list[0]
+        assert "actor = %s" in count_call[0][0]
+        assert "user123" in count_call[0][1]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_date_range(self, mock_query_db):
+        """Test querying audit logs filtered by date range."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        start_date = datetime(2026, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
+        end_date = datetime(2026, 1, 31, 23, 59, 59, tzinfo=pytz.UTC)
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 1}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "execution_started",
+                    "details": {},
+                    "actor": None,
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(start_date=start_date, end_date=end_date)
+
+        assert len(result.entries) == 1
+
+        # Verify the query included the date filters
+        count_call = mock_query_db.call_args_list[0]
+        assert "timestamp >= %s" in count_call[0][0]
+        assert "timestamp <= %s" in count_call[0][0]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_with_pagination(self, mock_query_db):
+        """Test querying audit logs with pagination."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 100}]),
+            json.dumps([
+                {
+                    "log_id": 51,
+                    "execution_id": 100,
+                    "action_type": "execution_started",
+                    "details": {},
+                    "actor": None,
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(limit=10, offset=50)
+
+        assert result.total_count == 100
+        assert result.limit == 10
+        assert result.offset == 50
+        assert result.has_more is True
+
+        # Verify LIMIT and OFFSET in data query
+        data_call = mock_query_db.call_args_list[1]
+        assert "LIMIT %s OFFSET %s" in data_call[0][0]
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_limit_cap(self, mock_query_db):
+        """Test that limit is capped at 250."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 0}]),
+            json.dumps([])
+        ]
+
+        result = query_audit_logs(limit=500)
+
+        assert result.limit == 250
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_negative_offset_clamped(self, mock_query_db):
+        """Test that negative offset is clamped to 0."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 0}]),
+            json.dumps([])
+        ]
+
+        result = query_audit_logs(offset=-10)
+
+        assert result.offset == 0
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_empty_results(self, mock_query_db):
+        """Test querying audit logs with no results."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 0}]),
+            json.dumps([])
+        ]
+
+        result = query_audit_logs(execution_id=999)
+
+        assert len(result.entries) == 0
+        assert result.total_count == 0
+        assert result.has_more is False
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_query_audit_logs_multiple_filters(self, mock_query_db):
+        """Test querying audit logs with multiple filters."""
+        from Medic.Core.audit_log import query_audit_logs
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+
+        mock_query_db.side_effect = [
+            json.dumps([{"total": 1}]),
+            json.dumps([
+                {
+                    "log_id": 1,
+                    "execution_id": 100,
+                    "action_type": "approved",
+                    "details": {"service_id": 42},
+                    "actor": "user123",
+                    "timestamp": now.isoformat(),
+                    "created_at": now.isoformat(),
+                },
+            ])
+        ]
+
+        result = query_audit_logs(
+            execution_id=100,
+            service_id=42,
+            action_type="approved",
+            actor="user123"
+        )
+
+        assert len(result.entries) == 1
+
+        # Verify all filters are in the query
+        count_call = mock_query_db.call_args_list[0]
+        query = count_call[0][0]
+        assert "execution_id = %s" in query
+        assert "(details->>'service_id')::int = %s" in query
+        assert "action_type = %s" in query
+        assert "actor = %s" in query
+
+
+class TestAuditLogsToCsv:
+    """Tests for audit_logs_to_csv function."""
+
+    def test_audit_logs_to_csv_empty_list(self):
+        """Test converting empty list to CSV."""
+        from Medic.Core.audit_log import audit_logs_to_csv
+
+        result = audit_logs_to_csv([])
+
+        # Should only contain headers
+        lines = result.strip().split('\n')
+        assert len(lines) == 1
+        assert "log_id" in lines[0]
+        assert "execution_id" in lines[0]
+
+    def test_audit_logs_to_csv_single_entry(self):
+        """Test converting single entry to CSV."""
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            AuditLogEntry,
+            audit_logs_to_csv,
+        )
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        entry = AuditLogEntry(
+            log_id=1,
+            execution_id=100,
+            action_type=AuditActionType.EXECUTION_STARTED,
+            details={"playbook_name": "test"},
+            actor=None,
+            timestamp=now,
+            created_at=now,
+        )
+
+        result = audit_logs_to_csv([entry])
+
+        lines = result.strip().split('\n')
+        assert len(lines) == 2  # Header + 1 data row
+        assert "1" in lines[1]
+        assert "100" in lines[1]
+        assert "execution_started" in lines[1]
+
+    def test_audit_logs_to_csv_multiple_entries(self):
+        """Test converting multiple entries to CSV."""
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            AuditLogEntry,
+            audit_logs_to_csv,
+        )
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        entries = [
+            AuditLogEntry(
+                log_id=1,
+                execution_id=100,
+                action_type=AuditActionType.EXECUTION_STARTED,
+                details={},
+                actor=None,
+                timestamp=now,
+            ),
+            AuditLogEntry(
+                log_id=2,
+                execution_id=100,
+                action_type=AuditActionType.APPROVED,
+                details={},
+                actor="user123",
+                timestamp=now,
+            ),
+        ]
+
+        result = audit_logs_to_csv(entries)
+
+        lines = result.strip().split('\n')
+        assert len(lines) == 3  # Header + 2 data rows
+        assert "user123" in lines[2]
+
+    def test_audit_logs_to_csv_with_special_characters(self):
+        """Test CSV handles special characters in details."""
+        from Medic.Core.audit_log import (
+            AuditActionType,
+            AuditLogEntry,
+            audit_logs_to_csv,
+        )
+
+        now = datetime.now(pytz.timezone('America/Chicago'))
+        entry = AuditLogEntry(
+            log_id=1,
+            execution_id=100,
+            action_type=AuditActionType.STEP_FAILED,
+            details={"error": 'Failed with "quotes" and, commas'},
+            actor=None,
+            timestamp=now,
+        )
+
+        result = audit_logs_to_csv([entry])
+
+        # CSV should properly escape quotes and commas
+        assert "Failed with" in result
+        # The JSON details should be quoted in the CSV
+        lines = result.strip().split('\n')
+        assert len(lines) == 2
+
+
+class TestGetServiceIdForExecution:
+    """Tests for get_service_id_for_execution function."""
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_get_service_id_for_execution_found(self, mock_query_db):
+        """Test retrieving service ID for an execution."""
+        from Medic.Core.audit_log import get_service_id_for_execution
+
+        mock_query_db.return_value = json.dumps([{"service_id": 42}])
+
+        result = get_service_id_for_execution(100)
+
+        assert result == 42
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_get_service_id_for_execution_not_found(self, mock_query_db):
+        """Test retrieving service ID for non-existent execution."""
+        from Medic.Core.audit_log import get_service_id_for_execution
+
+        mock_query_db.return_value = "[]"
+
+        result = get_service_id_for_execution(999)
+
+        assert result is None
+
+    @patch("Medic.Core.audit_log.db.query_db")
+    def test_get_service_id_for_execution_null_service(self, mock_query_db):
+        """Test retrieving service ID when service_id is null."""
+        from Medic.Core.audit_log import get_service_id_for_execution
+
+        mock_query_db.return_value = json.dumps([{"service_id": None}])
+
+        result = get_service_id_for_execution(100)
+
+        assert result is None

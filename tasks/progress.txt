@@ -91,6 +91,9 @@
 - Playbook metrics integration: Metrics recorded in _complete_execution(), _fail_execution(), cancel_execution(). Pending approval updated when status changes.
 - Audit log: medic.remediation_audit_log table stores action history per execution. Action types: execution_started, step_completed, step_failed, approval_requested, approved, rejected, execution_completed, execution_failed.
 - Audit log details: JSONB details field stores action-specific context (step_name, output, error_message, etc.). Actor field nullable (NULL for automated, user ID for manual).
+- Audit log query API: GET /v2/audit-logs with filters for execution_id, service_id, action_type, actor, start_date, end_date. Use query_audit_logs() from Medic/Core/audit_log.py.
+- Audit log pagination: query_audit_logs() returns AuditLogQueryResult with entries, total_count, limit (default 50, max 250), offset, has_more.
+- Audit log CSV export: Use Accept: text/csv header to get CSV response. audit_logs_to_csv() converts entries to CSV format.
 
 ---
 
@@ -611,4 +614,20 @@
   - Integration points in slack_approval.py: send_approval_request(), approve_request(), reject_request()
   - When adding new integration points that call db.query_db(), mock AUDIT_LOG_AVAILABLE = False in existing tests to avoid database connection errors
   - Pattern: @patch("Medic.Core.playbook_engine.AUDIT_LOG_AVAILABLE", False) decorator on tests that don't mock the service lookup
+---
+
+## 2026-02-03 - US-041 - Linear Issue: SRE-24
+- Implemented audit log query API with GET /v2/audit-logs endpoint
+- Files changed: Medic/Core/audit_log.py (extended), Medic/Core/routes.py (extended), tests/unit/test_audit_log.py (extended), tests/integration/test_api.py (extended)
+- **Learnings for future iterations:**
+  - Audit log query API: GET /v2/audit-logs with filters for execution_id, service_id, action_type, actor, start_date, end_date
+  - AuditLogQueryResult dataclass holds entries list, total_count, limit, offset, has_more for pagination support
+  - query_audit_logs() builds WHERE clause dynamically from provided filters using list of conditions and params
+  - Service ID filter uses JSONB extraction: (details->>'service_id')::int = %s to filter on the details field
+  - Limit capped at 250, offset clamped to minimum 0 for safety
+  - Invalid action_type is silently ignored in query_audit_logs() but returns 400 from API endpoint
+  - CSV export via Accept: text/csv header - uses audit_logs_to_csv() function with csv.writer
+  - CSV export includes X-Total-Count, X-Limit, X-Offset, X-Has-More headers for pagination info
+  - Date parameters accept ISO-8601 format with 'Z' suffix replaced with '+00:00' for Python parsing
+  - When mocking functions imported inside a route handler, mock at the source module (Medic.Core.audit_log.query_audit_logs) not the routes module
 ---
