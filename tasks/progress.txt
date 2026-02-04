@@ -49,6 +49,53 @@
 - **OpenMetrics format: Use `get_metrics(openmetrics=True)` for exemplar support (default)**
 - **Metrics info gauge: `medic_build_info` gauge with service_name, service_version, deployment_environment labels**
 - **OTEL metric naming: Use `medic_http_server_*` for HTTP, `medic_db_client_*` for DB (follows OTEL semantic conventions)**
+- **ServiceMonitor: Use `monitoring.coreos.com/v1` API, target service with matchLabels and port name**
+- **PodMonitor: Use `monitoring.coreos.com/v1` API, target pods with matchLabels and podMetricsEndpoints**
+- **Metric relabelings: Always add environment label from global.environment for OTEL resource attribution**
+
+---
+
+## 2026-02-04 - US-022 - Linear Issue: SRE-49
+- **What was implemented**: ServiceMonitor and PodMonitor Helm templates for Alloy metric discovery
+  - Created `helm/medic/templates/servicemonitor.yaml` for API metrics scraping:
+    - Uses `monitoring.coreos.com/v1` API version
+    - Conditional creation via `.Values.metrics.serviceMonitor.enabled`
+    - Targets medic-api service on /metrics endpoint
+    - Configurable scrape interval (default: 30s) and timeout (default: 10s)
+    - Enables exemplar scraping via `enableFeatures: [exemplar-storage]` when configured
+    - Supports metric relabeling and target relabeling via values
+    - Auto-adds environment label from `.Values.global.environment`
+    - Selector matches API deployment via `medic.api.selectorLabels`
+  - Created `helm/medic/templates/podmonitor.yaml` for worker metrics (if exposed):
+    - Uses `monitoring.coreos.com/v1` API version
+    - Conditional creation via `.Values.metrics.podMonitor.enabled`
+    - Targets worker pods via `medic.worker.selectorLabels`
+    - Same configurable options as ServiceMonitor
+    - Auto-adds environment label for OTEL resource attribution
+  - Updated `helm/medic/values.yaml` with expanded metrics configuration:
+    - Added `enableExemplars: true` (default) for trace correlation in Grafana
+    - Added `honorLabels: false` (default) setting
+    - Added `metricRelabelings: []` for post-scrape relabeling
+    - Added `relabelings: []` for target discovery relabeling
+    - Added full `podMonitor` section mirroring serviceMonitor structure
+  - Verified `helm lint` passes
+  - Verified `helm template` renders valid YAML
+  - Verified `kubectl apply --dry-run=client` succeeds for all resources
+
+- **Files changed**:
+  - `helm/medic/templates/servicemonitor.yaml` (new)
+  - `helm/medic/templates/podmonitor.yaml` (new)
+  - `helm/medic/values.yaml` (expanded metrics section)
+  - `tasks/prd.json` (updated passes: true)
+
+- **Learnings for future iterations**:
+  - ServiceMonitor API is `monitoring.coreos.com/v1` (stable, not v1beta1)
+  - Use `port: http` to reference named port from Service, not port number
+  - Exemplar scraping requires `enableFeatures: [exemplar-storage]` in endpoints spec
+  - Always add environment label via relabelings for consistent OTEL resource attribution
+  - PodMonitor uses `podMetricsEndpoints` not `endpoints` (different from ServiceMonitor)
+  - Selector matchLabels must match the pod/service labels exactly
+  - Environment label added via relabelings: `sourceLabels: [], targetLabel: environment, replacement: <value>`
 
 ---
 

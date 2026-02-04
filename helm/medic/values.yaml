@@ -224,9 +224,33 @@ topologySpreadConstraints:
 metrics:
   serviceMonitor:
     enabled: false
+    # Scrape interval (default: 30s)
+    interval: 30s
+    # Scrape timeout (default: 10s)
+    scrapeTimeout: 10s
+    # Additional labels to add to the ServiceMonitor
+    labels: {}
+    # Honor labels from the scraped metrics
+    honorLabels: false
+    # Enable exemplar scraping for trace correlation in Grafana
+    enableExemplars: true
+    # Metric relabeling configuration
+    metricRelabelings: []
+    # Add OTEL resource attributes as metric labels
+    # - sourceLabels: [__name__]
+    #   regex: 'medic_.*'
+    #   action: keep
+    # Relabeling configuration for discovered targets
+    relabelings: []
+  # PodMonitor for worker (if it exposes metrics)
+  podMonitor:
+    enabled: false
     interval: 30s
     scrapeTimeout: 10s
     labels: {}
+    honorLabels: false
+    metricRelabelings: []
+    relabelings: []
 
 # Grafana dashboard
 grafana:

@@ -479,7 +479,7 @@
         "Verify `helm template` renders valid ServiceMonitor"
       ],
       "priority": 22,
-      "passes": false,
+      "passes": true,
       "notes": "Alloy uses ServiceMonitor CRDs for metric discovery"
     },
     {
