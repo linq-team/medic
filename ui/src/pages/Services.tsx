@@ -20,6 +20,7 @@ import { MuteToggle, ActiveToggle } from '@/components/service-toggle'
 import { PrioritySelector } from '@/components/priority-selector'
 import { ServiceCreateModal } from '@/components/service-create-modal'
 import { BulkActionsToolbar } from '@/components/bulk-actions-toolbar'
+import { ServiceRowActions } from '@/components/service-row-actions'
 import { useServices } from '@/hooks'
 import type { Service } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -358,6 +359,9 @@ export function Services() {
                   >
                     Priority
                   </SortableTableHead>
+                  <TableHead className="w-[60px]">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -412,6 +416,9 @@ export function Services() {
                     <TableCell>{service.team || '—'}</TableCell>
                     <TableCell>
                       <PrioritySelector service={service} />
+                    </TableCell>
+                    <TableCell>
+                      <ServiceRowActions service={service} />
                     </TableCell>
                   </TableRow>
                 ))}

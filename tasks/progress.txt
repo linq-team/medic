@@ -2225,3 +2225,34 @@
   - US-012 and US-013 had overlapping requirements - bulk actions toolbar included team/priority editing
 
 ---
+
+## 2026-02-04 - US-014 - Linear Issue: SRE-118
+- **What was implemented**: Row actions menu added to Services table
+  - Added DropdownMenu component from shadcn
+  - Created ServiceRowActions component with three-dot trigger button
+  - Menu items include:
+    - View Details: Navigate to service detail page
+    - Edit: Opens ServiceEditModal
+    - Mute/Unmute: Toggle alert silencing with toast notification
+    - Activate/Deactivate: Toggle monitoring (deactivate shows confirmation dialog)
+    - View History: Navigate to /history with service filter
+  - Deactivate styled in red (text-destructive class)
+  - Fully keyboard accessible via Radix UI primitives
+  - Added 19 test cases covering all menu items and interactions
+
+- **Files changed**:
+  - `ui/src/components/ui/dropdown-menu.tsx` (new - shadcn DropdownMenu component)
+  - `ui/src/components/service-row-actions.tsx` (new - ServiceRowActions component)
+  - `ui/src/components/service-row-actions.test.tsx` (new - 19 test cases)
+  - `ui/src/pages/Services.tsx` (added Actions column and ServiceRowActions per row)
+  - `ui/package.json`, `ui/package-lock.json` (added @radix-ui/react-dropdown-menu)
+  - `tasks/prd.json` (marked US-014 as passes: true)
+
+- **Learnings for future iterations**:
+  - ServiceRowActions reuses ServiceEditModal for edit functionality
+  - View History navigates to /history page with service filter (page doesn't exist yet - US-017)
+  - Deactivate action requires confirmation dialog, activate does not
+  - Use `text-destructive focus:text-destructive` for destructive menu items
+  - Radix DropdownMenu provides keyboard accessibility out of the box
+
+---
