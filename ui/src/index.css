@@ -38,4 +38,80 @@
   --color-status-error: #dc2626;
   --color-status-critical: #991b1b;
   --color-status-muted: #6b7280;
+
+  /* shadcn/ui design tokens */
+  --radius: 0.5rem;
+}
+
+/* shadcn/ui CSS variables - Light mode (default) */
+:root {
+  --background: 252 249 233; /* linq-cream #FCF9E9 */
+  --foreground: 20 20 20; /* linq-black #141414 */
+
+  --card: 252 249 233; /* linq-cream */
+  --card-foreground: 20 20 20; /* linq-black */
+
+  --popover: 252 249 233;
+  --popover-foreground: 20 20 20;
+
+  --primary: 27 61 103; /* linq-navy #1B3D67 */
+  --primary-foreground: 252 249 233; /* cream */
+
+  --secondary: 176 191 183; /* linq-sage #B0BFB7 */
+  --secondary-foreground: 20 20 20;
+
+  --muted: 176 191 183; /* sage */
+  --muted-foreground: 107 114 128; /* status-muted */
+
+  --accent: 79 159 223; /* linq-blue #4F9FDF */
+  --accent-foreground: 255 255 255;
+
+  --destructive: 220 38 38; /* status-error */
+  --destructive-foreground: 255 255 255;
+
+  --border: 176 191 183; /* sage */
+  --input: 176 191 183;
+  --ring: 27 61 103; /* navy */
+}
+
+/* Dark mode */
+.dark {
+  --background: 20 20 20; /* linq-black #141414 */
+  --foreground: 252 249 233; /* linq-cream */
+
+  --card: 30 30 30;
+  --card-foreground: 252 249 233;
+
+  --popover: 30 30 30;
+  --popover-foreground: 252 249 233;
+
+  --primary: 79 159 223; /* linq-blue */
+  --primary-foreground: 20 20 20;
+
+  --secondary: 50 50 50;
+  --secondary-foreground: 252 249 233;
+
+  --muted: 50 50 50;
+  --muted-foreground: 156 163 175;
+
+  --accent: 131 177 73; /* linq-green */
+  --accent-foreground: 20 20 20;
+
+  --destructive: 239 68 68; /* error dark */
+  --destructive-foreground: 255 255 255;
+
+  --border: 50 50 50;
+  --input: 50 50 50;
+  --ring: 79 159 223; /* linq-blue */
+}
+
+/* Apply CSS variables to Tailwind v4 */
+@layer base {
+  * {
+    border-color: rgb(var(--border));
+  }
+  body {
+    background-color: rgb(var(--background));
+    color: rgb(var(--foreground));
+  }
 }
