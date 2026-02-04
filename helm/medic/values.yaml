@@ -255,9 +255,19 @@ metrics:
 # Grafana dashboard
 grafana:
   dashboard:
+    # Enable dashboard ConfigMap creation for Grafana sidecar discovery
     enabled: false
+    # Labels for Grafana sidecar to discover the dashboard
     labels:
       grafana_dashboard: "1"
+    # Additional annotations for the ConfigMap
+    annotations: {}
+    # Datasource configuration for the dashboard
+    # These are used as default values for dashboard variables
+    datasources:
+      prometheus: prometheus
+      tempo: tempo
+      loki: loki
 
 # Database migration job
 migrations:

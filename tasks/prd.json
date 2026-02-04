@@ -502,7 +502,7 @@
         "Verify dashboard JSON is valid"
       ],
       "priority": 23,
-      "passes": false,
+      "passes": true,
       "notes": "Full observability correlation: metrics -> traces -> logs"
     },
     {
