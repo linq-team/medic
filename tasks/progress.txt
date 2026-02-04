@@ -26,7 +26,23 @@
 - Layout component pattern: use Outlet for nested route rendering in React Router v6
 - Mobile navigation: use shadcn/ui Sheet component with side="left" for drawer pattern
 - Responsive breakpoints: md: (768px) is standard breakpoint to hide/show sidebar
+- tsconfig.app.json has erasableSyntaxOnly: true - don't use public constructor parameters in classes
+- API client factory pattern: createApiClient() returns object with methods, allows setApiKey() for runtime config
 
+---
+
+## 2026-02-04 - US-013 - Linear Issue: SRE-61
+- What was implemented: Created API client module with TypeScript types for communicating with Medic backend
+- Files changed:
+  - ui/src/lib/api.ts (new - API client module)
+- **Learnings for future iterations:**
+  - TypeScript erasableSyntaxOnly restricts constructor parameter properties - declare fields separately
+  - Use `git add -f` for files in ui/src/lib/ due to root .gitignore pattern
+  - API client pattern: factory function returns object with methods for each endpoint
+  - ApiError class extends Error with status and response properties for error handling
+  - Fetch-based client with Bearer token in Authorization header
+  - TypeScript types for all entities: Service, Alert, Heartbeat, AuditLogEntry, Playbook
+  - Methods return ApiResponse<T> for consistent response envelope handling
 ---
 
 ## 2026-02-04 - US-012 - Linear Issue: SRE-64
