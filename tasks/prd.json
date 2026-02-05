@@ -356,7 +356,8 @@
         "Restore invalidates both snapshots and services queries",
         "Add tests",
         "Typecheck passes"
-      ]
+      ],
+      "passes": true
     },
     {
       "id": "US-016",

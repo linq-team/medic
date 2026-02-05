@@ -154,6 +154,35 @@
 - **Service mutation hooks**: Use `useUpdateService`, `useCreateService`, `useBulkUpdateServices` from `@/hooks/use-service-mutations` for service CRUD operations with optimistic updates
 - **ServiceCreateModal pattern**: Modal for creating new services with heartbeat_name validation (alphanumeric + hyphens + underscores only), sensible defaults (priority=p3, alert_interval=5, threshold=1), and duplicate detection via error message parsing
 - **Quick action buttons**: ServiceDetail page has Mute/Unmute and Activate/Deactivate buttons in header with icons, using `useUpdateService` hook for mutations with toast notifications
+- **Snapshot hooks**: Use `useSnapshots`, `useSnapshot`, `useRestoreSnapshot` from `@/hooks/use-snapshots` for querying and restoring snapshots. Query key factory `snapshotsKeys` for consistent cache management. Restore mutation invalidates both snapshots and services queries.
+
+---
+
+## 2026-02-05 - US-015 - Linear Issue: SRE-114
+- **What was implemented**: React Query hooks for fetching and restoring service snapshots
+  - Added Snapshot types to api.ts: `SnapshotActionType`, `SnapshotData`, `Snapshot`
+  - Added API client methods: `getSnapshots`, `getSnapshotById`, `restoreSnapshot`
+  - Created `useSnapshots` query hook with filters (service_id, action_type, date range, pagination)
+  - Created `useSnapshot` query hook for fetching single snapshot by ID
+  - Created `useRestoreSnapshot` mutation hook that invalidates both snapshots and services queries
+  - Query key factory `snapshotsKeys` for consistent cache key management
+  - Added 17 test cases for hooks (snapshotsKeys, useSnapshots, useSnapshot, useRestoreSnapshot)
+  - Added 6 test cases for API client snapshot methods
+
+- **Files changed**:
+  - `ui/src/lib/api.ts` (added Snapshot types and API methods)
+  - `ui/src/lib/api.test.ts` (added tests for snapshot API methods)
+  - `ui/src/hooks/use-snapshots.ts` (new file - snapshot query and mutation hooks)
+  - `ui/src/hooks/use-snapshots.test.tsx` (new file - comprehensive tests for hooks)
+  - `ui/src/hooks/index.ts` (export new hooks)
+  - `tasks/prd.json` (marked US-015 as passes: true)
+
+- **Learnings for future iterations**:
+  - Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
+  - Restore mutation should invalidate both snapshots and services queries since service data changes
+  - Query keys with filters allow React Query to cache different filter combinations separately
+  - API client methods return `ApiResponse<PaginatedResponse<T>>` for paginated endpoints, `ApiResponse<T>` for single-entity endpoints
+  - useQuery `enabled` option prevents fetch when ID is falsy (e.g., `enabled: !!snapshotId`)
 
 ---
 
