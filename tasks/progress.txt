@@ -2422,3 +2422,21 @@
   - The CI workflow only changes the environment variable - the Python version is resolved at runtime by setup-python action
 
 ---
+
+## 2026-02-05 - US-002 - Linear Issue: SRE-123
+- **What was implemented**: Updated Dockerfile to use Python 3.14
+  - Updated builder stage FROM python:3.11-slim-bookworm to python:3.14-slim-bookworm
+  - Updated runtime stage FROM python:3.11-slim-bookworm to python:3.14-slim-bookworm
+  - Both multi-arch (amd64 + arm64) builds will use Python 3.14
+
+- **Files changed**:
+  - `Dockerfile` (updated FROM image tags in both stages)
+  - `tasks/prd.json` (marked US-002 as passes: true)
+
+- **Learnings for future iterations**:
+  - The Dockerfile uses a two-stage build: builder (with build deps) and runtime (minimal)
+  - python:3.14-slim-bookworm is available on Docker Hub for both amd64 and arm64
+  - When running mypy locally with Python 3.9, use `--python-version 3.14` to target Python 3.14 syntax
+  - Local mypy will pick up scripts/ package due to __init__.py even if not specified in paths
+
+---

@@ -64,7 +64,7 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Update base image version in both stages of Dockerfile"
     },
     {
