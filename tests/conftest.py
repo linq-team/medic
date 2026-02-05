@@ -14,19 +14,24 @@ def mock_env_vars():
 
     This fixture is autouse=True so it runs for all tests automatically,
     ensuring database and API credentials are always available.
+
+    Note: These credentials must match the PostgreSQL service configuration
+    in .github/workflows/build.yml for CI tests to connect to the database.
     """
     env_vars = {
-        "PG_USER": "test_user",
-        "PG_PASS": "test_pass",
-        "DB_NAME": "test_medic",
-        "DB_HOST": "localhost",
+        "PG_USER": os.environ.get("PG_USER", "medic"),
+        "PG_PASS": os.environ.get("PG_PASS", "medic_test_password"),
+        "DB_NAME": os.environ.get("DB_NAME", "test_medic"),
+        "DB_HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": "5000",
         "SLACK_API_TOKEN": "xoxb-test-token",
         "SLACK_CHANNEL_ID": "C12345678",
         "SLACK_SIGNING_SECRET": "test-signing-secret",
         "PAGERDUTY_ROUTING_KEY": "test-routing-key",
         "MEDIC_BASE_URL": "http://localhost:5000",
-        "MEDIC_SECRETS_KEY": "dGVzdC1zZWNyZXQta2V5LWZvci10ZXN0aW5n",
+        "MEDIC_SECRETS_KEY": os.environ.get(
+            "MEDIC_SECRETS_KEY", "dGVzdC1zZWNyZXQta2V5LWZvci10ZXN0aW5n"
+        ),
         "MEDIC_WEBHOOK_SECRET": "test-webhook-secret",
     }
     with patch.dict(os.environ, env_vars):
