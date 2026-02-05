@@ -227,6 +227,22 @@ module "secrets" {
 }
 
 # -----------------------------------------------------------------------------
+# ACM Certificate
+# -----------------------------------------------------------------------------
+# Creates an ACM certificate for dev-medic.linqapp.com with DNS validation.
+# After applying, add the CNAME record from `acm_validation_records` output
+# to Cloudflare DNS to complete certificate validation.
+# -----------------------------------------------------------------------------
+
+module "acm" {
+  source = "../../modules/acm"
+
+  domain_name = var.ingress_host
+
+  tags = var.tags
+}
+
+# -----------------------------------------------------------------------------
 # Kubernetes Namespace
 # -----------------------------------------------------------------------------
 
@@ -292,7 +308,7 @@ resource "helm_release" "medic" {
         host    = var.ingress_host
         tls = {
           enabled        = var.ingress_tls_enabled
-          certificateArn = var.ingress_certificate_arn
+          certificateArn = module.acm.certificate_arn
         }
       }
 
@@ -359,6 +375,7 @@ resource "helm_release" "medic" {
     module.rds,
     module.elasticache,
     module.secrets,
+    module.acm,
     kubernetes_namespace.medic,
     aws_secretsmanager_secret_version.rds_credentials
   ]

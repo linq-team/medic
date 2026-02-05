@@ -85,6 +85,24 @@ output "helm_release_status" {
 }
 
 # -----------------------------------------------------------------------------
+# ACM Certificate Outputs
+# -----------------------------------------------------------------------------
+
+output "acm_certificate_arn" {
+  description = "ACM certificate ARN"
+  value       = module.acm.certificate_arn
+}
+
+output "acm_validation_records" {
+  description = "DNS records to add to Cloudflare for ACM certificate validation"
+  value = {
+    domain_name = module.acm.domain_name
+    cname_name  = module.acm.validation_cname_name
+    cname_value = module.acm.validation_cname_value
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Access URLs
 # -----------------------------------------------------------------------------
 
