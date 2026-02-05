@@ -8,7 +8,7 @@ table for duration statistics and timeout detection.
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Any, Optional
 
 import pytz
 
@@ -33,7 +33,7 @@ class JobRun:
     duration_ms: Optional[int] = None
     status: str = "STARTED"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "run_id_pk": self.run_id_pk,
@@ -278,7 +278,7 @@ def get_job_run(service_id: int, run_id: str) -> Optional[JobRun]:
     return _parse_job_run(run_data)
 
 
-def get_completed_runs_for_service(service_id: int, limit: int = 100) -> List[JobRun]:
+def get_completed_runs_for_service(service_id: int, limit: int = 100) -> list[JobRun]:
     """
     Get completed job runs for a service, ordered by completion time desc.
 
@@ -312,7 +312,7 @@ def get_completed_runs_for_service(service_id: int, limit: int = 100) -> List[Jo
 
 def get_stale_runs(
     service_id: Optional[int] = None, older_than_seconds: int = 3600
-) -> List[JobRun]:
+) -> list[JobRun]:
     """
     Get job runs that started but haven't completed within the threshold.
 
@@ -354,7 +354,7 @@ def get_stale_runs(
     return [jr for jr in (_parse_job_run(r) for r in runs if r) if jr]
 
 
-def _parse_job_run(data: Dict[str, Any]) -> Optional[JobRun]:
+def _parse_job_run(data: dict[str, Any]) -> Optional[JobRun]:
     """Parse a database row into a JobRun object."""
     try:
         started_at = data.get("started_at")
@@ -393,7 +393,7 @@ class DurationStatistics:
     min_duration_ms: Optional[int] = None
     max_duration_ms: Optional[int] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "service_id": self.service_id,
@@ -463,7 +463,7 @@ def get_duration_statistics(
     )
 
 
-def _percentile(sorted_data: List[int], p: float) -> int:
+def _percentile(sorted_data: list[int], p: float) -> int:
     """
     Calculate the p-th percentile of sorted data.
 
@@ -508,7 +508,7 @@ class DurationAlert:
     started_at: Optional[datetime]
     completed_at: Optional[datetime] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "service_id": self.service_id,
@@ -615,7 +615,7 @@ def check_duration_threshold(
 
 def get_stale_runs_exceeding_max_duration(
     check_time: Optional[datetime] = None,
-) -> List[DurationAlert]:
+) -> list[DurationAlert]:
     """
     Find jobs that started but haven't completed and have exceeded
     their service's max_duration threshold.
@@ -654,7 +654,7 @@ def get_stale_runs_exceeding_max_duration(
     if not result or result == "[]":
         return []
 
-    alerts: List[DurationAlert] = []
+    alerts: list[DurationAlert] = []
     runs = json.loads(str(result))
 
     for run_data in runs:

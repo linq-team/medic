@@ -5,7 +5,7 @@ import psycopg2.extras
 import os
 import logging
 import json
-from typing import Optional, List, Tuple, Union
+from typing import Optional, Union
 
 import Medic.Helpers.logSettings as logLevel
 
@@ -39,14 +39,14 @@ def connect_db():
 
 
 def query_db(
-    query: str, params: Optional[Tuple] = None, show_columns: bool = True
-) -> Optional[Union[str, List]]:
+    query: str, params: Optional[tuple] = None, show_columns: bool = True
+) -> Optional[Union[str, list]]:
     """
     Execute a SELECT query and return results.
 
     Args:
         query: SQL query with %s placeholders for parameters
-        params: Tuple of parameters to safely substitute into query
+        params: tuple of parameters to safely substitute into query
         show_columns: If True, return JSON string; if False, return raw rows
 
     Returns:
@@ -87,13 +87,13 @@ def query_db(
             client.close()
 
 
-def insert_db(query: str, params: Optional[Tuple] = None) -> bool:
+def insert_db(query: str, params: Optional[tuple] = None) -> bool:
     """
     Execute an INSERT/UPDATE query.
 
     Args:
         query: SQL query with %s placeholders for parameters
-        params: Tuple of parameters to safely substitute into query
+        params: tuple of parameters to safely substitute into query
 
     Returns:
         True on success, False on failure

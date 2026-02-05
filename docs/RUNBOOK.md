@@ -316,3 +316,118 @@ pg_dump -h $DB_HOST -U $PG_USER -d $DB_NAME > medic_backup_$(date +%Y%m%d).sql
 Grafana: `dashboards/grafana.json`
 
 Import into your Grafana instance and configure the Prometheus datasource.
+
+---
+
+## Python 3.14 Upgrade
+
+### Summary
+
+Medic was upgraded from Python 3.11 to Python 3.14 in February 2026. This section documents the rollback procedure, changes made, and known compatibility notes.
+
+### What Changed
+
+| Component | Before | After |
+|-----------|--------|-------|
+| CI Python version | 3.11 | 3.14 |
+| Dockerfile base image | python:3.11-slim-bookworm | python:3.14-slim-bookworm |
+| Type annotations | `typing.Dict`, `typing.List`, etc. | Built-in `dict`, `list`, etc. |
+| `typing.Callable` | From `typing` module | From `collections.abc` |
+| `datetime.utcnow()` | Used in tests | Replaced with `datetime.now(timezone.utc)` |
+| `medic_build_info` metric | No Python version label | Includes `python_version` label |
+| `/health` endpoint | No Python version | Includes `python_version` field |
+
+### Dependency Versions (Python 3.14 Compatible)
+
+- `flask>=3.1.0`
+- `psycopg2-binary>=2.9.11` (Python 3.14 wheels available since October 2025)
+- `cryptography>=44.0.0`
+- `mypy>=1.14.0` (mypyc wheels for Python 3.14)
+- `opentelemetry-*>=1.39.0`
+- `redis>=5.2.0`
+- `pytest>=8.3.0`
+- `ruff>=0.9.0`
+
+### Rollback Procedure
+
+If issues are discovered after deploying the Python 3.14 upgrade, follow these steps to revert to Python 3.11:
+
+#### 1. Revert the Git Branch
+
+```bash
+# Identify the last commit before the Python 3.14 upgrade
+git log --oneline main
+
+# Revert the merge commit (if already merged to main)
+git revert <merge-commit-sha> --no-edit
+git push origin main
+```
+
+This will trigger the CI/CD pipeline to build and deploy with the reverted code.
+
+#### 2. Manual Docker Image Rollback (Emergency)
+
+If CI/CD is too slow, manually update the Helm release to use the last known good image:
+
+```bash
+# Find the last Python 3.11 image tag in ECR
+aws ecr describe-images \
+  --repository-name medic \
+  --region us-east-1 \
+  --query 'imageDetails | sort_by(@, &imagePushedAt) | [-5:].[imageTags[0], imagePushedAt]' \
+  --output table
+
+# Update Helm release with the previous image tag
+helm upgrade medic helm/medic \
+  --namespace medic \
+  --set image.tag=<previous-tag> \
+  --reuse-values
+```
+
+#### 3. Revert Dockerfile (If Building Locally)
+
+```dockerfile
+# Change both stages back to Python 3.11
+FROM python:3.11-slim-bookworm AS builder
+FROM python:3.11-slim-bookworm AS runtime
+```
+
+#### 4. Revert CI Workflow
+
+In `.github/workflows/build.yml`:
+```yaml
+env:
+  PYTHON_VERSION: "3.11"
+```
+
+#### 5. Revert Type Annotations (Optional)
+
+The type annotation changes (e.g., `list[str]` instead of `List[str]`) are backwards compatible with Python 3.11 (which supports PEP 585 built-in generics since Python 3.9). **No code changes are needed** for type annotations when rolling back.
+
+The only code change that may need reverting is in `tests/unit/test_monitor.py` where `datetime.utcnow()` was replaced. This change is also backwards compatible, so no revert is needed.
+
+### Known Issues and Compatibility Notes
+
+1. **No breaking changes discovered.** All 1304 tests pass on Python 3.14 with no regressions.
+
+2. **Python 3.14 features not adopted.** PEP 758 (bracketless except), PEP 750 (t-strings), and other new features were evaluated but not applied, since they provide no functional benefit to the codebase.
+
+3. **Alpine base image not used.** While `python:3.14-alpine` is 3x smaller (77MB vs 211MB), it uses musl libc which can break prebuilt wheels for `psycopg2-binary` and `cryptography`. Stick with `slim-bookworm`.
+
+4. **3 tests are skipped by design.** These are integration tests requiring `TEST_DATABASE_URL` environment variable. This is expected behavior, not a regression.
+
+5. **OpenTelemetry packages.** The `opentelemetry-*>=1.39.0` packages work with Python 3.14 despite not having the Python 3.14 classifier on PyPI. Functional compatibility has been verified.
+
+6. **`datetime.utcnow()` deprecation.** Python 3.12+ deprecates `datetime.utcnow()`. The test suite has been updated to use `datetime.now(timezone.utc)`. Application code already used timezone-aware datetimes.
+
+### Verification Checklist
+
+After deploying the Python 3.14 upgrade, verify:
+
+- [ ] `/health` endpoint returns `python_version: "3.14.x"`
+- [ ] `/metrics` endpoint includes `python_version` label on `medic_build_info`
+- [ ] All heartbeat endpoints respond correctly
+- [ ] Worker processes are running and checking heartbeats
+- [ ] Database connections are healthy
+- [ ] Redis rate limiting is functioning
+- [ ] Slack and PagerDuty integrations fire correctly

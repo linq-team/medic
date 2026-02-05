@@ -43,7 +43,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -79,7 +79,7 @@ class SnapshotActionType(str, Enum):
         return value in [m.value for m in cls]
 
     @classmethod
-    def values(cls) -> List[str]:
+    def values(cls) -> list[str]:
         """Return list of all valid action type values."""
         return [m.value for m in cls]
 
@@ -90,13 +90,13 @@ class ServiceSnapshot:
 
     snapshot_id: Optional[int]
     service_id: int
-    snapshot_data: Dict[str, Any]
+    snapshot_data: dict[str, Any]
     action_type: str
     actor: Optional[str]
     created_at: Optional[datetime]
     restored_at: Optional[datetime]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "snapshot_id": self.snapshot_id,
@@ -117,13 +117,13 @@ class ServiceSnapshot:
 class SnapshotQueryResult:
     """Result of a snapshot query with pagination info."""
 
-    entries: List[ServiceSnapshot]
+    entries: list[ServiceSnapshot]
     total_count: int
     limit: int
     offset: int
     has_more: bool
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "entries": [entry.to_dict() for entry in self.entries],
@@ -139,7 +139,7 @@ class SnapshotQueryResult:
 # ============================================================================
 
 
-def get_service_data(service_id: int) -> Optional[Dict[str, Any]]:
+def get_service_data(service_id: int) -> Optional[dict[str, Any]]:
     """
     Get the current service data for snapshot creation.
 
@@ -272,7 +272,7 @@ def create_snapshot(
 # ============================================================================
 
 
-def _parse_snapshot(row: Dict[str, Any]) -> Optional[ServiceSnapshot]:
+def _parse_snapshot(row: dict[str, Any]) -> Optional[ServiceSnapshot]:
     """
     Parse a database row into a ServiceSnapshot object.
 
@@ -379,8 +379,8 @@ def query_snapshots(
     offset = max(0, offset)
 
     # Build the WHERE clause dynamically
-    conditions: List[str] = []
-    params: List[Any] = []
+    conditions: list[str] = []
+    params: list[Any] = []
 
     if service_id is not None:
         conditions.append("service_id = %s")
@@ -432,7 +432,7 @@ def query_snapshots(
     data_params = list(params) + [limit, offset]
     data_result = db.query_db(data_query, tuple(data_params), show_columns=True)
 
-    entries: List[ServiceSnapshot] = []
+    entries: list[ServiceSnapshot] = []
     if data_result and data_result != "[]":
         rows = json.loads(str(data_result))
         entries = [

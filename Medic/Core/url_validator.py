@@ -27,7 +27,7 @@ import ipaddress
 import logging
 import os
 import socket
-from typing import List, Optional, Set
+from typing import Optional
 from urllib.parse import urlparse
 
 import Medic.Helpers.logSettings as logLevel
@@ -50,10 +50,10 @@ class InvalidURLError(Exception):
 
 
 # Allowed URL schemes
-ALLOWED_SCHEMES: Set[str] = {"http", "https"}
+ALLOWED_SCHEMES: set[str] = {"http", "https"}
 
 # Private IP networks that should be blocked (RFC 1918 + special ranges)
-BLOCKED_IP_NETWORKS: List[ipaddress.IPv4Network] = [
+BLOCKED_IP_NETWORKS: list[ipaddress.IPv4Network] = [
     ipaddress.IPv4Network("127.0.0.0/8"),  # Loopback
     ipaddress.IPv4Network("10.0.0.0/8"),  # Private Class A
     ipaddress.IPv4Network("172.16.0.0/12"),  # Private Class B
@@ -63,7 +63,7 @@ BLOCKED_IP_NETWORKS: List[ipaddress.IPv4Network] = [
 ]
 
 # IPv6 blocked networks
-BLOCKED_IPV6_NETWORKS: List[ipaddress.IPv6Network] = [
+BLOCKED_IPV6_NETWORKS: list[ipaddress.IPv6Network] = [
     ipaddress.IPv6Network("::1/128"),  # Loopback
     ipaddress.IPv6Network("fc00::/7"),  # Unique local
     ipaddress.IPv6Network("fe80::/10"),  # Link-local
@@ -71,7 +71,7 @@ BLOCKED_IPV6_NETWORKS: List[ipaddress.IPv6Network] = [
 ]
 
 # Specific IPs that should always be blocked
-BLOCKED_IPS: Set[str] = {
+BLOCKED_IPS: set[str] = {
     "0.0.0.0",
     "127.0.0.1",
     "localhost",
@@ -84,7 +84,7 @@ BLOCKED_IPS: Set[str] = {
 DNS_TIMEOUT: float = 5.0
 
 
-def get_allowed_hosts() -> Optional[Set[str]]:
+def get_allowed_hosts() -> Optional[set[str]]:
     """Get the explicit allowlist of webhook hosts from environment.
 
     Returns:
@@ -162,7 +162,7 @@ def is_private_ip(ip: str) -> bool:
         return True
 
 
-def resolve_hostname(hostname: str, timeout: float = DNS_TIMEOUT) -> List[str]:
+def resolve_hostname(hostname: str, timeout: float = DNS_TIMEOUT) -> list[str]:
     """Resolve a hostname to its IP addresses.
 
     This is used to catch DNS rebinding attacks where a hostname
@@ -190,7 +190,7 @@ def resolve_hostname(hostname: str, timeout: float = DNS_TIMEOUT) -> List[str]:
                 hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
             )
             # Extract unique IP addresses from results
-            ips: List[str] = list(set(str(info[4][0]) for info in addr_info))
+            ips: list[str] = list(set(str(info[4][0]) for info in addr_info))
             return ips
         except socket.gaierror as e:
             logger.log(level=30, msg=f"DNS resolution failed for {hostname}: {e}")

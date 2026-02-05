@@ -18,7 +18,7 @@ import fnmatch
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -88,7 +88,7 @@ class PlaybookTrigger:
             and self.meets_failure_threshold(failure_count)
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "trigger_id": self.trigger_id,
@@ -109,7 +109,7 @@ class MatchedPlaybook:
     service_pattern: str
     consecutive_failures: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "playbook_id": self.playbook_id,
@@ -120,7 +120,7 @@ class MatchedPlaybook:
         }
 
 
-def get_enabled_triggers() -> List[PlaybookTrigger]:
+def get_enabled_triggers() -> list[PlaybookTrigger]:
     """
     Get all enabled triggers from the database.
 
@@ -146,7 +146,7 @@ def get_enabled_triggers() -> List[PlaybookTrigger]:
     return [_parse_trigger(row) for row in rows if row]
 
 
-def get_triggers_for_playbook(playbook_id: int) -> List[PlaybookTrigger]:
+def get_triggers_for_playbook(playbook_id: int) -> list[PlaybookTrigger]:
     """
     Get all triggers associated with a specific playbook.
 
@@ -393,7 +393,7 @@ def matches_glob_pattern(pattern: str, value: str) -> bool:
     return fnmatch.fnmatch(value.lower(), pattern.lower())
 
 
-def _parse_trigger(data: Dict[str, Any]) -> PlaybookTrigger:
+def _parse_trigger(data: dict[str, Any]) -> PlaybookTrigger:
     """Parse a database row into a PlaybookTrigger object."""
     return PlaybookTrigger(
         trigger_id=data["trigger_id"],

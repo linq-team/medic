@@ -30,7 +30,7 @@ Usage:
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -60,7 +60,7 @@ def create_execution(
     playbook_id: int,
     service_id: Optional[int] = None,
     status: ExecutionStatus = ExecutionStatus.PENDING_APPROVAL,
-    context: Optional[Dict[str, Any]] = None,
+    context: Optional[dict[str, Any]] = None,
 ) -> Optional[PlaybookExecution]:
     """
     Create a new playbook execution record.
@@ -153,7 +153,7 @@ def get_execution(execution_id: int) -> Optional[PlaybookExecution]:
     return _parse_execution(rows[0])
 
 
-def get_active_executions() -> List[PlaybookExecution]:
+def get_active_executions() -> list[PlaybookExecution]:
     """
     Get all active (running/waiting) executions.
 
@@ -180,7 +180,7 @@ def get_active_executions() -> List[PlaybookExecution]:
     return [ex for ex in (_parse_execution(r) for r in rows if r) if ex is not None]
 
 
-def get_pending_approval_executions() -> List[PlaybookExecution]:
+def get_pending_approval_executions() -> list[PlaybookExecution]:
     """
     Get all executions waiting for approval.
 
@@ -256,7 +256,7 @@ def update_execution_status(
 
     # Build dynamic update
     set_clauses = ["status = %s", "updated_at = %s"]
-    params: List[Any] = [status.value, now]
+    params: list[Any] = [status.value, now]
 
     if current_step is not None:
         set_clauses.append("current_step = %s")
@@ -287,7 +287,7 @@ def update_execution_status(
     return bool(result)
 
 
-def _parse_execution(data: Dict[str, Any]) -> Optional[PlaybookExecution]:
+def _parse_execution(data: dict[str, Any]) -> Optional[PlaybookExecution]:
     """Parse a database row into a PlaybookExecution object."""
     try:
         started_at = data.get("started_at")
@@ -405,7 +405,7 @@ def update_step_result(
     now = get_now()
 
     set_clauses = ["status = %s", "updated_at = %s"]
-    params: List[Any] = [status.value, now]
+    params: list[Any] = [status.value, now]
 
     if output is not None:
         set_clauses.append("output = %s")
@@ -435,7 +435,7 @@ def update_step_result(
     return bool(result)
 
 
-def get_step_results_for_execution(execution_id: int) -> List[StepResult]:
+def get_step_results_for_execution(execution_id: int) -> list[StepResult]:
     """
     Get all step results for an execution.
 
@@ -465,7 +465,7 @@ def get_step_results_for_execution(execution_id: int) -> List[StepResult]:
     return [sr for sr in parsed if sr is not None]
 
 
-def _parse_step_result(data: Dict[str, Any]) -> Optional[StepResult]:
+def _parse_step_result(data: dict[str, Any]) -> Optional[StepResult]:
     """Parse a database row into a StepResult object."""
     try:
         started_at = data.get("started_at")

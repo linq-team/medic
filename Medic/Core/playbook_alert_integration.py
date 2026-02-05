@@ -27,7 +27,7 @@ Usage:
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import Medic.Helpers.logSettings as logLevel
 from Medic.Core.playbook_engine import (
@@ -68,7 +68,7 @@ class PlaybookTriggerResult:
     status: str = ""
     message: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "triggered": self.triggered,
@@ -103,7 +103,7 @@ def trigger_playbook_for_alert(
     service_id: int,
     service_name: str,
     consecutive_failures: int,
-    alert_context: Optional[Dict[str, Any]] = None,
+    alert_context: Optional[dict[str, Any]] = None,
 ) -> PlaybookTriggerResult:
     """
     Trigger a playbook execution for an alerting service.

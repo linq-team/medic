@@ -37,7 +37,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -97,7 +97,7 @@ class ApprovalRequest:
     slack_message_ts: Optional[str] = None
     slack_channel_id: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "request_id": self.request_id,
@@ -271,7 +271,7 @@ def get_approval_request(request_id: int) -> Optional[ApprovalRequest]:
     return _parse_approval_request(rows[0])
 
 
-def get_pending_approval_requests() -> List[ApprovalRequest]:
+def get_pending_approval_requests() -> list[ApprovalRequest]:
     """
     Get all pending approval requests.
 
@@ -354,7 +354,7 @@ def update_approval_request_status(
     return bool(result)
 
 
-def _parse_approval_request(data: Dict[str, Any]) -> Optional[ApprovalRequest]:
+def _parse_approval_request(data: dict[str, Any]) -> Optional[ApprovalRequest]:
     """Parse a database row into an ApprovalRequest object."""
     try:
         requested_at = data.get("requested_at")
@@ -405,7 +405,7 @@ def build_approval_blocks(
     service_name: str,
     expires_at: Optional[datetime] = None,
     description: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Build Slack Block Kit blocks for approval message.
 
@@ -419,7 +419,7 @@ def build_approval_blocks(
     Returns:
         List of Block Kit block dicts
     """
-    blocks: List[Dict[str, Any]] = []
+    blocks: list[dict[str, Any]] = []
 
     # Header section
     blocks.append(
@@ -497,7 +497,7 @@ def build_approval_result_blocks(
     approved: bool,
     decided_by: str,
     decided_at: datetime,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Build Slack Block Kit blocks for approval result message (replaces buttons).
 
@@ -516,7 +516,7 @@ def build_approval_result_blocks(
     status_text = "Approved" if approved else "Declined"
     header_text = f"{status_emoji} Playbook {status_text}"
 
-    blocks: List[Dict[str, Any]] = []
+    blocks: list[dict[str, Any]] = []
 
     # Header section
     blocks.append(
@@ -1007,11 +1007,11 @@ class SlackInteractionResult:
     success: bool
     message: str
     response_action: Optional[str] = None  # "update", "errors", etc.
-    response_blocks: Optional[List[Dict[str, Any]]] = None
+    response_blocks: Optional[list[dict[str, Any]]] = None
 
 
 def handle_slack_interaction(
-    payload: Dict[str, Any], slack_client: Optional[WebClient] = None
+    payload: dict[str, Any], slack_client: Optional[WebClient] = None
 ) -> SlackInteractionResult:
     """
     Handle a Slack interaction webhook callback.

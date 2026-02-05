@@ -8,7 +8,8 @@ import json
 import logging
 import os
 from functools import wraps
-from typing import Optional, Callable, Any, Tuple
+from collections.abc import Callable
+from typing import Any, Optional
 
 from flask import request, g, Response
 
@@ -86,7 +87,7 @@ def _get_api_key_id() -> Optional[str]:
 
 def _create_rate_limit_response(
     result: RateLimitResult,
-) -> Tuple[str, int, dict]:
+) -> tuple[str, int, dict]:
     """
     Create a 429 Too Many Requests response.
 
@@ -294,7 +295,7 @@ def verify_rate_limit(
     endpoint_type: Optional[str] = None,
     config: Optional[RateLimitConfig] = None,
     key_override: Optional[str] = None,
-) -> Optional[Tuple[str, int, dict]]:
+) -> Optional[tuple[str, int, dict]]:
     """
     Verify rate limit for the current request without using decorator.
 

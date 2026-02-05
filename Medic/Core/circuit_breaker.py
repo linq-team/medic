@@ -33,7 +33,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -69,7 +69,7 @@ class CircuitBreakerStatus:
     threshold: int
     message: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "service_id": self.service_id,
@@ -281,7 +281,7 @@ def record_circuit_breaker_trip(
         )
 
 
-def get_services_with_open_circuit() -> List[CircuitBreakerStatus]:
+def get_services_with_open_circuit() -> list[CircuitBreakerStatus]:
     """
     Get all services that currently have an open circuit breaker.
 
@@ -342,7 +342,7 @@ def get_services_with_open_circuit() -> List[CircuitBreakerStatus]:
 
 def get_execution_history_for_service(
     service_id: int, limit: int = 20
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Get recent playbook execution history for a service.
 

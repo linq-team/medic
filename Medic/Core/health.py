@@ -2,13 +2,19 @@
 
 import os
 import logging
-from typing import Dict, Any
+import sys
+from typing import Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
-def check_database_health() -> Dict[str, Any]:
+def get_python_version() -> str:
+    """Get the Python version string."""
+    return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+
+def check_database_health() -> dict[str, Any]:
     """Check database connectivity."""
     try:
         from Medic.Core.database import connect_db
@@ -27,7 +33,7 @@ def check_database_health() -> Dict[str, Any]:
         return {"status": "unhealthy", "error": str(e)}
 
 
-def check_pagerduty_health() -> Dict[str, Any]:
+def check_pagerduty_health() -> dict[str, Any]:
     """Check PagerDuty configuration."""
     routing_key = os.environ.get("PAGERDUTY_ROUTING_KEY")
     if routing_key:
@@ -35,7 +41,7 @@ def check_pagerduty_health() -> Dict[str, Any]:
     return {"status": "not_configured", "routing_key_set": False}
 
 
-def check_slack_health() -> Dict[str, Any]:
+def check_slack_health() -> dict[str, Any]:
     """Check Slack configuration."""
     token = os.environ.get("SLACK_API_TOKEN")
     channel = os.environ.get("SLACK_CHANNEL_ID")
@@ -49,7 +55,7 @@ def check_slack_health() -> Dict[str, Any]:
     }
 
 
-def get_full_health_status() -> Dict[str, Any]:
+def get_full_health_status() -> dict[str, Any]:
     """Get comprehensive health status."""
     from Medic.Core import metrics
 
@@ -72,6 +78,7 @@ def get_full_health_status() -> Dict[str, Any]:
         "status": "healthy" if overall_healthy else "degraded",
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "version": "2.0.0",
+        "python_version": get_python_version(),
         "components": {
             "database": db_health,
             "pagerduty": pd_health,
@@ -80,12 +87,12 @@ def get_full_health_status() -> Dict[str, Any]:
     }
 
 
-def get_liveness_status() -> Dict[str, Any]:
+def get_liveness_status() -> dict[str, Any]:
     """Simple liveness check - is the service running?"""
     return {"status": "alive", "timestamp": datetime.utcnow().isoformat() + "Z"}
 
 
-def get_readiness_status() -> Dict[str, Any]:
+def get_readiness_status() -> dict[str, Any]:
     """Readiness check - can the service accept traffic?"""
     db_health = check_database_health()
 

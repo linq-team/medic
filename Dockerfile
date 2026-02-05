@@ -2,12 +2,32 @@
 # Medic Production Dockerfile
 # Multi-stage build supporting both amd64 (x86_64) and arm64 (Graviton/M1)
 # =============================================================================
+#
+# Base Image Evaluation (Python 3.14) - February 2026
+# -----------------------------------------------------------------------------
+# Image                        | Size    | Notes
+# -----------------------------|---------|----------------------------------------
+# python:3.14-bookworm         | 1.49GB  | Full Debian, includes compilers/dev tools
+# python:3.14-slim-bookworm    | 211MB   | Minimal Debian, glibc-based (RECOMMENDED)
+# python:3.14-alpine           | 77.1MB  | Smallest, but uses musl libc
+#
+# Decision: Using slim-bookworm because:
+# - 3x smaller than full image while maintaining glibc compatibility
+# - Prebuilt wheels (psycopg2-binary, cryptography) work without issues
+# - Alpine's musl libc can cause compatibility issues with native extensions
+# - Alpine builds are slower (must compile from source when wheels unavailable)
+# - Bookworm (Debian 12) provides stable, long-term support
+#
+# References:
+# - https://pythonspeed.com/articles/base-image-python-docker-images/
+# - https://hub.docker.com/_/python
+# =============================================================================
 
 # -----------------------------------------------------------------------------
 # Stage 1: Builder
 # Install dependencies and compile any native extensions
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 # Set build-time environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,7 +56,7 @@ RUN pip install --user --no-warn-script-location gunicorn>=21.0.0
 # Stage 2: Runtime
 # Minimal image with only runtime dependencies
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 # Metadata labels
 LABEL maintainer="Medic Team <medic@example.com>" \
