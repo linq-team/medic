@@ -55,6 +55,7 @@ def upsert_api_key(
     db, name: str, key_hash: str, scopes: list[str], expires_at: str | None = None
 ) -> bool:
     """Upsert an API key into the database."""
+    params: tuple
     if expires_at:
         query = """
             INSERT INTO medic.api_keys (name, key_hash, scopes, expires_at)
