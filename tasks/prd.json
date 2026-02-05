@@ -100,7 +100,7 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "May require updating mypy and type stub packages"
     },
     {
