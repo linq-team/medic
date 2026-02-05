@@ -1,13 +1,13 @@
 # =============================================================================
 # Medic CD Pipeline - Deploy to EKS
 # =============================================================================
-# Triggers after successful CI build on main branch.
-# Deploys the new Docker image to EKS via Terraform/Helm.
+# PR to main → deploy to dev (skipped by default until dev cluster exists)
+# Push to main → deploy to prod (requires GitHub Environment approval)
 #
 # Flow:
 #   1. CI workflow builds and pushes image to ECR
-#   2. This workflow triggers on CI success
-#   3. Updates image tag in Terraform and applies
+#   2. PR to main triggers dev deployment (if skip_dev is false)
+#   3. Merge to main triggers prod deployment
 #
 # Required Secrets:
 #   - AWS_ACCESS_KEY_ID: AWS access key
@@ -22,10 +22,12 @@
 name: CD - Deploy to EKS
 
 on:
-  # Trigger after CI workflow completes successfully
-  workflow_run:
-    workflows: ["Build and Test"]
-    types: [completed]
+  # PR to main → deploy to dev
+  pull_request:
+    branches: [main]
+
+  # Merge/push to main → deploy to prod
+  push:
     branches: [main]
 
   # Manual deployment with optional image tag override
@@ -43,10 +45,15 @@ on:
         description: "Image tag to deploy (leave empty for latest commit SHA)"
         required: false
         type: string
+      skip_dev:
+        description: "Skip dev deployment (default: true, dev cluster does not exist yet)"
+        required: false
+        type: boolean
+        default: true
 
 # Prevent concurrent deployments to the same environment
 concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'dev' }}
+  group: deploy-${{ github.event.inputs.environment || (github.event_name == 'pull_request' && 'dev') || 'prod' }}
   cancel-in-progress: false
 
 env:
@@ -60,10 +67,6 @@ jobs:
   prepare:
     name: Prepare Deployment
     runs-on: ubuntu-latest
-    # Only run if CI succeeded or manual trigger
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
 
     outputs:
       image_tag: ${{ steps.tag.outputs.image_tag }}
@@ -73,18 +76,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          # For workflow_run, checkout the commit that triggered CI
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Determine environment
         id: env
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          else
-            # Auto-deploy to dev on CI success
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "environment=dev" >> $GITHUB_OUTPUT
+          else
+            # push to main → prod
+            echo "environment=prod" >> $GITHUB_OUTPUT
           fi
 
       - name: Determine image tag
@@ -93,15 +95,15 @@ jobs:
           if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
             # Manual override
             IMAGE_TAG="${{ github.event.inputs.image_tag }}"
-          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            # Use commit SHA from CI trigger
-            IMAGE_TAG=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # Use PR head commit SHA
+            IMAGE_TAG=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-7)
           else
-            # Fallback to current commit
+            # Use current commit SHA (push or workflow_dispatch)
             IMAGE_TAG=$(git rev-parse --short=7 HEAD)
           fi
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
-          echo "📦 Image tag: ${IMAGE_TAG}"
+          echo "Image tag: ${IMAGE_TAG}"
 
       - name: Check if image exists
         id: check
@@ -111,40 +113,43 @@ jobs:
         run: |
           IMAGE_TAG="${{ steps.tag.outputs.image_tag }}"
 
-          # Check if image exists in ECR
+          # Check if image exists in ECR (ECR is in us-east-1)
           if aws ecr describe-images \
               --repository-name medic \
               --image-ids imageTag="${IMAGE_TAG}" \
               --region us-east-1 > /dev/null 2>&1; then
-            echo "✅ Image medic:${IMAGE_TAG} found in ECR"
+            echo "Image medic:${IMAGE_TAG} found in ECR"
             echo "should_deploy=true" >> $GITHUB_OUTPUT
           else
-            echo "❌ Image medic:${IMAGE_TAG} not found in ECR"
+            echo "Image medic:${IMAGE_TAG} not found in ECR"
             echo "should_deploy=false" >> $GITHUB_OUTPUT
           fi
 
   # ---------------------------------------------------------------------------
-  # Deploy to EKS via Terraform
+  # Deploy to dev (PR to main)
+  # Skipped by default until dev-o11y-tf cluster exists
   # ---------------------------------------------------------------------------
-  deploy:
-    name: Deploy to ${{ needs.prepare.outputs.environment }}
+  deploy-dev:
+    name: Deploy to dev
     runs-on: ubuntu-latest
     needs: prepare
-    if: needs.prepare.outputs.should_deploy == 'true'
+    if: |
+      needs.prepare.outputs.should_deploy == 'true' &&
+      needs.prepare.outputs.environment == 'dev' &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_dev != 'true')
 
-    # Use GitHub Environments for approval (prod requires manual approval)
     environment:
-      name: ${{ needs.prepare.outputs.environment }}
+      name: dev
 
     env:
-      TF_ENVIRONMENT: ${{ needs.prepare.outputs.environment }}
+      TF_ENVIRONMENT: dev
       TF_VAR_image_tag: ${{ needs.prepare.outputs.image_tag }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -160,27 +165,26 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform Init
-        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        working-directory: terraform/environments/dev
         run: |
           terraform init \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
-            -backend-config="key=${{ vars.TF_STATE_KEY }}/${{ env.TF_ENVIRONMENT }}/terraform.tfstate" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}/dev/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
             -backend-config="encrypt=true"
 
       - name: Terraform Plan
         id: plan
-        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        working-directory: terraform/environments/dev
         run: |
-          echo "📋 Planning deployment of medic:${{ needs.prepare.outputs.image_tag }}"
+          echo "Planning deployment of medic:${{ needs.prepare.outputs.image_tag }} to dev"
 
           terraform plan \
             -var="image_tag=${{ needs.prepare.outputs.image_tag }}" \
             -out=tfplan \
             -no-color | tee plan-output.txt
 
-          # Check if there are changes
           if grep -q "No changes" plan-output.txt; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
@@ -189,42 +193,119 @@ jobs:
 
       - name: Terraform Apply
         if: steps.plan.outputs.has_changes == 'true'
-        working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
+        working-directory: terraform/environments/dev
         run: |
-          echo "🚀 Deploying medic:${{ needs.prepare.outputs.image_tag }} to ${{ env.TF_ENVIRONMENT }}"
+          echo "Deploying medic:${{ needs.prepare.outputs.image_tag }} to dev"
+          terraform apply -auto-approve tfplan
+
+      - name: Deployment Summary
+        run: |
+          echo "### Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** \`dev\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** \`${{ needs.prepare.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # Deploy to prod (push/merge to main)
+  # Requires GitHub Environment approval
+  # ---------------------------------------------------------------------------
+  deploy-prod:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: |
+      needs.prepare.outputs.should_deploy == 'true' &&
+      needs.prepare.outputs.environment == 'prod'
+
+    # Prod requires GitHub Environment approval
+    environment:
+      name: prod
+
+    env:
+      TF_ENVIRONMENT: prod
+      TF_VAR_image_tag: ${{ needs.prepare.outputs.image_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform/environments/prod
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}/prod/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: terraform/environments/prod
+        run: |
+          echo "Planning deployment of medic:${{ needs.prepare.outputs.image_tag }} to prod"
+
+          terraform plan \
+            -var="image_tag=${{ needs.prepare.outputs.image_tag }}" \
+            -out=tfplan \
+            -no-color | tee plan-output.txt
+
+          if grep -q "No changes" plan-output.txt; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Apply
+        if: steps.plan.outputs.has_changes == 'true'
+        working-directory: terraform/environments/prod
+        run: |
+          echo "Deploying medic:${{ needs.prepare.outputs.image_tag }} to prod"
           terraform apply -auto-approve tfplan
 
       - name: Verify Deployment
         run: |
-          echo "⏳ Waiting for deployment to stabilize..."
+          echo "Waiting for deployment to stabilize..."
           sleep 30
 
-          # Configure kubectl (requires EKS cluster access)
+          # Configure kubectl for prod cluster
           aws eks update-kubeconfig --name o11y-prod --region ${{ env.AWS_REGION }}
 
-          # Check pod status
-          echo "📊 Pod status:"
+          echo "Pod status:"
           kubectl get pods -n medic -l app.kubernetes.io/name=medic
 
-          # Check if all pods are ready
           READY_PODS=$(kubectl get pods -n medic -l app.kubernetes.io/name=medic \
             -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | tr ' ' '\n' | grep -c True || echo 0)
           TOTAL_PODS=$(kubectl get pods -n medic -l app.kubernetes.io/name=medic --no-headers | wc -l)
 
           if [[ "$READY_PODS" -eq "$TOTAL_PODS" && "$TOTAL_PODS" -gt 0 ]]; then
-            echo "✅ All $TOTAL_PODS pods are ready"
+            echo "All $TOTAL_PODS pods are ready"
           else
-            echo "⚠️ Only $READY_PODS of $TOTAL_PODS pods are ready"
+            echo "Warning: Only $READY_PODS of $TOTAL_PODS pods are ready"
           fi
 
       - name: Deployment Summary
         run: |
-          echo "### ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** \`${{ env.TF_ENVIRONMENT }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** \`prod\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image Tag:** \`${{ needs.prepare.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.event.workflow_run.head_sha || github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------------
@@ -233,13 +314,13 @@ jobs:
   notify-failure:
     name: Notify Failure
     runs-on: ubuntu-latest
-    needs: [prepare, deploy]
+    needs: [prepare, deploy-dev, deploy-prod]
     if: failure()
 
     steps:
       - name: Deployment Failed
         run: |
-          echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** \`${{ needs.prepare.outputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image Tag:** \`${{ needs.prepare.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
