@@ -267,6 +267,48 @@ resource "null_resource" "eso_validation" {
 }
 
 # -----------------------------------------------------------------------------
+# ClusterSecretStore - AWS Secrets Manager
+# -----------------------------------------------------------------------------
+# Creates a ClusterSecretStore resource for External Secrets Operator (ESO).
+# This allows ExternalSecret resources in any namespace to fetch secrets from
+# AWS Secrets Manager using the IRSA service account for authentication.
+#
+# Must match the name expected by the Helm chart (var.external_secret_store_ref).
+# Depends on ESO being installed (validated by null_resource.eso_validation).
+# -----------------------------------------------------------------------------
+
+resource "kubernetes_manifest" "cluster_secret_store" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ClusterSecretStore"
+    metadata = {
+      name = var.external_secret_store_ref
+    }
+    spec = {
+      provider = {
+        aws = {
+          service = "SecretsManager"
+          region  = var.aws_region
+          auth = {
+            jwt = {
+              serviceAccountRef = {
+                name      = var.service_account_name
+                namespace = var.kubernetes_namespace
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    null_resource.eso_validation,
+    kubernetes_namespace.medic,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Kubernetes Namespace
 # -----------------------------------------------------------------------------
 
@@ -403,6 +445,7 @@ resource "helm_release" "medic" {
     module.secrets,
     module.acm,
     null_resource.eso_validation,
+    kubernetes_manifest.cluster_secret_store,
     kubernetes_namespace.medic,
     aws_secretsmanager_secret_version.rds_credentials
   ]
