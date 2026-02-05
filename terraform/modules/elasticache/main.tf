@@ -70,7 +70,7 @@ resource "aws_elasticache_cluster" "this" {
   engine               = "redis"
   engine_version       = var.engine_version
   node_type            = var.node_type
-  num_cache_nodes      = 1  # Single node (no cluster mode)
+  num_cache_nodes      = 1 # Single node (no cluster mode)
   port                 = 6379
   parameter_group_name = var.parameter_group_name
 
@@ -83,9 +83,9 @@ resource "aws_elasticache_cluster" "this" {
   snapshot_window          = var.snapshot_retention_limit > 0 ? var.snapshot_window : null
 
   # Maintenance
-  maintenance_window       = var.maintenance_window
+  maintenance_window         = var.maintenance_window
   auto_minor_version_upgrade = var.auto_minor_version_upgrade
-  apply_immediately        = var.apply_immediately
+  apply_immediately          = var.apply_immediately
 
   # Notifications
   notification_topic_arn = var.notification_topic_arn

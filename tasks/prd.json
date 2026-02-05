@@ -28,7 +28,7 @@
         "YAML lint passes on workflow files"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Foundation fix - must be done first. ECR is in us-east-1, EKS/RDS/Secrets in us-east-2."
     },
     {
@@ -45,7 +45,7 @@
         "Terraform fmt passes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Shared backend with different prefixes per environment."
     },
     {
@@ -60,7 +60,7 @@
         "Terraform fmt passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Dev cluster doesn't exist yet. Configure now, will fail gracefully until cluster created."
     },
     {
@@ -76,7 +76,7 @@
         "Terraform fmt passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Reusable module for ACM certificates with DNS validation."
     },
     {
@@ -91,7 +91,7 @@
         "Terraform fmt passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-004. Certificate ARN flows to Helm ingress config."
     },
     {
@@ -106,7 +106,7 @@
         "Terraform fmt passes"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "ESO is deployed by o11y-tf. Fail fast if missing."
     },
     {
@@ -123,7 +123,7 @@
         "Terraform fmt passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-006. Must match name expected by Helm chart."
     },
     {
@@ -138,7 +138,7 @@
         "Terraform fmt passes"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Secrets already created in AWS. Terraform just references them."
     },
     {
@@ -154,7 +154,7 @@
         "YAML lint passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "PR→dev, merge→prod. Skip dev by default until cluster exists."
     },
     {
@@ -169,7 +169,7 @@
         "Link to o11y-tf repository for ESO deployment"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Referenced by error message in US-006."
     },
     {
@@ -186,7 +186,7 @@
         "Include architecture diagram (ASCII or mermaid) showing component relationships"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Comprehensive setup guide for new team members."
     },
     {
@@ -201,7 +201,7 @@
         "Document multi-region architecture (ECR us-east-1, EKS us-east-2)"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Final documentation step. Links to detailed docs."
     }
   ]

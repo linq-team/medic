@@ -12,6 +12,10 @@ Help is just a heartbeat away
   * [Architecture](#architecture)
   * [Dependencies](#dependencies)
   * [Terminology](#terminology)
+* [Deployment](#deployment)
+  * [CI/CD Workflow](#cicd-workflow)
+  * [Multi-Region Architecture](#multi-region-architecture)
+  * [Troubleshooting](#troubleshooting)
 * [Deployment and Configuration](#deployment-and-configuration)
   * [Environmental Variables](#environmental-variables)
   * [Metrics and Telemetry](#metrics-and-telemetry)
@@ -51,6 +55,40 @@ Full Interactive API documentation is available via swagger at your deployed Med
 
 ## Terminology
 
+
+# Deployment
+
+Medic is deployed to EKS via GitHub Actions and Terraform. For full setup instructions, see [Deployment Prerequisites](docs/deployment-prerequisites.md).
+
+## CI/CD Workflow
+
+| Trigger | Environment | Description |
+|---------|-------------|-------------|
+| Pull request to `main` | **dev** | Automatically deploys to dev (currently skipped until dev cluster is provisioned) |
+| Push/merge to `main` | **prod** | Deploys to prod after GitHub Environment approval |
+| Manual (`workflow_dispatch`) | dev or prod | On-demand deployment with optional image tag override |
+
+**Pipeline flow:**
+1. **CI** (`build.yml`) — Lint, typecheck, test, build Docker image, push to ECR
+2. **Terraform** (`terraform.yml`) — Provision RDS, ElastiCache, Secrets Manager, ACM certificates
+3. **CD** (`cd-eks.yml`) — Deploy Helm release to EKS cluster
+
+## Multi-Region Architecture
+
+Medic operates across two AWS regions:
+
+| Resource | Region | Notes |
+|----------|--------|-------|
+| ECR (container images) | `us-east-1` | Docker image repository |
+| EKS cluster | `us-east-2` | Application runtime (from o11y-tf) |
+| RDS PostgreSQL | `us-east-2` | Database |
+| ElastiCache Redis | `us-east-2` | Rate limiting |
+| Secrets Manager | `us-east-2` | Application secrets |
+| ACM certificates | `us-east-2` | TLS termination |
+
+## Troubleshooting
+
+- [ESO (External Secrets Operator) not found](docs/troubleshooting/eso-not-found.md) — Common during first deployment or when targeting a cluster without ESO installed
 
 # Deployment and Configuration
 Postgres tables required:

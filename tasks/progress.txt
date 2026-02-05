@@ -3,5 +3,178 @@
 # Branch: feature/terraform-self-contained-deployment
 # Started: 2026-02-05
 
+## Codebase Patterns
+- Terraform files use `terraform fmt` canonical style (single space before inline comments, aligned `=` signs)
+- Multi-region architecture: ECR in us-east-1, EKS/RDS/Secrets Manager in us-east-2
+- S3 state backend region is passed via `-backend-config="region=${{ env.AWS_REGION }}"` in workflows
+- cd-eks.yml explicitly uses `--region us-east-1` for ECR image checks
+- `ruff` and `mypy` are available via `python3 -m ruff` / `python3 -m mypy` (not in PATH directly)
+- Pre-existing mypy warnings in `scripts/init_api_keys.py` (Python 3.10 union syntax) — not blocking
+- Backend.tf files only set `encrypt = true`; all other backend config (bucket, key, region, DynamoDB) comes via `-backend-config` flags in workflows
+- Dev environment points to `dev-o11y-terraform-state` bucket (future dev-o11y-tf cluster); prod points to `o11y-prod-terraform-state`
+- Dev ingress host is `dev-medic.linqapp.com`; prod is `medic.linqapp.com`
+- ACM module uses DNS validation (not email) — requires adding CNAME to Cloudflare manually after `terraform apply`
+- ACM certificate ARN is passed to Helm via `module.acm.certificate_arn` (not the `ingress_certificate_arn` variable) — module output is the source of truth
+- ESO CRD validation uses `data "kubernetes_resources"` with `field_selector` to check for specific CRD by name — avoids listing all CRDs
+- `null_resource` with `precondition` lifecycle block is the pattern for fail-fast validation checks in Terraform
+- Multiple `locals {}` blocks are valid in Terraform and get merged — no need to combine into a single block
+- ClusterSecretStore uses `external-secrets.io/v1beta1` with JWT auth and `serviceAccountRef` for IRSA-based AWS Secrets Manager access
+- `kubernetes_manifest` is the resource type for creating ESO custom resources (ClusterSecretStore, ExternalSecret, etc.) via Terraform
+- Secrets module has two secret paths: `medic/{env}/secrets` (Terraform-managed) and `medic/{env}/app-secrets` (manually created, referenced via data source)
+- ExternalSecret keys in Helm are passed as a `keys` array from Terraform, each with `secretKey`, `remoteRef.key`, `remoteRef.property` — the Helm template iterates this array directly
+- IAM policy for IRSA must include ARNs for BOTH the Terraform-managed secret AND the manually-created app-secrets to allow ESO to read them
+- CD pipeline (`cd-eks.yml`) uses `pull_request` → dev and `push` → prod with separate `deploy-dev` / `deploy-prod` jobs; `skip_dev` input defaults to `true` until dev cluster exists
+
+---
+
+## 2026-02-05 - US-001 - Linear Issue: SRE-147
+- **What was implemented:** Fixed region mismatch in terraform.yml workflow — changed `AWS_REGION` from `us-east-1` to `us-east-2` to match EKS cluster region. Also ran `terraform fmt` across all modules to fix pre-existing formatting inconsistencies.
+- **Files changed:**
+  - `.github/workflows/terraform.yml` — AWS_REGION us-east-1 → us-east-2
+  - `terraform/environments/dev/main.tf` — terraform fmt alignment
+  - `terraform/environments/prod/main.tf` — terraform fmt alignment
+  - `terraform/environments/prod/variables.tf` — terraform fmt comment spacing
+  - `terraform/modules/elasticache/main.tf` — terraform fmt alignment
+  - `terraform/modules/elasticache/variables.tf` — terraform fmt comment spacing
+  - `terraform/modules/secrets/main.tf` — terraform fmt alignment
+- **Learnings for future iterations:**
+  - `cd-eks.yml` was already correct with `AWS_REGION: us-east-2` — only `terraform.yml` had the mismatch
+  - Both `terraform/environments/*/variables.tf` already had `aws_region` defaulting to `us-east-2`
+  - Multiple terraform files had pre-existing format issues (extra spaces before inline comments) — `terraform fmt` is not being enforced in pre-commit hooks
+  - YAML validation works via `python3 -c "import yaml; yaml.safe_load(...)"`
+---
+
+## 2026-02-05 - US-002 - Linear Issue: SRE-147
+- **What was implemented:** Updated backend.tf comments in both dev and prod environments to clearly document the shared S3 backend with environment-specific key prefixes. Fixed prod backend.tf which incorrectly referenced `dev` in its key comment.
+- **Files changed:**
+  - `terraform/environments/dev/backend.tf` — Updated header and inline comments to document shared backend (bucket, DynamoDB, dev key prefix)
+  - `terraform/environments/prod/backend.tf` — Updated header and inline comments to document shared backend (bucket, DynamoDB, prod key prefix); fixed key comment from `dev` to `prod`
+- **Learnings for future iterations:**
+  - The S3 state key pattern `$TF_STATE_KEY/$TF_ENVIRONMENT/terraform.tfstate` is configured in the workflow files, not in backend.tf — backend.tf only has `encrypt = true` since all other values come via `-backend-config` flags
+  - Original prod backend.tf had a copy-paste bug: key comment said `TF_STATE_KEY/dev/terraform.tfstate` instead of `prod`
+  - Backend configuration is entirely driven by CI/CD `-backend-config` flags — the backend.tf files are documentation-only beyond `encrypt = true`
+---
+
+## 2026-02-05 - US-003 - Linear Issue: SRE-147
+- **What was implemented:** Configured dev environment to reference the future `dev-o11y-tf` cluster remote state instead of the prod `o11y-prod-terraform-state` bucket. Updated `o11y_state_bucket` default to `dev-o11y-terraform-state`, changed `ingress_host` to `dev-medic.linqapp.com`, and added clear comments in both `variables.tf` and `main.tf` explaining that the dev environment will fail until the dev-o11y-tf cluster is provisioned.
+- **Files changed:**
+  - `terraform/environments/dev/variables.tf` — Changed `o11y_state_bucket` default from `o11y-prod-terraform-state` to `dev-o11y-terraform-state`; updated `ingress_host` from `medic.internal.linqapp.com` to `dev-medic.linqapp.com`; added NOTE comments about dev-o11y-tf not existing yet
+  - `terraform/environments/dev/main.tf` — Updated header and remote state section comments to reference dev-o11y-tf; added NOTE about environment failing until dev cluster is provisioned
+- **Learnings for future iterations:**
+  - Dev `ingress_host` was previously `medic.internal.linqapp.com` (not a dev-specific hostname) — prod already had the correct `medic.linqapp.com`
+  - The `o11y_state_bucket` variable drives the remote state lookup — changing it is sufficient to point dev at a different cluster's state
+  - Prod environment should NOT be modified for this story — it correctly references `o11y-prod-terraform-state`
+---
+
+## 2026-02-05 - US-004 - Linear Issue: SRE-147
+- **What was implemented:** Created reusable ACM certificate Terraform module at `terraform/modules/acm/` with DNS validation for TLS termination. Module creates an ACM certificate and outputs the certificate ARN plus CNAME validation records for Cloudflare DNS setup.
+- **Files changed:**
+  - `terraform/modules/acm/main.tf` — ACM certificate resource with DNS validation and `create_before_destroy` lifecycle
+  - `terraform/modules/acm/variables.tf` — `domain_name` (required) and `tags` (optional) variables
+  - `terraform/modules/acm/outputs.tf` — `certificate_arn`, `domain_validation_options`, `domain_name`, `validation_cname_name`, `validation_cname_value` outputs
+- **Learnings for future iterations:**
+  - Existing modules follow a consistent pattern: header comment block with `=====`, section dividers with `-----`, `merge(var.tags, {...})` for tag merging
+  - ACM DNS validation always creates a single CNAME record — `one()` function extracts it cleanly from `domain_validation_options`
+  - `create_before_destroy` lifecycle is important for ACM certificates to avoid downtime during rotation
+  - The module intentionally does NOT include `aws_acm_certificate_validation` resource — validation is done externally via Cloudflare DNS (not managed by Terraform)
+---
+
+## 2026-02-05 - US-005 - Linear Issue: SRE-147
+- **What was implemented:** Integrated the ACM module into both dev and prod environments. Added `module "acm"` blocks using `var.ingress_host` as the domain name (dev-medic.linqapp.com for dev, medic.linqapp.com for prod). Updated Helm release ingress config to use `module.acm.certificate_arn` instead of `var.ingress_certificate_arn`. Added `acm_certificate_arn` and `acm_validation_records` outputs to both environments showing DNS records needed for Cloudflare setup. Added `module.acm` to Helm release `depends_on`.
+- **Files changed:**
+  - `terraform/environments/dev/main.tf` — Added ACM module block; updated Helm release to use `module.acm.certificate_arn`; added `module.acm` to `depends_on`
+  - `terraform/environments/prod/main.tf` — Added ACM module block; updated Helm release to use `module.acm.certificate_arn`; added `module.acm` to `depends_on`
+  - `terraform/environments/dev/outputs.tf` — Added `acm_certificate_arn` and `acm_validation_records` outputs
+  - `terraform/environments/prod/outputs.tf` — Added `acm_certificate_arn` and `acm_validation_records` outputs
+- **Learnings for future iterations:**
+  - The `ingress_certificate_arn` variable still exists in variables.tf but is no longer used by Helm release — it's now derived from `module.acm.certificate_arn`. The variable could be removed in a cleanup pass but was left to avoid unnecessary churn.
+  - ACM module uses `var.ingress_host` to derive the domain name, keeping domain config DRY (one source of truth).
+  - The `acm_validation_records` output uses a map with `domain_name`, `cname_name`, `cname_value` — run `terraform output acm_validation_records` after apply to get the CNAME records for Cloudflare.
+  - Both environments follow the same pattern: module block before Kubernetes namespace section, outputs before Access URLs section.
+---
+
+## 2026-02-05 - US-006 - Linear Issue: SRE-147
+- **What was implemented:** Added ESO CRD validation check to both dev and prod environments. Uses `data "kubernetes_resources"` to query for the `externalsecrets.external-secrets.io` CRD via the `apiextensions.k8s.io/v1` API. A `null_resource` with a `precondition` lifecycle block fails fast with a clear error message if the CRD is not found, pointing to `docs/troubleshooting/eso-not-found.md`. Added `null_resource.eso_validation` to the Helm release `depends_on` to ensure validation runs before deployment. Added `hashicorp/null` provider to `required_providers`.
+- **Files changed:**
+  - `terraform/environments/dev/main.tf` — Added null provider, ESO CRD data source, eso_installed local, null_resource validation with precondition, added eso_validation to Helm depends_on
+  - `terraform/environments/prod/main.tf` — Same changes as dev
+- **Learnings for future iterations:**
+  - `data "kubernetes_resources"` supports `field_selector` for filtering — `metadata.name=<crd-name>` is an efficient way to check for a specific CRD without listing all CRDs
+  - `null_resource` with `precondition` is the idiomatic Terraform pattern for validation gates — it runs during plan/apply and produces clear errors
+  - The `null` provider (`hashicorp/null ~> 3.2`) must be added to `required_providers` when using `null_resource`
+  - Multiple `locals {}` blocks in the same file are valid Terraform — they're merged automatically
+  - ESO validation section is placed between ACM certificate and Kubernetes namespace sections in both environments
+---
+
+## 2026-02-05 - US-007 - Linear Issue: SRE-147
+- **What was implemented:** Added `kubernetes_manifest` resource for ClusterSecretStore in both dev and prod environments. The ClusterSecretStore is named `aws-secrets-manager` (via `var.external_secret_store_ref`), configured with AWS Secrets Manager provider in `us-east-2` (via `var.aws_region`), and uses JWT auth referencing the IRSA service account from the secrets module. Added dependency on `null_resource.eso_validation` and `kubernetes_namespace.medic`. Also added `kubernetes_manifest.cluster_secret_store` to the Helm release `depends_on` to ensure the store exists before ExternalSecret resources are created.
+- **Files changed:**
+  - `terraform/environments/dev/main.tf` — Added ClusterSecretStore kubernetes_manifest resource; added it to Helm release depends_on
+  - `terraform/environments/prod/main.tf` — Same changes as dev
+- **Learnings for future iterations:**
+  - ClusterSecretStore uses `external-secrets.io/v1beta1` API version — this is the stable ESO API for secret stores
+  - JWT auth with `serviceAccountRef` is the correct pattern for IRSA-based authentication — the service account name and namespace must match what's annotated with the IAM role ARN
+  - The `var.external_secret_store_ref` variable (default: `aws-secrets-manager`) is the single source of truth for the store name — both the ClusterSecretStore resource and the Helm chart's ExternalSecret reference this same variable
+  - ClusterSecretStore is placed between ESO CRD validation and Kubernetes namespace sections, following the dependency order pattern
+  - The `kubernetes_manifest` resource requires the kubernetes provider to be configured — it uses the same EKS auth as other kubernetes resources
+---
+
+## 2026-02-05 - US-008 - Linear Issue: SRE-147
+- **What was implemented:** Updated secrets module to reference existing `medic/{env}/app-secrets` in AWS Secrets Manager via a data source. Added the app-secrets ARN to the IRSA IAM policy so ESO can read both Terraform-managed secrets and manually-created app-secrets. Updated Helm ExternalSecret configuration in both dev and prod environments to use the `keys` array format (matching the Helm template), with all required secret keys: MEDIC_SECRETS_KEY, MEDIC_WEBHOOK_SECRET, SLACK_API_TOKEN, SLACK_CHANNEL_ID, SLACK_SIGNING_SECRET, PAGERDUTY_ROUTING_KEY (from app-secrets) and DATABASE_URL (from rds-credentials). Updated Helm values.yaml defaults to include all secret keys with the correct `app-secrets` path.
+- **Files changed:**
+  - `terraform/modules/secrets/main.tf` — Added `data "aws_secretsmanager_secret" "app_secrets"` data source; updated IAM policy to include app-secrets ARN in GetSecretValue resource list
+  - `terraform/modules/secrets/outputs.tf` — Added `app_secrets_arn` and `app_secrets_name` outputs
+  - `terraform/environments/dev/main.tf` — Replaced `secretPath`/`additionalSecrets` with explicit `keys` array including all 7 secret keys from two Secrets Manager entries
+  - `terraform/environments/prod/main.tf` — Same changes as dev
+  - `helm/medic/values.yaml` — Updated default ExternalSecret keys to include MEDIC_WEBHOOK_SECRET, SLACK_CHANNEL_ID; changed remote ref paths from `medic/production/secrets` to `medic/production/app-secrets` and `medic/production/rds-credentials`; removed REDIS_URL and MEDIC_ADMIN_API_KEY (not in app-secrets)
+- **Learnings for future iterations:**
+  - The Helm ExternalSecret template uses `.Values.externalSecret.keys` array — Terraform must pass this exact structure (`secretKey`, `remoteRef.key`, `remoteRef.property`), not a custom `secretPath`/`additionalSecrets` format
+  - `data "aws_secretsmanager_secret"` is a read-only lookup — Terraform does NOT manage the secret values, just references the ARN for IAM policy and passes the name to Helm
+  - The IRSA IAM policy must include ARNs for ALL secrets the service account needs to read (both Terraform-managed and manually-created)
+  - REDIS_URL is passed via ConfigMap (non-sensitive, from ElastiCache module output), not via Secrets Manager
+  - The `secretStoreRef` in Helm values is now passed as an object `{name, kind}` matching the template structure
+---
+
+## 2026-02-05 - US-009 - Linear Issue: SRE-147
+- **What was implemented:** Rewrote `cd-eks.yml` CD pipeline triggers from `workflow_run` (CI success) to `pull_request` (→dev) and `push` (→prod on main). Split the single `deploy` job into `deploy-dev` and `deploy-prod` with separate conditions. Added `skip_dev` boolean input to `workflow_dispatch` (default: true, since dev cluster doesn't exist yet). Dev deployment has condition checking `skip_dev != true`. Prod deployment uses GitHub Environment approval. Updated concurrency group to dynamically select environment based on trigger type. Removed `workflow_run` trigger entirely.
+- **Files changed:**
+  - `.github/workflows/cd-eks.yml` — Replaced `workflow_run` with `pull_request` + `push` triggers; added `skip_dev` input; split `deploy` into `deploy-dev` and `deploy-prod` jobs; updated concurrency group; updated `notify-failure` to depend on both deploy jobs
+- **Learnings for future iterations:**
+  - `workflow_run` triggers don't provide the same context as `push`/`pull_request` — switching trigger types requires updating checkout refs and SHA resolution logic
+  - `github.event.inputs.skip_dev` is a string `'true'`/`'false'` in `if:` conditions, not a boolean — use `!= 'true'` for comparison
+  - Splitting a single deploy job into two (dev/prod) is cleaner than conditional logic within one job — each has its own `environment:` block for proper GitHub Environment integration
+  - Dev deployment intentionally omits the `Verify Deployment` step (no dev cluster yet) — only prod has kubectl verification
+  - The `concurrency` group uses a ternary-like expression: `inputs.environment || (event_name == 'pull_request' && 'dev') || 'prod'`
+---
+
+## 2026-02-05 - US-010 - Linear Issue: SRE-147
+- **What was implemented:** Created `docs/troubleshooting/eso-not-found.md` with comprehensive troubleshooting documentation for when ESO CRD is not found during Terraform deployment. Document covers: what the error means, how to verify ESO installation (`kubectl get crd`), resolution steps for three scenarios (ESO not deployed, wrong kubeconfig context, expected dev environment failure), and links to ESO docs and o11y-tf.
+- **Files changed:**
+  - `docs/troubleshooting/eso-not-found.md` — New file: ESO troubleshooting guide
+- **Learnings for future iterations:**
+  - The `docs/troubleshooting/` subdirectory did not previously exist — it was created for this story
+  - The error message in Terraform (`terraform/environments/*/main.tf`) references this doc at `docs/troubleshooting/eso-not-found.md` — keep the path in sync if moving the file
+  - Existing troubleshooting doc (`docs/TROUBLESHOOTING.md`) covers application-level issues; the new `docs/troubleshooting/` directory is for infrastructure/deployment issues
+---
+
+## 2026-02-05 - US-011 - Linear Issue: SRE-147
+- **What was implemented:** Created `docs/deployment-prerequisites.md` with comprehensive deployment prerequisites documentation. Includes ASCII architecture diagram showing CI/CD pipeline flow, multi-region architecture table (ECR in us-east-1, EKS/RDS/Secrets in us-east-2), GitHub secrets/variables/environments configuration, external dependencies (o11y-tf cluster, ESO, ALB Controller, Alloy), AWS Secrets Manager paths for both Terraform-managed and manually-created secrets, DNS/TLS setup for Cloudflare ACM validation, Terraform state backend details, IAM permissions summary, and a step-by-step first-time setup checklist.
+- **Files changed:**
+  - `docs/deployment-prerequisites.md` — New file: comprehensive deployment prerequisites guide
+- **Learnings for future iterations:**
+  - The `docs/` directory already has `TROUBLESHOOTING.md` (app-level) and `troubleshooting/eso-not-found.md` (infra-level) — infrastructure docs go in subdirectories, application docs go at the top level
+  - App-secrets must be created manually in AWS Secrets Manager before the first Terraform apply — they are referenced via `data "aws_secretsmanager_secret"`, not created by Terraform
+  - The Alloy/OTEL collector endpoint (`http://alloy:4317`) is a cluster-internal service that must be running for telemetry — this is deployed by o11y-tf
+  - ACM certificate validation requires two steps: Terraform creates the cert, then you must manually add the CNAME to Cloudflare — `terraform output acm_validation_records` provides the values
+---
+
+## 2026-02-05 - US-012 - Linear Issue: SRE-147
+- **What was implemented:** Added a "Deployment" section to README.md documenting the CI/CD workflow (PR→dev, merge→prod), multi-region architecture (ECR in us-east-1, EKS/RDS/Secrets in us-east-2), and troubleshooting links. Updated the Table of Contents to include the new section. Linked to `docs/deployment-prerequisites.md` for full setup instructions and `docs/troubleshooting/eso-not-found.md` for common deployment issues.
+- **Files changed:**
+  - `README.md` — Added "Deployment" section with CI/CD Workflow, Multi-Region Architecture, and Troubleshooting subsections; updated Table of Contents
+- **Learnings for future iterations:**
+  - The README already had a "Deployment and Configuration" section focused on application configuration (env vars, DB tables) — the new "Deployment" section covers infrastructure/CI/CD deployment, placed before the existing section
+  - The Table of Contents uses `* [Section](#section)` markdown format with manually maintained anchors — when adding new sections, update the TOC to match
+  - README serves as the entry point linking to detailed docs — keep deployment details in dedicated docs (`deployment-prerequisites.md`) and only put the workflow overview in the README
 ---
 

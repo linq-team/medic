@@ -22,6 +22,20 @@ output "secret_name" {
 }
 
 # -----------------------------------------------------------------------------
+# App Secrets Outputs (manually created)
+# -----------------------------------------------------------------------------
+
+output "app_secrets_arn" {
+  description = "ARN of the manually-created app-secrets in Secrets Manager"
+  value       = data.aws_secretsmanager_secret.app_secrets.arn
+}
+
+output "app_secrets_name" {
+  description = "Name of the manually-created app-secrets in Secrets Manager"
+  value       = data.aws_secretsmanager_secret.app_secrets.name
+}
+
+# -----------------------------------------------------------------------------
 # IAM Role Outputs
 # -----------------------------------------------------------------------------
 

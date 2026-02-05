@@ -28,6 +28,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -78,12 +82,12 @@ data "terraform_remote_state" "o11y" {
 
 # Local values derived from o11y remote state
 locals {
-  eks_cluster_name      = data.terraform_remote_state.o11y.outputs.cluster_name
-  eks_endpoint          = data.terraform_remote_state.o11y.outputs.cluster_endpoint
-  eks_ca_cert           = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
-  oidc_provider_arn     = data.terraform_remote_state.o11y.outputs.oidc_provider_arn
-  vpc_id                = data.terraform_remote_state.o11y.outputs.vpc_id
-  private_subnet_ids    = data.terraform_remote_state.o11y.outputs.private_subnet_ids
+  eks_cluster_name       = data.terraform_remote_state.o11y.outputs.cluster_name
+  eks_endpoint           = data.terraform_remote_state.o11y.outputs.cluster_endpoint
+  eks_ca_cert            = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
+  oidc_provider_arn      = data.terraform_remote_state.o11y.outputs.oidc_provider_arn
+  vpc_id                 = data.terraform_remote_state.o11y.outputs.vpc_id
+  private_subnet_ids     = data.terraform_remote_state.o11y.outputs.private_subnet_ids
   node_security_group_id = data.terraform_remote_state.o11y.outputs.node_security_group_id
 }
 
@@ -104,7 +108,7 @@ resource "random_password" "rds_password" {
 resource "aws_secretsmanager_secret" "rds_credentials" {
   name                    = "medic/${var.environment}/rds-credentials"
   description             = "RDS credentials for Medic ${var.environment}"
-  recovery_window_in_days = 30  # Longer recovery window in prod
+  recovery_window_in_days = 30 # Longer recovery window in prod
 
   tags = merge(var.tags, {
     Name = "medic-${var.environment}-rds-credentials"
@@ -143,7 +147,7 @@ module "rds" {
   instance_class = var.rds_instance_class
   engine_version = var.rds_engine_version
   database_name  = var.rds_database_name
-  multi_az       = true  # Always Multi-AZ in production
+  multi_az       = true # Always Multi-AZ in production
 
   # Credentials from Secrets Manager
   master_username = var.rds_master_username
@@ -155,7 +159,7 @@ module "rds" {
 
   # Backup - longer retention in prod
   backup_retention_period = 30
-  skip_final_snapshot     = false  # Never skip in production
+  skip_final_snapshot     = false # Never skip in production
 
   # Monitoring - enabled in prod
   performance_insights_enabled = true
@@ -208,6 +212,103 @@ module "secrets" {
 }
 
 # -----------------------------------------------------------------------------
+# ACM Certificate
+# -----------------------------------------------------------------------------
+# Creates an ACM certificate for medic.linqapp.com with DNS validation.
+# After applying, add the CNAME record from `acm_validation_records` output
+# to Cloudflare DNS to complete certificate validation.
+# -----------------------------------------------------------------------------
+
+module "acm" {
+  source = "../../modules/acm"
+
+  domain_name = var.ingress_host
+
+  tags = var.tags
+}
+
+# -----------------------------------------------------------------------------
+# ESO CRD Validation
+# -----------------------------------------------------------------------------
+# Checks that External Secrets Operator (ESO) is installed on the cluster.
+# ESO is deployed by o11y-tf. If it's missing, Terraform will fail with a
+# clear error message pointing to troubleshooting documentation.
+#
+# See: docs/troubleshooting/eso-not-found.md
+# -----------------------------------------------------------------------------
+
+data "kubernetes_resources" "eso_crd" {
+  api_version    = "apiextensions.k8s.io/v1"
+  kind           = "CustomResourceDefinition"
+  field_selector = "metadata.name=externalsecrets.external-secrets.io"
+}
+
+locals {
+  eso_installed = length(data.kubernetes_resources.eso_crd.objects) > 0
+}
+
+resource "null_resource" "eso_validation" {
+  lifecycle {
+    precondition {
+      condition     = local.eso_installed
+      error_message = <<-EOT
+        External Secrets Operator (ESO) CRD not found on the cluster.
+
+        ESO is a prerequisite deployed by o11y-tf. The 'externalsecrets.external-secrets.io'
+        CRD must exist before Medic can be deployed.
+
+        Troubleshooting: docs/troubleshooting/eso-not-found.md
+
+        To verify manually:
+          kubectl get crd externalsecrets.external-secrets.io
+      EOT
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
+# ClusterSecretStore - AWS Secrets Manager
+# -----------------------------------------------------------------------------
+# Creates a ClusterSecretStore resource for External Secrets Operator (ESO).
+# This allows ExternalSecret resources in any namespace to fetch secrets from
+# AWS Secrets Manager using the IRSA service account for authentication.
+#
+# Must match the name expected by the Helm chart (var.external_secret_store_ref).
+# Depends on ESO being installed (validated by null_resource.eso_validation).
+# -----------------------------------------------------------------------------
+
+resource "kubernetes_manifest" "cluster_secret_store" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ClusterSecretStore"
+    metadata = {
+      name = var.external_secret_store_ref
+    }
+    spec = {
+      provider = {
+        aws = {
+          service = "SecretsManager"
+          region  = var.aws_region
+          auth = {
+            jwt = {
+              serviceAccountRef = {
+                name      = var.service_account_name
+                namespace = var.kubernetes_namespace
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    null_resource.eso_validation,
+    kubernetes_namespace.medic,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Kubernetes Namespace
 # -----------------------------------------------------------------------------
 
@@ -230,10 +331,10 @@ resource "kubernetes_namespace" "medic" {
 # -----------------------------------------------------------------------------
 
 resource "helm_release" "medic" {
-  name       = "medic"
-  namespace  = var.kubernetes_namespace
-  chart      = var.helm_chart_path
-  version    = var.helm_chart_version
+  name      = "medic"
+  namespace = var.kubernetes_namespace
+  chart     = var.helm_chart_path
+  version   = var.helm_chart_version
 
   create_namespace = false
 
@@ -282,7 +383,7 @@ resource "helm_release" "medic" {
         host    = var.ingress_host
         tls = {
           enabled        = var.ingress_tls_enabled
-          certificateArn = var.ingress_certificate_arn
+          certificateArn = module.acm.certificate_arn
         }
       }
 
@@ -294,15 +395,68 @@ resource "helm_release" "medic" {
         }
       }
 
+      # ExternalSecret for ESO integration
+      # Fetches secrets from two Secrets Manager entries:
+      #   - medic/{env}/app-secrets: application secrets (manually created)
+      #   - medic/{env}/rds-credentials: database URL (Terraform-managed)
       externalSecret = {
-        enabled        = true
-        secretStoreRef = var.external_secret_store_ref
-        secretPath     = module.secrets.secret_name
-        additionalSecrets = [
+        enabled = true
+        secretStoreRef = {
+          name = var.external_secret_store_ref
+          kind = "ClusterSecretStore"
+        }
+        keys = [
+          # App secrets (manually created in AWS Secrets Manager)
           {
-            secretPath = aws_secretsmanager_secret.rds_credentials.name
-            property   = "DATABASE_URL"
-          }
+            secretKey = "MEDIC_SECRETS_KEY"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "MEDIC_SECRETS_KEY"
+            }
+          },
+          {
+            secretKey = "MEDIC_WEBHOOK_SECRET"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "MEDIC_WEBHOOK_SECRET"
+            }
+          },
+          {
+            secretKey = "SLACK_API_TOKEN"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "SLACK_API_TOKEN"
+            }
+          },
+          {
+            secretKey = "SLACK_CHANNEL_ID"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "SLACK_CHANNEL_ID"
+            }
+          },
+          {
+            secretKey = "SLACK_SIGNING_SECRET"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "SLACK_SIGNING_SECRET"
+            }
+          },
+          {
+            secretKey = "PAGERDUTY_ROUTING_KEY"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "PAGERDUTY_ROUTING_KEY"
+            }
+          },
+          # RDS credentials (Terraform-managed)
+          {
+            secretKey = "DATABASE_URL"
+            remoteRef = {
+              key      = aws_secretsmanager_secret.rds_credentials.name
+              property = "DATABASE_URL"
+            }
+          },
         ]
       }
 
@@ -342,6 +496,9 @@ resource "helm_release" "medic" {
     module.rds,
     module.elasticache,
     module.secrets,
+    module.acm,
+    null_resource.eso_validation,
+    kubernetes_manifest.cluster_secret_store,
     kubernetes_namespace.medic,
     aws_secretsmanager_secret_version.rds_credentials
   ]
