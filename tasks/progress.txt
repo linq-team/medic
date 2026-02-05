@@ -23,6 +23,7 @@
 - Secrets module has two secret paths: `medic/{env}/secrets` (Terraform-managed) and `medic/{env}/app-secrets` (manually created, referenced via data source)
 - ExternalSecret keys in Helm are passed as a `keys` array from Terraform, each with `secretKey`, `remoteRef.key`, `remoteRef.property` — the Helm template iterates this array directly
 - IAM policy for IRSA must include ARNs for BOTH the Terraform-managed secret AND the manually-created app-secrets to allow ESO to read them
+- CD pipeline (`cd-eks.yml`) uses `pull_request` → dev and `push` → prod with separate `deploy-dev` / `deploy-prod` jobs; `skip_dev` input defaults to `true` until dev cluster exists
 
 ---
 
@@ -132,5 +133,27 @@
   - The IRSA IAM policy must include ARNs for ALL secrets the service account needs to read (both Terraform-managed and manually-created)
   - REDIS_URL is passed via ConfigMap (non-sensitive, from ElastiCache module output), not via Secrets Manager
   - The `secretStoreRef` in Helm values is now passed as an object `{name, kind}` matching the template structure
+---
+
+## 2026-02-05 - US-009 - Linear Issue: SRE-147
+- **What was implemented:** Rewrote `cd-eks.yml` CD pipeline triggers from `workflow_run` (CI success) to `pull_request` (→dev) and `push` (→prod on main). Split the single `deploy` job into `deploy-dev` and `deploy-prod` with separate conditions. Added `skip_dev` boolean input to `workflow_dispatch` (default: true, since dev cluster doesn't exist yet). Dev deployment has condition checking `skip_dev != true`. Prod deployment uses GitHub Environment approval. Updated concurrency group to dynamically select environment based on trigger type. Removed `workflow_run` trigger entirely.
+- **Files changed:**
+  - `.github/workflows/cd-eks.yml` — Replaced `workflow_run` with `pull_request` + `push` triggers; added `skip_dev` input; split `deploy` into `deploy-dev` and `deploy-prod` jobs; updated concurrency group; updated `notify-failure` to depend on both deploy jobs
+- **Learnings for future iterations:**
+  - `workflow_run` triggers don't provide the same context as `push`/`pull_request` — switching trigger types requires updating checkout refs and SHA resolution logic
+  - `github.event.inputs.skip_dev` is a string `'true'`/`'false'` in `if:` conditions, not a boolean — use `!= 'true'` for comparison
+  - Splitting a single deploy job into two (dev/prod) is cleaner than conditional logic within one job — each has its own `environment:` block for proper GitHub Environment integration
+  - Dev deployment intentionally omits the `Verify Deployment` step (no dev cluster yet) — only prod has kubectl verification
+  - The `concurrency` group uses a ternary-like expression: `inputs.environment || (event_name == 'pull_request' && 'dev') || 'prod'`
+---
+
+## 2026-02-05 - US-010 - Linear Issue: SRE-147
+- **What was implemented:** Created `docs/troubleshooting/eso-not-found.md` with comprehensive troubleshooting documentation for when ESO CRD is not found during Terraform deployment. Document covers: what the error means, how to verify ESO installation (`kubectl get crd`), resolution steps for three scenarios (ESO not deployed, wrong kubeconfig context, expected dev environment failure), and links to ESO docs and o11y-tf.
+- **Files changed:**
+  - `docs/troubleshooting/eso-not-found.md` — New file: ESO troubleshooting guide
+- **Learnings for future iterations:**
+  - The `docs/troubleshooting/` subdirectory did not previously exist — it was created for this story
+  - The error message in Terraform (`terraform/environments/*/main.tf`) references this doc at `docs/troubleshooting/eso-not-found.md` — keep the path in sync if moving the file
+  - Existing troubleshooting doc (`docs/TROUBLESHOOTING.md`) covers application-level issues; the new `docs/troubleshooting/` directory is for infrastructure/deployment issues
 ---
 

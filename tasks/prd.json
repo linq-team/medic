@@ -154,7 +154,7 @@
         "YAML lint passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "PR→dev, merge→prod. Skip dev by default until cluster exists."
     },
     {
@@ -169,7 +169,7 @@
         "Link to o11y-tf repository for ESO deployment"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Referenced by error message in US-006."
     },
     {
