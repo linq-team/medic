@@ -15,9 +15,11 @@
 #   - dev: Development environment (auto-approval)
 #   - prod: Production environment (requires manual approval)
 #
-# Required Secrets/Variables per environment:
-#   - AWS_ROLE_ARN: IAM role ARN for OIDC authentication
-#   - AWS_REGION: AWS region (e.g., us-east-1)
+# Required Secrets:
+#   - AWS_ACCESS_KEY_ID: AWS access key for Terraform
+#   - AWS_SECRET_ACCESS_KEY: AWS secret key for Terraform
+#
+# Required Variables:
 #   - TF_STATE_BUCKET: S3 bucket for Terraform state
 #   - TF_STATE_KEY: Key prefix for state file
 #   - TF_STATE_DYNAMODB_TABLE: DynamoDB table for state locking
@@ -60,6 +62,7 @@ on:
 
 env:
   TERRAFORM_VERSION: "1.7.0"
+  AWS_REGION: us-east-1
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -78,7 +81,6 @@ jobs:
       TF_ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
 
     permissions:
-      id-token: write    # Required for OIDC authentication with AWS
       contents: read
       pull-requests: write  # Required for PR comments
 
@@ -96,11 +98,12 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Configure AWS credentials via OIDC
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
         id: init
@@ -109,7 +112,7 @@ jobs:
           terraform init \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="key=${{ vars.TF_STATE_KEY }}/${{ env.TF_ENVIRONMENT }}/terraform.tfstate" \
-            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
             -backend-config="encrypt=true"
 
@@ -214,7 +217,6 @@ jobs:
       TF_ENVIRONMENT: ${{ needs.terraform-plan.outputs.environment }}
 
     permissions:
-      id-token: write    # Required for OIDC authentication with AWS
       contents: read
 
     steps:
@@ -227,11 +229,12 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Configure AWS credentials via OIDC
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
         working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
@@ -239,7 +242,7 @@ jobs:
           terraform init \
             -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
             -backend-config="key=${{ vars.TF_STATE_KEY }}/${{ env.TF_ENVIRONMENT }}/terraform.tfstate" \
-            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
             -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
             -backend-config="encrypt=true"
 
