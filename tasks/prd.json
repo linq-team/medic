@@ -28,7 +28,7 @@
         "YAML lint passes on workflow files"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Foundation fix - must be done first. ECR is in us-east-1, EKS/RDS/Secrets in us-east-2."
     },
     {
@@ -45,7 +45,7 @@
         "Terraform fmt passes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Shared backend with different prefixes per environment."
     },
     {

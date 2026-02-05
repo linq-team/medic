@@ -3,5 +3,42 @@
 # Branch: feature/terraform-self-contained-deployment
 # Started: 2026-02-05
 
+## Codebase Patterns
+- Terraform files use `terraform fmt` canonical style (single space before inline comments, aligned `=` signs)
+- Multi-region architecture: ECR in us-east-1, EKS/RDS/Secrets Manager in us-east-2
+- S3 state backend region is passed via `-backend-config="region=${{ env.AWS_REGION }}"` in workflows
+- cd-eks.yml explicitly uses `--region us-east-1` for ECR image checks
+- `ruff` and `mypy` are available via `python3 -m ruff` / `python3 -m mypy` (not in PATH directly)
+- Pre-existing mypy warnings in `scripts/init_api_keys.py` (Python 3.10 union syntax) — not blocking
+- Backend.tf files only set `encrypt = true`; all other backend config (bucket, key, region, DynamoDB) comes via `-backend-config` flags in workflows
+
+---
+
+## 2026-02-05 - US-001 - Linear Issue: SRE-147
+- **What was implemented:** Fixed region mismatch in terraform.yml workflow — changed `AWS_REGION` from `us-east-1` to `us-east-2` to match EKS cluster region. Also ran `terraform fmt` across all modules to fix pre-existing formatting inconsistencies.
+- **Files changed:**
+  - `.github/workflows/terraform.yml` — AWS_REGION us-east-1 → us-east-2
+  - `terraform/environments/dev/main.tf` — terraform fmt alignment
+  - `terraform/environments/prod/main.tf` — terraform fmt alignment
+  - `terraform/environments/prod/variables.tf` — terraform fmt comment spacing
+  - `terraform/modules/elasticache/main.tf` — terraform fmt alignment
+  - `terraform/modules/elasticache/variables.tf` — terraform fmt comment spacing
+  - `terraform/modules/secrets/main.tf` — terraform fmt alignment
+- **Learnings for future iterations:**
+  - `cd-eks.yml` was already correct with `AWS_REGION: us-east-2` — only `terraform.yml` had the mismatch
+  - Both `terraform/environments/*/variables.tf` already had `aws_region` defaulting to `us-east-2`
+  - Multiple terraform files had pre-existing format issues (extra spaces before inline comments) — `terraform fmt` is not being enforced in pre-commit hooks
+  - YAML validation works via `python3 -c "import yaml; yaml.safe_load(...)"`
+---
+
+## 2026-02-05 - US-002 - Linear Issue: SRE-147
+- **What was implemented:** Updated backend.tf comments in both dev and prod environments to clearly document the shared S3 backend with environment-specific key prefixes. Fixed prod backend.tf which incorrectly referenced `dev` in its key comment.
+- **Files changed:**
+  - `terraform/environments/dev/backend.tf` — Updated header and inline comments to document shared backend (bucket, DynamoDB, dev key prefix)
+  - `terraform/environments/prod/backend.tf` — Updated header and inline comments to document shared backend (bucket, DynamoDB, prod key prefix); fixed key comment from `dev` to `prod`
+- **Learnings for future iterations:**
+  - The S3 state key pattern `$TF_STATE_KEY/$TF_ENVIRONMENT/terraform.tfstate` is configured in the workflow files, not in backend.tf — backend.tf only has `encrypt = true` since all other values come via `-backend-config` flags
+  - Original prod backend.tf had a copy-paste bug: key comment said `TF_STATE_KEY/dev/terraform.tfstate` instead of `prod`
+  - Backend configuration is entirely driven by CI/CD `-backend-config` flags — the backend.tf files are documentation-only beyond `encrypt = true`
 ---
 
