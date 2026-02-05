@@ -2606,3 +2606,22 @@
   - The `/health` endpoint returns both static info (version) and dynamic checks (component health)
 
 ---
+
+## 2026-02-05 - US-009 - Linear Issue: SRE-130
+- QA validation: ran full CI checks on Python 3.14.2
+- **Ruff lint**: Clean (no errors)
+- **Mypy typecheck**: Clean (no errors, only informational note)
+- **Pytest**: 1304 passed, 3 skipped, 0 warnings, 85% coverage
+- **Helm lint**: Clean, helm template renders successfully
+- Fixed `datetime.utcnow()` deprecation warning in `tests/unit/test_monitor.py` - replaced with `datetime.now(timezone.utc).replace(tzinfo=None)` to get naive UTC datetime without deprecation
+- Files changed:
+  - `tests/unit/test_monitor.py` (fixed deprecated datetime.utcnow())
+  - `tasks/prd.json` (marked US-009 as passes: true)
+
+- **Learnings for future iterations**:
+  - `datetime.utcnow()` is deprecated since Python 3.12 - use `datetime.now(timezone.utc)` for aware or `.replace(tzinfo=None)` for naive UTC datetimes
+  - Run tests with `-W error::DeprecationWarning` flag to catch deprecation warnings that would otherwise be silent
+  - pyenv Python 3.14.2 is at `$HOME/.pyenv/versions/3.14.2/bin/python3.14` - use direct path since shell integration isn't set up
+  - All CI checks pass cleanly on Python 3.14.2 with no regressions
+
+---
