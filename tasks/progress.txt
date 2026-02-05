@@ -2380,3 +2380,29 @@
   - Bulk undo should handle partial failures gracefully - show warning toast for partial success
 
 ---
+
+## 2026-02-05 - US-004 - Linear Issue: SRE-125
+- **What was implemented**: Updated all dependencies to Python 3.14 compatible versions
+  - Updated Medic/requirements.txt with Python 3.14 compatible versions:
+    - flask>=3.1.0, Cerberus>=1.3.7, psycopg2-binary>=2.9.11
+    - cryptography>=44.0.0, redis>=5.2.0, croniter>=5.0.0
+    - opentelemetry packages>=1.39.0 (api, sdk, instrumentation-flask, exporter-otlp-proto-grpc)
+  - Updated requirements-dev.txt with Python 3.14 compatible versions:
+    - mypy>=1.14.0 (with Python 3.14 mypyc wheel support)
+    - pytest>=8.3.0, pytest-cov>=6.0.0, pytest-asyncio>=0.25.0
+    - Added ruff>=0.9.0 for CI linting
+
+- **Files changed**:
+  - `Medic/requirements.txt` (updated all dependency versions)
+  - `requirements-dev.txt` (updated all dependency versions, added ruff)
+  - `tasks/prd.json` (marked US-004 as passes: true)
+
+- **Learnings for future iterations**:
+  - psycopg2-binary 2.9.11 has Python 3.14 wheels (uploaded October 2025)
+  - cryptography 44.x+ has Python 3.14 support including free-threaded variant
+  - mypy 1.14.0+ has mypyc wheels for Python 3.14
+  - OpenTelemetry Python packages 1.39.x work with Python 3.14 despite missing classifier
+  - pyreadiness.org/3.14/ tracks package Python 3.14 classifier status
+  - Many packages support Python 3.14 functionally but haven't added the classifier yet
+
+---
