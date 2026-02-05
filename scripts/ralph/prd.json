@@ -1,0 +1,193 @@
+{
+  "project": "Medic",
+  "branchName": "ralph/python-3.14-upgrade",
+  "linearParentIssue": "SRE-121",
+  "description": "Upgrade Medic from Python 3.11 to Python 3.14.3 - the latest stable release. Includes updating CI, Dockerfile, dependencies, and fixing any compatibility issues.",
+  "userStories": [
+    {
+      "id": "US-004",
+      "linearIssue": "SRE-125",
+      "title": "Fix dependency compatibility issues",
+      "description": "As a developer, I need all dependencies to be compatible with Python 3.14 so the application runs correctly.",
+      "acceptanceCriteria": [
+        "Update Medic/requirements.txt with Python 3.14 compatible versions",
+        "Update requirements-dev.txt with Python 3.14 compatible versions",
+        "Verify psycopg2-binary version supports Python 3.14",
+        "Verify cryptography version supports Python 3.14",
+        "Verify opentelemetry packages support Python 3.14",
+        "Verify flask version supports Python 3.14",
+        "All pip install commands succeed without errors",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Must be done first before updating Python version in CI/Docker"
+    },
+    {
+      "id": "US-001",
+      "linearIssue": "SRE-122",
+      "title": "Update CI workflow Python version",
+      "description": "As a developer, I need CI to run on Python 3.14 so that tests validate against the target runtime.",
+      "acceptanceCriteria": [
+        "Update PYTHON_VERSION in .github/workflows/build.yml from '3.11' to '3.14'",
+        "Verify setup-python@v5 action supports Python 3.14",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Simple version number change in workflow file"
+    },
+    {
+      "id": "US-002",
+      "linearIssue": "SRE-123",
+      "title": "Update Dockerfile to Python 3.14",
+      "description": "As a developer, I need the production Docker image to use Python 3.14 so that deployed code matches the CI environment.",
+      "acceptanceCriteria": [
+        "Update builder stage FROM python:3.11-slim-bookworm to python:3.14-slim-bookworm",
+        "Update runtime stage FROM python:3.11-slim-bookworm to python:3.14-slim-bookworm",
+        "Dockerfile syntax is valid",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Update base image version in both stages of Dockerfile"
+    },
+    {
+      "id": "US-005",
+      "linearIssue": "SRE-126",
+      "title": "Fix deprecation warnings and compatibility issues",
+      "description": "As a developer, I need to resolve any Python 3.14 deprecation warnings so the codebase is future-proof.",
+      "acceptanceCriteria": [
+        "Fix any deprecated stdlib usage in Medic/ directory",
+        "Fix any typing module deprecations (use collections.abc where needed)",
+        "Fix any asyncio API changes",
+        "Fix any f-string or syntax changes for Python 3.14",
+        "No DeprecationWarning in code",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Check typing, asyncio, collections, importlib modules for deprecated usage"
+    },
+    {
+      "id": "US-006",
+      "linearIssue": "SRE-127",
+      "title": "Update type hints for Python 3.14",
+      "description": "As a developer, I want to leverage Python 3.14's improved type hint features so the code is more maintainable.",
+      "acceptanceCriteria": [
+        "Update mypy version in requirements-dev.txt to support Python 3.14",
+        "Update type stubs versions if needed",
+        "Fix any new type errors from stricter checking",
+        "Mypy passes with no errors on Medic/ medic.py config.py",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "May require updating mypy and type stub packages"
+    },
+    {
+      "id": "US-008",
+      "linearIssue": "SRE-129",
+      "title": "Validate full test suite passes",
+      "description": "As a developer, I need confirmation that all tests pass on Python 3.14 before merging.",
+      "acceptanceCriteria": [
+        "Run pytest tests/ -v and all tests pass",
+        "Test coverage does not decrease",
+        "No new flaky tests",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Final validation step - run full test suite"
+    },
+    {
+      "id": "US-003",
+      "linearIssue": "SRE-124",
+      "title": "Evaluate alternative Docker base images",
+      "description": "As a developer, I want to evaluate alpine and distroless base images so that we can optimize for size and security.",
+      "acceptanceCriteria": [
+        "Document size of python:3.14-slim-bookworm image",
+        "Document size of python:3.14-alpine image if available",
+        "Document compatibility notes for each base image",
+        "Add comparison as comment in Dockerfile or in PR description",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Research task - document findings, keep slim-bookworm as default unless alpine is clearly better"
+    },
+    {
+      "id": "US-007",
+      "linearIssue": "SRE-128",
+      "title": "Leverage Python 3.14 features (optional improvements)",
+      "description": "As a developer, I want to use beneficial Python 3.14 features where they improve code quality.",
+      "acceptanceCriteria": [
+        "Review Python 3.14 What's New documentation",
+        "Identify if any new features would benefit the codebase",
+        "Only apply changes that genuinely improve readability or performance",
+        "Do NOT refactor working code just to use new syntax",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Optional - skip if no clear benefit. Do not over-engineer."
+    },
+    {
+      "id": "US-009",
+      "linearIssue": "SRE-130",
+      "title": "QA validation and manual testing",
+      "description": "As a QA engineer, I need to manually validate the Python upgrade so we can confirm no regressions in production behavior.",
+      "acceptanceCriteria": [
+        "Manual test plan documented",
+        "Health check endpoints validated manually",
+        "QA signoff obtained"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "MANUAL TASK - Requires human QA. Skip in Ralph automation."
+    },
+    {
+      "id": "US-010",
+      "linearIssue": "SRE-131",
+      "title": "Update monitoring and telemetry",
+      "description": "As an SRE, I need monitoring updated to track the new Python version so we can detect issues post-deployment.",
+      "acceptanceCriteria": [
+        "Python version exposed in application metrics or info endpoint",
+        "Verify OTEL instrumentation works with Python 3.14",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Add Python version to /health or /info endpoint if not already present"
+    },
+    {
+      "id": "US-011",
+      "linearIssue": "SRE-132",
+      "title": "Create runbook and documentation",
+      "description": "As a support engineer, I need documentation for the Python 3.14 upgrade so I can troubleshoot issues.",
+      "acceptanceCriteria": [
+        "Rollback procedure documented in PR description or docs",
+        "Known issues documented if any discovered"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "MANUAL TASK - Documentation. Can add basic notes in PR description."
+    },
+    {
+      "id": "US-012",
+      "linearIssue": "SRE-133",
+      "title": "Handoff and ownership confirmation",
+      "description": "As a team lead, I need clear handoff so all stakeholders know about the Python upgrade.",
+      "acceptanceCriteria": [
+        "PR description includes summary of changes",
+        "Breaking changes documented if any"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "MANUAL TASK - Human communication required. Skip in Ralph automation."
+    }
+  ]
+}
