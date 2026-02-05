@@ -7,7 +7,7 @@
 # Stage 1: Builder
 # Install dependencies and compile any native extensions
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 # Set build-time environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,7 +36,7 @@ RUN pip install --user --no-warn-script-location gunicorn>=21.0.0
 # Stage 2: Runtime
 # Minimal image with only runtime dependencies
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 # Metadata labels
 LABEL maintainer="Medic Team <medic@example.com>" \
