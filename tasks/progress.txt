@@ -70,6 +70,7 @@
 - **Helm hooks: Use `helm.sh/hook: pre-install,pre-upgrade` for migrations, negative weight runs first**
 - **Helm Job cleanup: Use `helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded`**
 - **Migration script: Track applied migrations in `schema_migrations` table, support `DATABASE_URL` env var**
+- **Python 3.14+ type annotations: Use built-in types for generics (`list[str]` not `List[str]`), use `collections.abc.Callable` instead of `typing.Callable`**
 
 ### UI (React Dashboard)
 - UI project located in ui/ directory
@@ -2438,5 +2439,59 @@
   - python:3.14-slim-bookworm is available on Docker Hub for both amd64 and arm64
   - When running mypy locally with Python 3.9, use `--python-version 3.14` to target Python 3.14 syntax
   - Local mypy will pick up scripts/ package due to __init__.py even if not specified in paths
+
+---
+
+## 2026-02-05 - US-005 - Linear Issue: SRE-126
+- **What was implemented**: Fixed Python 3.14 deprecation warnings across the codebase
+  - Updated type annotations to use Python 3.9+ built-in generic types:
+    - `Dict` -> `dict`
+    - `List` -> `list`
+    - `Tuple` -> `tuple`
+    - `Set` -> `set`
+  - Moved `Callable` imports from `typing` to `collections.abc` where used
+  - Removed unused typing imports (Dict, List, Tuple, Set)
+  - All 1304 tests pass with the updated type annotations
+  - ruff and mypy checks pass
+
+- **Files changed**:
+  - 29 files in `Medic/` directory with type annotation updates
+  - `Medic/Core/alert_routing.py`
+  - `Medic/Core/api_keys.py`
+  - `Medic/Core/audit_log.py`
+  - `Medic/Core/auth_middleware.py`
+  - `Medic/Core/circuit_breaker.py`
+  - `Medic/Core/database.py`
+  - `Medic/Core/health.py`
+  - `Medic/Core/job_runs.py`
+  - `Medic/Core/logging_config.py`
+  - `Medic/Core/maintenance_windows.py`
+  - `Medic/Core/metrics.py`
+  - `Medic/Core/playbook/db.py`
+  - `Medic/Core/playbook/executors/condition.py`
+  - `Medic/Core/playbook/executors/script.py`
+  - `Medic/Core/playbook/executors/webhook.py`
+  - `Medic/Core/playbook/models.py`
+  - `Medic/Core/playbook_alert_integration.py`
+  - `Medic/Core/playbook_engine.py`
+  - `Medic/Core/playbook_parser.py`
+  - `Medic/Core/playbook_triggers.py`
+  - `Medic/Core/rate_limit_middleware.py`
+  - `Medic/Core/rate_limiter.py`
+  - `Medic/Core/secrets.py`
+  - `Medic/Core/slack_approval.py`
+  - `Medic/Core/snapshots.py`
+  - `Medic/Core/url_validator.py`
+  - `Medic/Core/webhook_delivery.py`
+  - `Medic/Core/working_hours.py`
+  - `Medic/Helpers/heartbeat.py`
+  - `tasks/prd.json` (marked US-005 as passes: true)
+
+- **Learnings for future iterations**:
+  - Python 3.9+ allows using built-in types for generic annotations: `list[str]` instead of `List[str]`
+  - The `typing` module's `Dict`, `List`, `Tuple`, `Set` etc. are deprecated in Python 3.9+ and will raise DeprecationWarnings in Python 3.14+
+  - Use `collections.abc.Callable` instead of `typing.Callable` for Python 3.14+ compatibility
+  - The `Optional`, `Union`, `Any`, and `TYPE_CHECKING` imports from `typing` are still valid and recommended
+  - When bulk-updating type annotations, use `replace_all=true` or script-based replacement to ensure all occurrences are caught (including return types and parameter types)
 
 ---
