@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BookOpen,
   ScrollText,
+  History,
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/alerts', label: 'Alerts', icon: AlertTriangle },
   { to: '/playbooks', label: 'Playbooks', icon: BookOpen },
   { to: '/audit-logs', label: 'Audit Logs', icon: ScrollText },
+  { to: '/history', label: 'History', icon: History },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
