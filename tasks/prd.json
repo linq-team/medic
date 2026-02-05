@@ -199,8 +199,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": "Claude generates rollback runbook and documents any known issues or compatibility notes from the upgrade."
+      "passes": true,
+      "notes": "Rollback procedure and known issues documented in docs/RUNBOOK.md under 'Python 3.14 Upgrade' section. Includes rollback steps (git revert, manual Helm rollback, Dockerfile/CI revert), dependency compatibility notes, and post-deployment verification checklist."
     }
   ],
   "linearTickets": {

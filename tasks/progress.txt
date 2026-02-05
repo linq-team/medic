@@ -2625,3 +2625,30 @@
   - All CI checks pass cleanly on Python 3.14.2 with no regressions
 
 ---
+
+## 2026-02-05 - US-011 - Linear Issue: SRE-132
+- **What was implemented**: Created runbook and documentation for Python 3.14 upgrade
+  - Added "Python 3.14 Upgrade" section to `docs/RUNBOOK.md` with:
+    - Summary of all changes made (CI, Dockerfile, type annotations, monitoring)
+    - Dependency versions table with compatibility notes
+    - Step-by-step rollback procedure:
+      1. Git revert (standard rollback via CI/CD)
+      2. Manual Docker image rollback via Helm (emergency)
+      3. Dockerfile revert instructions
+      4. CI workflow revert instructions
+      5. Note that type annotation changes are backwards compatible (no revert needed)
+    - Known issues and compatibility notes (6 items documented)
+    - Post-deployment verification checklist
+
+- **Files changed**:
+  - `docs/RUNBOOK.md` (added Python 3.14 Upgrade section)
+  - `tasks/prd.json` (marked US-011 as passes: true)
+
+- **Learnings for future iterations**:
+  - Type annotation changes (list[str] vs List[str]) are backwards compatible to Python 3.9+ so rollback is safe
+  - Alpine Docker images are tempting for size but musl libc compatibility issues make them risky for Python packages
+  - datetime.utcnow() deprecation fix is also backwards compatible - no revert needed
+  - OpenTelemetry packages may work with newer Python versions before adding the classifier to PyPI
+  - Always document rollback procedures before merging major runtime upgrades
+
+---
