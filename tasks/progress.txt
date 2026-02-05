@@ -155,6 +155,38 @@
 - **ServiceCreateModal pattern**: Modal for creating new services with heartbeat_name validation (alphanumeric + hyphens + underscores only), sensible defaults (priority=p3, alert_interval=5, threshold=1), and duplicate detection via error message parsing
 - **Quick action buttons**: ServiceDetail page has Mute/Unmute and Activate/Deactivate buttons in header with icons, using `useUpdateService` hook for mutations with toast notifications
 - **Snapshot hooks**: Use `useSnapshots`, `useSnapshot`, `useRestoreSnapshot` from `@/hooks/use-snapshots` for querying and restoring snapshots. Query key factory `snapshotsKeys` for consistent cache management. Restore mutation invalidates both snapshots and services queries.
+- **Tabs component**: shadcn Tabs component from `@/components/ui/tabs`, use with `value` and `onValueChange` for controlled state
+- **URL-synced tabs**: Use `useSearchParams` to sync tab state with URL query params (e.g., `?tab=history`)
+- **History tab pattern**: Fetch snapshots conditionally with `enabled: !!service?.service_id && activeTab === 'history'` to avoid unnecessary API calls
+- **Restore confirmation dialog**: Show snapshot data preview in dialog before restoring, including service name, active status, muted status, priority, and team
+
+---
+
+## 2026-02-05 - US-016 - Linear Issue: SRE-115
+- **What was implemented**: History tab added to ServiceDetail page with snapshot list and restore functionality
+  - Added shadcn Tabs component to UI component library
+  - Added Overview and History tabs to ServiceDetail page
+  - Tab state synced with URL query params (`?tab=history`)
+  - Snapshot list displays action type (formatted labels), actor, timestamp, and change summary
+  - Restore button on each non-restored snapshot opens confirmation dialog
+  - Confirmation dialog shows preview of the state that will be restored
+  - Already-restored snapshots display "Restored" badge instead of button
+  - Empty state with message when no snapshots exist
+  - Added 19 new test cases covering tabs, history display, and restore flow
+
+- **Files changed**:
+  - `ui/src/components/ui/tabs.tsx` (new file - shadcn Tabs component)
+  - `ui/src/pages/ServiceDetail.tsx` (added tabs, history tab content, restore dialog)
+  - `ui/src/pages/ServiceDetail.test.tsx` (added 19 tests for history tab functionality)
+  - `ui/package.json` (added @radix-ui/react-tabs dependency)
+  - `tasks/prd.json` (marked US-016 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn CLI creates files in literal `@/` directory - must move to `src/components/ui/` after install
+  - Use `useSearchParams` from react-router-dom to sync UI state with URL for better UX (deep linking, back button)
+  - Enable React Query conditionally with `enabled` option to avoid fetching when data isn't needed (e.g., when tab is not active)
+  - When testing tabs, use `getByRole('tab', { name: /TabName/i })` and check `data-state="active"` attribute
+  - For restore confirmations, show a preview of what will be restored so users understand the impact
 
 ---
 

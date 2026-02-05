@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { type ReactNode } from 'react'
 import { ServiceDetail } from './ServiceDetail'
-import { apiClient, type Service } from '@/lib/api'
+import { apiClient, type Service, type Snapshot } from '@/lib/api'
 import { toast } from 'sonner'
 
 // Mock the apiClient
@@ -20,6 +20,8 @@ vi.mock('@/lib/api', async () => {
     apiClient: {
       getServiceByHeartbeatName: vi.fn(),
       updateService: vi.fn(),
+      getSnapshots: vi.fn(),
+      restoreSnapshot: vi.fn(),
     },
   }
 })
@@ -61,11 +63,14 @@ const mockService: Service = {
 }
 
 // Wrapper component with providers
-function createWrapper(queryClient: QueryClient) {
+function createWrapper(queryClient: QueryClient, initialTab?: string) {
+  const initialEntry = initialTab
+    ? `/services/test-service?tab=${initialTab}`
+    : '/services/test-service'
   return function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/services/test-service']}>
+        <MemoryRouter initialEntries={[initialEntry]}>
           <Routes>
             <Route path="/services/:id" element={children} />
           </Routes>
@@ -76,9 +81,9 @@ function createWrapper(queryClient: QueryClient) {
 }
 
 // Helper to render the page
-function renderPage(queryClient?: QueryClient) {
+function renderPage(queryClient?: QueryClient, initialTab?: string) {
   const qc = queryClient ?? createTestQueryClient()
-  const Wrapper = createWrapper(qc)
+  const Wrapper = createWrapper(qc, initialTab)
   return {
     ...render(
       <Wrapper>
@@ -914,6 +919,712 @@ describe('ServiceDetail - Quick Action Buttons', () => {
       expect(screen.queryByRole('button', { name: /Unmute/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Activate/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Deactivate/i })).not.toBeInTheDocument()
+    })
+  })
+})
+
+// Mock snapshot data
+const mockSnapshot: Snapshot = {
+  snapshot_id: 1,
+  service_id: 1,
+  snapshot_data: {
+    service_id: 1,
+    heartbeat_name: 'test-service',
+    service_name: 'Test Service',
+    active: 1,
+    alert_interval: 5,
+    threshold: 1,
+    team: 'platform',
+    priority: 'p3',
+    muted: 0,
+    down: 0,
+    runbook: 'https://example.com/runbook',
+    date_added: '2026-01-01T00:00:00Z',
+    date_modified: null,
+    date_muted: null,
+  },
+  action_type: 'edit',
+  actor: 'user@example.com',
+  created_at: '2026-02-01T12:00:00Z',
+  restored_at: null,
+}
+
+const mockRestoredSnapshot: Snapshot = {
+  ...mockSnapshot,
+  snapshot_id: 2,
+  action_type: 'mute',
+  created_at: '2026-01-15T12:00:00Z',
+  restored_at: '2026-01-20T14:30:00Z',
+}
+
+describe('ServiceDetail - History Tab', () => {
+  let queryClient: QueryClient
+
+  beforeEach(() => {
+    queryClient = createTestQueryClient()
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    queryClient.clear()
+  })
+
+  describe('Tab Navigation', () => {
+    it('renders Overview and History tabs', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      mockGetService.mockResolvedValueOnce({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+
+      renderPage(queryClient)
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Overview/i })).toBeInTheDocument()
+        expect(screen.getByRole('tab', { name: /History/i })).toBeInTheDocument()
+      })
+    })
+
+    it('shows Overview tab as active by default', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      mockGetService.mockResolvedValueOnce({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+
+      renderPage(queryClient)
+
+      await waitFor(() => {
+        const overviewTab = screen.getByRole('tab', { name: /Overview/i })
+        expect(overviewTab).toHaveAttribute('data-state', 'active')
+      })
+    })
+
+    it('switches to History tab when clicked', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [],
+          total_count: 0,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient)
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /History/i })).toBeInTheDocument()
+      })
+
+      const historyTab = screen.getByRole('tab', { name: /History/i })
+      await user.click(historyTab)
+
+      await waitFor(() => {
+        expect(historyTab).toHaveAttribute('data-state', 'active')
+      })
+    })
+  })
+
+  describe('History Tab Content', () => {
+    it('shows empty state message when no snapshots exist', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [],
+          total_count: 0,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByText('No history yet')).toBeInTheDocument()
+        expect(
+          screen.getByText(/Snapshots are created automatically when changes are made/)
+        ).toBeInTheDocument()
+      })
+    })
+
+    it('renders snapshot list with action type, actor, and date', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        // Check action type badge
+        expect(screen.getByText('Edited')).toBeInTheDocument()
+        // Check actor
+        expect(screen.getByText('user@example.com')).toBeInTheDocument()
+        // Check restore button exists
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+    })
+
+    it('shows Restored badge for already-restored snapshots', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockRestoredSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByText('Restored')).toBeInTheDocument()
+        // Should not show Restore button for already-restored snapshot
+        expect(screen.queryByRole('button', { name: /^Restore$/i })).not.toBeInTheDocument()
+      })
+    })
+
+    it('shows loading skeleton while fetching snapshots', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      // Never resolve to keep loading state
+      mockGetSnapshots.mockReturnValue(new Promise(() => {}))
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        // Check that skeleton elements are rendered
+        expect(screen.getByText('Change History')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Restore Functionality', () => {
+    it('opens restore confirmation dialog when Restore button is clicked', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByText('Restore Service')).toBeInTheDocument()
+        expect(screen.getByText(/Are you sure you want to restore/)).toBeInTheDocument()
+      })
+    })
+
+    it('shows snapshot state preview in restore dialog', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('This will restore the following state:')).toBeInTheDocument()
+        // Check that snapshot data is shown
+        expect(screen.getByText('Service Name:')).toBeInTheDocument()
+        expect(screen.getByText('Active:')).toBeInTheDocument()
+        expect(screen.getByText('Muted:')).toBeInTheDocument()
+        expect(screen.getByText('Priority:')).toBeInTheDocument()
+      })
+    })
+
+    it('closes dialog when Cancel is clicked', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      // Open dialog
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      // Close dialog
+      const dialog = screen.getByRole('dialog')
+      const cancelButton = within(dialog).getByRole('button', { name: /Cancel/i })
+      await user.click(cancelButton)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      })
+    })
+
+    it('calls restoreSnapshot when Restore is confirmed', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+      const mockRestoreSnapshot = vi.mocked(apiClient.restoreSnapshot)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+      mockRestoreSnapshot.mockResolvedValueOnce({
+        success: true,
+        message: 'Restored',
+        results: { ...mockSnapshot, restored_at: '2026-02-05T12:00:00Z' },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      // Open dialog
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      // Confirm restore
+      const dialog = screen.getByRole('dialog')
+      const confirmButton = within(dialog).getByRole('button', { name: /^Restore$/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(mockRestoreSnapshot).toHaveBeenCalledWith(1, undefined)
+      })
+    })
+
+    it('shows success toast when restore succeeds', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+      const mockRestoreSnapshot = vi.mocked(apiClient.restoreSnapshot)
+      const mockToastSuccess = vi.mocked(toast.success)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+      mockRestoreSnapshot.mockResolvedValueOnce({
+        success: true,
+        message: 'Restored',
+        results: { ...mockSnapshot, restored_at: '2026-02-05T12:00:00Z' },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      // Open dialog
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      // Confirm restore
+      const dialog = screen.getByRole('dialog')
+      const confirmButton = within(dialog).getByRole('button', { name: /^Restore$/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('restored'))
+      })
+    })
+
+    it('shows error toast when restore fails', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+      const mockRestoreSnapshot = vi.mocked(apiClient.restoreSnapshot)
+      const mockToastError = vi.mocked(toast.error)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+      mockRestoreSnapshot.mockRejectedValueOnce(new Error('Restore failed'))
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      // Open dialog
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      // Confirm restore
+      const dialog = screen.getByRole('dialog')
+      const confirmButton = within(dialog).getByRole('button', { name: /^Restore$/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(mockToastError).toHaveBeenCalledWith(expect.stringContaining('Failed'))
+      })
+    })
+
+    it('closes dialog after restore succeeds', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+      const mockRestoreSnapshot = vi.mocked(apiClient.restoreSnapshot)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+      mockRestoreSnapshot.mockResolvedValueOnce({
+        success: true,
+        message: 'Restored',
+        results: { ...mockSnapshot, restored_at: '2026-02-05T12:00:00Z' },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      // Open dialog
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      // Confirm restore
+      const dialog = screen.getByRole('dialog')
+      const confirmButton = within(dialog).getByRole('button', { name: /^Restore$/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      })
+    })
+
+    it('closes dialog after restore fails', async () => {
+      const user = userEvent.setup()
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+      const mockRestoreSnapshot = vi.mocked(apiClient.restoreSnapshot)
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [mockSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+      mockRestoreSnapshot.mockRejectedValueOnce(new Error('Restore failed'))
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Restore/i })).toBeInTheDocument()
+      })
+
+      // Open dialog
+      const restoreButton = screen.getByRole('button', { name: /Restore/i })
+      await user.click(restoreButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      // Confirm restore
+      const dialog = screen.getByRole('dialog')
+      const confirmButton = within(dialog).getByRole('button', { name: /^Restore$/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Action Type Display', () => {
+    it('displays Muted for mute action type', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      const muteSnapshot: Snapshot = { ...mockSnapshot, action_type: 'mute' }
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [muteSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByText('Muted')).toBeInTheDocument()
+      })
+    })
+
+    it('displays Deactivated for deactivate action type', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      const deactivateSnapshot: Snapshot = { ...mockSnapshot, action_type: 'deactivate' }
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [deactivateSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByText('Deactivated')).toBeInTheDocument()
+      })
+    })
+
+    it('displays Priority Changed for priority_change action type', async () => {
+      const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
+      const mockGetSnapshots = vi.mocked(apiClient.getSnapshots)
+
+      const priorityChangeSnapshot: Snapshot = { ...mockSnapshot, action_type: 'priority_change' }
+
+      mockGetService.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: [mockService],
+      })
+      mockGetSnapshots.mockResolvedValue({
+        success: true,
+        message: 'OK',
+        results: {
+          entries: [priorityChangeSnapshot],
+          total_count: 1,
+          limit: 50,
+          offset: 0,
+          has_more: false,
+        },
+      })
+
+      renderPage(queryClient, 'history')
+
+      await waitFor(() => {
+        expect(screen.getByText('Priority Changed')).toBeInTheDocument()
+      })
     })
   })
 })
