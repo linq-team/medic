@@ -35,6 +35,7 @@ Usage:
 
 import logging
 import os
+import sys
 import time
 from functools import wraps
 from collections.abc import Callable
@@ -66,6 +67,16 @@ DEFAULT_ENVIRONMENT: str = "development"
 DEFAULT_VERSION: str = "unknown"
 
 
+def _get_python_version() -> str:
+    """
+    Get the Python version string.
+
+    Returns:
+        Python version in format 'major.minor.micro' (e.g., '3.14.3')
+    """
+    return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+
 def _get_config() -> dict[str, str]:
     """
     Get metrics configuration from environment variables.
@@ -76,10 +87,12 @@ def _get_config() -> dict[str, str]:
     service_name = os.environ.get("OTEL_SERVICE_NAME", DEFAULT_SERVICE_NAME)
     environment = os.environ.get("MEDIC_ENVIRONMENT", DEFAULT_ENVIRONMENT)
     version = os.environ.get("MEDIC_VERSION", DEFAULT_VERSION)
+    python_version = _get_python_version()
     return {
         "service_name": service_name,
         "environment": environment,
         "version": version,
+        "python_version": python_version,
     }
 
 
@@ -98,13 +111,14 @@ APP_INFO.info({"version": "2.0.0", "description": "Heartbeat monitoring service"
 MEDIC_BUILD_INFO = Gauge(
     "medic_build_info",
     "Medic service information with OTEL resource attributes",
-    ["service_name", "service_version", "deployment_environment"],
+    ["service_name", "service_version", "deployment_environment", "python_version"],
 )
 # Set the gauge to 1 with resource attribute labels
 MEDIC_BUILD_INFO.labels(
     service_name=_config["service_name"],
     service_version=_config["version"],
     deployment_environment=_config["environment"],
+    python_version=_config["python_version"],
 ).set(1)
 
 # Request metrics - OTEL semantic: http.server.* namespace
@@ -559,4 +573,5 @@ def refresh_config() -> None:
         service_name=_config["service_name"],
         service_version=_config["version"],
         deployment_environment=_config["environment"],
+        python_version=_config["python_version"],
     ).set(1)

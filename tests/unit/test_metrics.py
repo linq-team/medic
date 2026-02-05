@@ -373,8 +373,10 @@ class TestRefreshConfig:
     """Tests for refresh_config function."""
 
     @patch("Medic.Core.metrics.MEDIC_BUILD_INFO")
-    def test_updates_config_from_env(self, mock_info_gauge):
+    @patch("Medic.Core.metrics._get_python_version")
+    def test_updates_config_from_env(self, mock_python_version, mock_info_gauge):
         """Should update config from environment variables."""
+        mock_python_version.return_value = "3.14.3"
         mock_labels = MagicMock()
         mock_info_gauge.labels.return_value = mock_labels
 
@@ -390,7 +392,8 @@ class TestRefreshConfig:
             mock_info_gauge.labels.assert_called_with(
                 service_name="new-service",
                 service_version="2.0.0",
-                deployment_environment="staging"
+                deployment_environment="staging",
+                python_version="3.14.3"
             )
             mock_labels.set.assert_called_with(1)
 
@@ -413,6 +416,7 @@ class TestMedicBuildInfoGauge:
         assert "service_name" in label_names
         assert "service_version" in label_names
         assert "deployment_environment" in label_names
+        assert "python_version" in label_names
 
 
 class TestOtelMetricNaming:

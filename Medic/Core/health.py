@@ -2,10 +2,16 @@
 
 import os
 import logging
+import sys
 from typing import Any
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def get_python_version() -> str:
+    """Get the Python version string."""
+    return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 
 
 def check_database_health() -> dict[str, Any]:
@@ -72,6 +78,7 @@ def get_full_health_status() -> dict[str, Any]:
         "status": "healthy" if overall_healthy else "degraded",
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "version": "2.0.0",
+        "python_version": get_python_version(),
         "components": {
             "database": db_health,
             "pagerduty": pd_health,
