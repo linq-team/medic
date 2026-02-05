@@ -34,6 +34,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -243,6 +247,45 @@ module "acm" {
 }
 
 # -----------------------------------------------------------------------------
+# ESO CRD Validation
+# -----------------------------------------------------------------------------
+# Checks that External Secrets Operator (ESO) is installed on the cluster.
+# ESO is deployed by o11y-tf. If it's missing, Terraform will fail with a
+# clear error message pointing to troubleshooting documentation.
+#
+# See: docs/troubleshooting/eso-not-found.md
+# -----------------------------------------------------------------------------
+
+data "kubernetes_resources" "eso_crd" {
+  api_version    = "apiextensions.k8s.io/v1"
+  kind           = "CustomResourceDefinition"
+  field_selector = "metadata.name=externalsecrets.external-secrets.io"
+}
+
+locals {
+  eso_installed = length(data.kubernetes_resources.eso_crd.objects) > 0
+}
+
+resource "null_resource" "eso_validation" {
+  lifecycle {
+    precondition {
+      condition     = local.eso_installed
+      error_message = <<-EOT
+        External Secrets Operator (ESO) CRD not found on the cluster.
+
+        ESO is a prerequisite deployed by o11y-tf. The 'externalsecrets.external-secrets.io'
+        CRD must exist before Medic can be deployed.
+
+        Troubleshooting: docs/troubleshooting/eso-not-found.md
+
+        To verify manually:
+          kubectl get crd externalsecrets.external-secrets.io
+      EOT
+    }
+  }
+}
+
+# -----------------------------------------------------------------------------
 # Kubernetes Namespace
 # -----------------------------------------------------------------------------
 
@@ -376,6 +419,7 @@ resource "helm_release" "medic" {
     module.elasticache,
     module.secrets,
     module.acm,
+    null_resource.eso_validation,
     kubernetes_namespace.medic,
     aws_secretsmanager_secret_version.rds_credentials
   ]

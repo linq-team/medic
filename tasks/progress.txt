@@ -14,6 +14,10 @@
 - Dev environment points to `dev-o11y-terraform-state` bucket (future dev-o11y-tf cluster); prod points to `o11y-prod-terraform-state`
 - Dev ingress host is `dev-medic.linqapp.com`; prod is `medic.linqapp.com`
 - ACM module uses DNS validation (not email) — requires adding CNAME to Cloudflare manually after `terraform apply`
+- ACM certificate ARN is passed to Helm via `module.acm.certificate_arn` (not the `ingress_certificate_arn` variable) — module output is the source of truth
+- ESO CRD validation uses `data "kubernetes_resources"` with `field_selector` to check for specific CRD by name — avoids listing all CRDs
+- `null_resource` with `precondition` lifecycle block is the pattern for fail-fast validation checks in Terraform
+- Multiple `locals {}` blocks are valid in Terraform and get merged — no need to combine into a single block
 
 ---
 
@@ -67,5 +71,32 @@
   - ACM DNS validation always creates a single CNAME record — `one()` function extracts it cleanly from `domain_validation_options`
   - `create_before_destroy` lifecycle is important for ACM certificates to avoid downtime during rotation
   - The module intentionally does NOT include `aws_acm_certificate_validation` resource — validation is done externally via Cloudflare DNS (not managed by Terraform)
+---
+
+## 2026-02-05 - US-005 - Linear Issue: SRE-147
+- **What was implemented:** Integrated the ACM module into both dev and prod environments. Added `module "acm"` blocks using `var.ingress_host` as the domain name (dev-medic.linqapp.com for dev, medic.linqapp.com for prod). Updated Helm release ingress config to use `module.acm.certificate_arn` instead of `var.ingress_certificate_arn`. Added `acm_certificate_arn` and `acm_validation_records` outputs to both environments showing DNS records needed for Cloudflare setup. Added `module.acm` to Helm release `depends_on`.
+- **Files changed:**
+  - `terraform/environments/dev/main.tf` — Added ACM module block; updated Helm release to use `module.acm.certificate_arn`; added `module.acm` to `depends_on`
+  - `terraform/environments/prod/main.tf` — Added ACM module block; updated Helm release to use `module.acm.certificate_arn`; added `module.acm` to `depends_on`
+  - `terraform/environments/dev/outputs.tf` — Added `acm_certificate_arn` and `acm_validation_records` outputs
+  - `terraform/environments/prod/outputs.tf` — Added `acm_certificate_arn` and `acm_validation_records` outputs
+- **Learnings for future iterations:**
+  - The `ingress_certificate_arn` variable still exists in variables.tf but is no longer used by Helm release — it's now derived from `module.acm.certificate_arn`. The variable could be removed in a cleanup pass but was left to avoid unnecessary churn.
+  - ACM module uses `var.ingress_host` to derive the domain name, keeping domain config DRY (one source of truth).
+  - The `acm_validation_records` output uses a map with `domain_name`, `cname_name`, `cname_value` — run `terraform output acm_validation_records` after apply to get the CNAME records for Cloudflare.
+  - Both environments follow the same pattern: module block before Kubernetes namespace section, outputs before Access URLs section.
+---
+
+## 2026-02-05 - US-006 - Linear Issue: SRE-147
+- **What was implemented:** Added ESO CRD validation check to both dev and prod environments. Uses `data "kubernetes_resources"` to query for the `externalsecrets.external-secrets.io` CRD via the `apiextensions.k8s.io/v1` API. A `null_resource` with a `precondition` lifecycle block fails fast with a clear error message if the CRD is not found, pointing to `docs/troubleshooting/eso-not-found.md`. Added `null_resource.eso_validation` to the Helm release `depends_on` to ensure validation runs before deployment. Added `hashicorp/null` provider to `required_providers`.
+- **Files changed:**
+  - `terraform/environments/dev/main.tf` — Added null provider, ESO CRD data source, eso_installed local, null_resource validation with precondition, added eso_validation to Helm depends_on
+  - `terraform/environments/prod/main.tf` — Same changes as dev
+- **Learnings for future iterations:**
+  - `data "kubernetes_resources"` supports `field_selector` for filtering — `metadata.name=<crd-name>` is an efficient way to check for a specific CRD without listing all CRDs
+  - `null_resource` with `precondition` is the idiomatic Terraform pattern for validation gates — it runs during plan/apply and produces clear errors
+  - The `null` provider (`hashicorp/null ~> 3.2`) must be added to `required_providers` when using `null_resource`
+  - Multiple `locals {}` blocks in the same file are valid Terraform — they're merged automatically
+  - ESO validation section is placed between ACM certificate and Kubernetes namespace sections in both environments
 ---
 

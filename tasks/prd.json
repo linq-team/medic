@@ -91,7 +91,7 @@
         "Terraform fmt passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-004. Certificate ARN flows to Helm ingress config."
     },
     {
@@ -106,7 +106,7 @@
         "Terraform fmt passes"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "ESO is deployed by o11y-tf. Fail fast if missing."
     },
     {
