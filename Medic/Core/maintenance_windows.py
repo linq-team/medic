@@ -20,7 +20,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from Medic.Core.database import query_db
@@ -51,7 +51,7 @@ class MaintenanceWindow:
     end_time: datetime
     timezone: str
     recurrence: Optional[str] = None
-    service_ids: List[int] = field(default_factory=list)
+    service_ids: list[int] = field(default_factory=list)
 
     def get_timezone(self) -> ZoneInfo:
         """
@@ -319,7 +319,7 @@ def is_in_maintenance_window(
         return is_within_one_time_window(window, check_time)
 
 
-def parse_maintenance_window(row: Dict[str, Any]) -> Optional[MaintenanceWindow]:
+def parse_maintenance_window(row: dict[str, Any]) -> Optional[MaintenanceWindow]:
     """
     Parse a database row into a MaintenanceWindow object.
 
@@ -437,7 +437,7 @@ def get_maintenance_window_by_name(name: str) -> Optional[MaintenanceWindow]:
         return None
 
 
-def get_all_maintenance_windows() -> List[MaintenanceWindow]:
+def get_all_maintenance_windows() -> list[MaintenanceWindow]:
     """
     Get all maintenance windows from the database.
 
@@ -470,7 +470,7 @@ def get_all_maintenance_windows() -> List[MaintenanceWindow]:
 
 def get_active_maintenance_windows(
     check_time: Optional[datetime] = None,
-) -> List[MaintenanceWindow]:
+) -> list[MaintenanceWindow]:
     """
     Get all currently active maintenance windows.
 
@@ -490,7 +490,7 @@ def get_active_maintenance_windows(
 
 def get_maintenance_windows_for_service(
     service_id: int,
-) -> List[MaintenanceWindow]:
+) -> list[MaintenanceWindow]:
     """
     Get all maintenance windows that apply to a specific service.
 
@@ -602,7 +602,7 @@ def get_active_maintenance_window_for_service(
 def get_maintenance_status(
     service_id: int,
     check_time: Optional[datetime] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get detailed maintenance status for a service.
 

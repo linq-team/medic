@@ -20,7 +20,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import yaml  # type: ignore[import-untyped]
 
@@ -117,12 +117,12 @@ class WebhookStep:
     name: str
     url: str
     method: str = "POST"
-    headers: Dict[str, str] = field(default_factory=dict)
-    body: Optional[Dict[str, Any]] = None
-    success_codes: List[int] = field(default_factory=lambda: [200, 201, 202])
+    headers: dict[str, str] = field(default_factory=dict)
+    body: Optional[dict[str, Any]] = None
+    success_codes: list[int] = field(default_factory=lambda: [200, 201, 202])
     timeout_seconds: int = 30
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "name": self.name,
@@ -142,10 +142,10 @@ class ScriptStep:
 
     name: str
     script_name: str  # Name of pre-registered script
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
     timeout_seconds: int = 60
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "name": self.name,
@@ -163,7 +163,7 @@ class WaitStep:
     name: str
     duration_seconds: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "name": self.name,
@@ -180,9 +180,9 @@ class ConditionStep:
     condition_type: ConditionType
     timeout_seconds: int = 300  # 5 minutes default
     on_failure: OnFailureAction = OnFailureAction.FAIL
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "name": self.name,
@@ -204,13 +204,13 @@ class Playbook:
 
     name: str
     description: str
-    steps: List[PlaybookStep]
+    steps: list[PlaybookStep]
     approval: ApprovalMode = ApprovalMode.NONE
     approval_timeout_minutes: Optional[int] = None
     version: int = 1
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         approval_str = self.approval.value
         has_timeout = (
@@ -286,7 +286,7 @@ def _parse_duration(duration_str: str) -> int:
         raise ValueError(f"Unknown duration unit: {unit}")
 
 
-def _parse_webhook_step(step_data: Dict[str, Any]) -> WebhookStep:
+def _parse_webhook_step(step_data: dict[str, Any]) -> WebhookStep:
     """
     Parse a webhook step definition.
 
@@ -351,7 +351,7 @@ def _parse_webhook_step(step_data: Dict[str, Any]) -> WebhookStep:
     )
 
 
-def _parse_script_step(step_data: Dict[str, Any]) -> ScriptStep:
+def _parse_script_step(step_data: dict[str, Any]) -> ScriptStep:
     """
     Parse a script step definition.
 
@@ -392,7 +392,7 @@ def _parse_script_step(step_data: Dict[str, Any]) -> ScriptStep:
     )
 
 
-def _parse_wait_step(step_data: Dict[str, Any]) -> WaitStep:
+def _parse_wait_step(step_data: dict[str, Any]) -> WaitStep:
     """
     Parse a wait step definition.
 
@@ -429,7 +429,7 @@ def _parse_wait_step(step_data: Dict[str, Any]) -> WaitStep:
     )
 
 
-def _parse_condition_step(step_data: Dict[str, Any]) -> ConditionStep:
+def _parse_condition_step(step_data: dict[str, Any]) -> ConditionStep:
     """
     Parse a condition step definition.
 
@@ -490,7 +490,7 @@ def _parse_condition_step(step_data: Dict[str, Any]) -> ConditionStep:
     )
 
 
-def _parse_step(step_data: Dict[str, Any]) -> PlaybookStep:
+def _parse_step(step_data: dict[str, Any]) -> PlaybookStep:
     """
     Parse a single step definition.
 
@@ -590,7 +590,7 @@ def parse_playbook_yaml(yaml_content: str) -> Playbook:
     if not isinstance(steps_data, list):
         raise PlaybookParseError("Steps must be a list", "steps")
 
-    steps: List[PlaybookStep] = []
+    steps: list[PlaybookStep] = []
     step_names: set = set()
 
     for i, step_data in enumerate(steps_data):
@@ -636,7 +636,7 @@ def parse_playbook_yaml(yaml_content: str) -> Playbook:
     )
 
 
-def validate_playbook_yaml(yaml_content: str) -> List[str]:
+def validate_playbook_yaml(yaml_content: str) -> list[str]:
     """
     Validate a playbook YAML definition without returning the parsed result.
 
@@ -646,7 +646,7 @@ def validate_playbook_yaml(yaml_content: str) -> List[str]:
     Returns:
         List of error messages (empty if valid)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     try:
         parse_playbook_yaml(yaml_content)

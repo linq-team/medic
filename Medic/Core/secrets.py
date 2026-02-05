@@ -27,7 +27,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -96,7 +96,7 @@ class Secret:
     updated_at: datetime
     created_by: Optional[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (without encrypted value)."""
         return {
             "secret_id": self.secret_id,
@@ -469,7 +469,7 @@ def get_secret_value(name: str) -> str:
     return decrypt_secret(encrypted_value, nonce, tag)
 
 
-def list_secrets() -> List[Secret]:
+def list_secrets() -> list[Secret]:
     """
     List all secrets (metadata only, no decrypted values).
 
@@ -513,7 +513,7 @@ def secret_exists(name: str) -> bool:
     return len(rows) > 0
 
 
-def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
+def _parse_secret(data: dict[str, Any]) -> Optional[Secret]:
     """Parse a database row into a Secret object."""
     try:
         created_at_raw = data.get("created_at")
@@ -559,7 +559,7 @@ def _parse_secret(data: Dict[str, Any]) -> Optional[Secret]:
 # ============================================================================
 
 
-def substitute_secrets(value: Any, context: Optional[Dict[str, str]] = None) -> Any:
+def substitute_secrets(value: Any, context: Optional[dict[str, str]] = None) -> Any:
     """
     Substitute secret references in a value.
 
@@ -610,7 +610,7 @@ def substitute_secrets(value: Any, context: Optional[Dict[str, str]] = None) -> 
         return value
 
 
-def find_secret_references(value: Any) -> List[str]:
+def find_secret_references(value: Any) -> list[str]:
     """
     Find all secret references in a value without resolving them.
 
@@ -637,7 +637,7 @@ def find_secret_references(value: Any) -> List[str]:
     return list(references)
 
 
-def validate_secret_references(value: Any) -> List[str]:
+def validate_secret_references(value: Any) -> list[str]:
     """
     Validate that all secret references in a value exist.
 

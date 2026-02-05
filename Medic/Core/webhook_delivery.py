@@ -9,7 +9,8 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 import requests
 
@@ -48,7 +49,7 @@ class WebhookConfig:
 
     webhook_id: int
     url: str
-    headers: Dict[str, str]
+    headers: dict[str, str]
     enabled: bool = True
     service_id: Optional[int] = None
 
@@ -69,7 +70,7 @@ class DeliveryRecord:
 
     delivery_id: int
     webhook_id: int
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     status: DeliveryStatus
     attempts: int
     last_attempt_at: Optional[str] = None
@@ -89,7 +90,7 @@ class WebhookDeliveryService:
 
     def __init__(
         self,
-        retry_delays: Optional[List[int]] = None,
+        retry_delays: Optional[list[int]] = None,
         max_attempts: int = MAX_ATTEMPTS,
         request_timeout: int = REQUEST_TIMEOUT,
         http_client: Optional[Callable[..., requests.Response]] = None,
@@ -117,8 +118,8 @@ class WebhookDeliveryService:
     def _send_request(
         self,
         url: str,
-        payload: Dict[str, Any],
-        headers: Dict[str, str],
+        payload: dict[str, Any],
+        headers: dict[str, str],
     ) -> DeliveryResult:
         """
         Send HTTP POST request to webhook URL.
@@ -193,7 +194,7 @@ class WebhookDeliveryService:
     def _create_delivery_record(
         self,
         webhook_id: int,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> Optional[int]:
         """
         Create a new delivery record in the database.
@@ -261,7 +262,7 @@ class WebhookDeliveryService:
     def deliver(
         self,
         webhook: WebhookConfig,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         async_retry: bool = False,
     ) -> DeliveryResult:
         """
@@ -319,7 +320,7 @@ class WebhookDeliveryService:
     def _deliver_with_retry(
         self,
         webhook: WebhookConfig,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         delivery_id: int,
     ) -> DeliveryResult:
         """
@@ -415,10 +416,10 @@ class WebhookDeliveryService:
 
     def deliver_to_all(
         self,
-        webhooks: List[WebhookConfig],
-        payload: Dict[str, Any],
+        webhooks: list[WebhookConfig],
+        payload: dict[str, Any],
         async_delivery: bool = True,
-    ) -> Dict[int, DeliveryResult]:
+    ) -> dict[int, DeliveryResult]:
         """
         Deliver payload to multiple webhooks.
 
@@ -431,10 +432,10 @@ class WebhookDeliveryService:
         Returns:
             Dictionary mapping webhook_id to DeliveryResult
         """
-        results: Dict[int, DeliveryResult] = {}
+        results: dict[int, DeliveryResult] = {}
 
         if async_delivery:
-            threads: List[threading.Thread] = []
+            threads: list[threading.Thread] = []
 
             def deliver_and_store(webhook: WebhookConfig) -> None:
                 result = self.deliver(webhook, payload, async_retry=False)
@@ -503,7 +504,7 @@ def set_webhook_delivery_service(
 
 def deliver_webhook(
     webhook: WebhookConfig,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     async_retry: bool = False,
 ) -> DeliveryResult:
     """
@@ -521,7 +522,7 @@ def deliver_webhook(
     return service.deliver(webhook, payload, async_retry)
 
 
-def get_webhooks_for_service(service_id: Optional[int] = None) -> List[WebhookConfig]:
+def get_webhooks_for_service(service_id: Optional[int] = None) -> list[WebhookConfig]:
     """
     Get webhook configurations for a service.
 

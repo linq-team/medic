@@ -9,7 +9,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import Medic.Helpers.logSettings as logLevel
 
@@ -166,10 +166,10 @@ class InMemoryRateLimiter(RateLimiter):
         """
         self.default_config = default_config or RateLimitConfig()
         # Buckets keyed by "{key}:{endpoint_type}"
-        self._buckets: Dict[str, SlidingWindowEntry] = {}
+        self._buckets: dict[str, SlidingWindowEntry] = {}
         self._buckets_lock = threading.Lock()
         # Per-key custom configurations
-        self._key_configs: Dict[str, RateLimitConfig] = {}
+        self._key_configs: dict[str, RateLimitConfig] = {}
         self._configs_lock = threading.Lock()
 
     def set_key_config(self, key: str, config: RateLimitConfig) -> None:
@@ -398,7 +398,7 @@ class RedisRateLimiter(RateLimiter):
         """
         self.default_config = default_config or RateLimitConfig()
         self.key_prefix = key_prefix
-        self._key_configs: Dict[str, RateLimitConfig] = {}
+        self._key_configs: dict[str, RateLimitConfig] = {}
         self._configs_lock = threading.Lock()
 
         if redis_client is not None:

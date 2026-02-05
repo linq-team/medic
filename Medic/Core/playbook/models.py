@@ -35,7 +35,8 @@ Usage:
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from Medic.Core.playbook_parser import Playbook, PlaybookStep
@@ -115,7 +116,7 @@ class StepResult:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "result_id": self.result_id,
@@ -163,11 +164,11 @@ class PlaybookExecution:
     # Loaded playbook (not persisted, loaded on demand)
     playbook: Optional["Playbook"] = None
     # Step results (loaded on demand)
-    step_results: List[StepResult] = field(default_factory=list)
+    step_results: list[StepResult] = field(default_factory=list)
     # Context variables for step execution
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "execution_id": self.execution_id,

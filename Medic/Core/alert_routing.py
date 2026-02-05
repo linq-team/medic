@@ -21,7 +21,8 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 from datetime import datetime
 from Medic.Core.database import query_db
@@ -159,7 +160,7 @@ class NotificationTarget:
     target_id: int
     service_id: int
     target_type: NotificationType
-    config: Dict[str, Any]
+    config: dict[str, Any]
     priority: int
     enabled: bool
     period: NotificationPeriod = NotificationPeriod.ALWAYS
@@ -179,7 +180,7 @@ def get_notification_targets_for_service(
     service_id: int,
     enabled_only: bool = True,
     period: Optional[str] = None,
-) -> List[NotificationTarget]:
+) -> list[NotificationTarget]:
     """
     Get notification targets for a service, ordered by priority.
 
@@ -271,10 +272,10 @@ def get_notification_targets_for_service(
 
 def route_alert(
     service_id: int,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     mode: NotificationMode = NotificationMode.NOTIFY_ALL,
-    sender: Optional[Callable[[NotificationTarget, Dict[str, Any]], bool]] = None,
-) -> List[NotificationResult]:
+    sender: Optional[Callable[[NotificationTarget, dict[str, Any]], bool]] = None,
+) -> list[NotificationResult]:
     """
     Route an alert to notification targets for a service.
 
@@ -297,7 +298,7 @@ def route_alert(
     if sender is None:
         sender = default_notification_sender
 
-    results: List[NotificationResult] = []
+    results: list[NotificationResult] = []
 
     if mode == NotificationMode.NOTIFY_ALL:
         results = _route_notify_all(targets, payload, sender)
@@ -311,10 +312,10 @@ def route_alert(
 
 
 def _route_notify_all(
-    targets: List[NotificationTarget],
-    payload: Dict[str, Any],
-    sender: Callable[[NotificationTarget, Dict[str, Any]], bool],
-) -> List[NotificationResult]:
+    targets: list[NotificationTarget],
+    payload: dict[str, Any],
+    sender: Callable[[NotificationTarget, dict[str, Any]], bool],
+) -> list[NotificationResult]:
     """
     Send notification to all enabled targets.
 
@@ -326,7 +327,7 @@ def _route_notify_all(
     Returns:
         List of NotificationResult for each target
     """
-    results: List[NotificationResult] = []
+    results: list[NotificationResult] = []
 
     for target in targets:
         if not target.enabled:
@@ -375,10 +376,10 @@ def _route_notify_all(
 
 
 def _route_notify_until_success(
-    targets: List[NotificationTarget],
-    payload: Dict[str, Any],
-    sender: Callable[[NotificationTarget, Dict[str, Any]], bool],
-) -> List[NotificationResult]:
+    targets: list[NotificationTarget],
+    payload: dict[str, Any],
+    sender: Callable[[NotificationTarget, dict[str, Any]], bool],
+) -> list[NotificationResult]:
     """
     Send notification to targets in priority order until one succeeds.
 
@@ -390,7 +391,7 @@ def _route_notify_until_success(
     Returns:
         List of NotificationResult for targets attempted (stops after success)
     """
-    results: List[NotificationResult] = []
+    results: list[NotificationResult] = []
 
     for target in targets:
         if not target.enabled:
@@ -445,7 +446,7 @@ def _route_notify_until_success(
 
 def default_notification_sender(
     target: NotificationTarget,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
 ) -> bool:
     """
     Default notification sender that dispatches based on target type.
@@ -475,7 +476,7 @@ def default_notification_sender(
 
 def _send_slack_notification(
     target: NotificationTarget,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
 ) -> bool:
     """
     Send a Slack notification.
@@ -503,7 +504,7 @@ def _send_slack_notification(
 
 def _send_pagerduty_notification(
     target: NotificationTarget,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
 ) -> bool:
     """
     Send a PagerDuty notification.
@@ -531,7 +532,7 @@ def _send_pagerduty_notification(
 
 def _send_webhook_notification(
     target: NotificationTarget,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
 ) -> bool:
     """
     Send a webhook notification.
@@ -571,8 +572,8 @@ def has_notification_targets(service_id: int) -> bool:
 
 
 def get_successful_results(
-    results: List[NotificationResult],
-) -> List[NotificationResult]:
+    results: list[NotificationResult],
+) -> list[NotificationResult]:
     """
     Filter notification results to only successful ones.
 
@@ -585,7 +586,7 @@ def get_successful_results(
     return [r for r in results if r.success]
 
 
-def get_failed_results(results: List[NotificationResult]) -> List[NotificationResult]:
+def get_failed_results(results: list[NotificationResult]) -> list[NotificationResult]:
     """
     Filter notification results to only failed ones.
 
@@ -598,7 +599,7 @@ def get_failed_results(results: List[NotificationResult]) -> List[NotificationRe
     return [r for r in results if not r.success]
 
 
-def all_notifications_succeeded(results: List[NotificationResult]) -> bool:
+def all_notifications_succeeded(results: list[NotificationResult]) -> bool:
     """
     Check if all notification attempts succeeded.
 
@@ -613,7 +614,7 @@ def all_notifications_succeeded(results: List[NotificationResult]) -> bool:
     return all(r.success for r in results)
 
 
-def any_notification_succeeded(results: List[NotificationResult]) -> bool:
+def any_notification_succeeded(results: list[NotificationResult]) -> bool:
     """
     Check if any notification attempt succeeded.
 
@@ -630,7 +631,7 @@ def get_notification_targets_for_period(
     service_id: int,
     period: str,
     enabled_only: bool = True,
-) -> List[NotificationTarget]:
+) -> list[NotificationTarget]:
     """
     Get notification targets for a service filtered by working hours period.
 
@@ -654,11 +655,11 @@ def get_notification_targets_for_period(
 
 def route_alert_with_schedule(
     service_id: int,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     mode: NotificationMode = NotificationMode.NOTIFY_ALL,
-    sender: Optional[Callable[[NotificationTarget, Dict[str, Any]], bool]] = None,
+    sender: Optional[Callable[[NotificationTarget, dict[str, Any]], bool]] = None,
     check_time: Optional[datetime] = None,
-) -> List[NotificationResult]:
+) -> list[NotificationResult]:
     """
     Route an alert using working hours-aware target selection.
 
@@ -710,7 +711,7 @@ def route_alert_with_schedule(
     if sender is None:
         sender = default_notification_sender
 
-    results: List[NotificationResult] = []
+    results: list[NotificationResult] = []
 
     if mode == NotificationMode.NOTIFY_ALL:
         results = _route_notify_all(targets, payload, sender)

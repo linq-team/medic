@@ -37,7 +37,8 @@ import logging
 import os
 import time
 from functools import wraps
-from typing import Callable, Optional, Dict, Any
+from collections.abc import Callable
+from typing import Any, Optional
 
 from prometheus_client import (
     Counter,
@@ -65,7 +66,7 @@ DEFAULT_ENVIRONMENT: str = "development"
 DEFAULT_VERSION: str = "unknown"
 
 
-def _get_config() -> Dict[str, str]:
+def _get_config() -> dict[str, str]:
     """
     Get metrics configuration from environment variables.
 
@@ -232,7 +233,7 @@ medic_http_requests_total = REQUEST_COUNT
 medic_http_request_duration_seconds = REQUEST_LATENCY
 
 
-def _build_exemplar(trace_id: Optional[str]) -> Optional[Dict[str, str]]:
+def _build_exemplar(trace_id: Optional[str]) -> Optional[dict[str, str]]:
     """
     Build an exemplar dictionary for a metric observation.
 

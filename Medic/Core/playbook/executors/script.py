@@ -29,7 +29,7 @@ import resource
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -69,7 +69,7 @@ MAX_SCRIPT_OUTPUT_SIZE = 8192
 # SECURITY: This prevents secrets (DATABASE_URL, MEDIC_SECRETS_KEY, API keys,
 # etc.) from leaking to script execution environments. Only basic system
 # variables and explicit MEDIC context variables are allowed.
-ALLOWED_SCRIPT_ENV_VARS: List[str] = [
+ALLOWED_SCRIPT_ENV_VARS: list[str] = [
     "PATH",  # Required for finding executables
     "HOME",  # User home directory
     "USER",  # Current user name
@@ -79,7 +79,7 @@ ALLOWED_SCRIPT_ENV_VARS: List[str] = [
 ]
 
 
-def _get_script_env(execution: "PlaybookExecution") -> Dict[str, str]:
+def _get_script_env(execution: "PlaybookExecution") -> dict[str, str]:
     """
     Build a safe environment dictionary for script execution.
 
@@ -97,7 +97,7 @@ def _get_script_env(execution: "PlaybookExecution") -> Dict[str, str]:
         Dictionary of safe environment variables for subprocess execution
     """
     # Start with only allowlisted environment variables
-    safe_env: Dict[str, str] = {}
+    safe_env: dict[str, str] = {}
 
     # Get the base allowlist
     allowed_vars = set(ALLOWED_SCRIPT_ENV_VARS)
@@ -173,7 +173,7 @@ def get_registered_script(script_name: str) -> Optional[RegisteredScript]:
 
 
 def _substitute_script_variables(
-    script_content: str, context: Dict[str, Any], parameters: Dict[str, Any]
+    script_content: str, context: dict[str, Any], parameters: dict[str, Any]
 ) -> str:
     """
     Substitute variables and secrets in script content.

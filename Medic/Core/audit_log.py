@@ -63,7 +63,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -102,12 +102,12 @@ class AuditLogEntry:
     log_id: Optional[int]
     execution_id: int
     action_type: AuditActionType
-    details: Dict[str, Any]
+    details: dict[str, Any]
     actor: Optional[str]
     timestamp: datetime
     created_at: Optional[datetime] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "log_id": self.log_id,
@@ -128,7 +128,7 @@ class AuditLogEntry:
 def create_audit_log_entry(
     execution_id: int,
     action_type: AuditActionType,
-    details: Dict[str, Any],
+    details: dict[str, Any],
     actor: Optional[str] = None,
     timestamp: Optional[datetime] = None,
 ) -> Optional[AuditLogEntry]:
@@ -205,7 +205,7 @@ def log_execution_started(
     service_id: Optional[int] = None,
     service_name: Optional[str] = None,
     trigger: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None,
+    context: Optional[dict[str, Any]] = None,
 ) -> Optional[AuditLogEntry]:
     """
     Log that a playbook execution has started.
@@ -222,7 +222,7 @@ def log_execution_started(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "playbook_id": playbook_id,
         "playbook_name": playbook_name,
     }
@@ -265,7 +265,7 @@ def log_step_completed(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "step_name": step_name,
         "step_index": step_index,
     }
@@ -309,7 +309,7 @@ def log_step_failed(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "step_name": step_name,
         "step_index": step_index,
     }
@@ -352,7 +352,7 @@ def log_approval_requested(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "playbook_name": playbook_name,
     }
 
@@ -388,7 +388,7 @@ def log_approved(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
 
     if playbook_name:
         details["playbook_name"] = playbook_name
@@ -423,7 +423,7 @@ def log_rejected(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
 
     if playbook_name:
         details["playbook_name"] = playbook_name
@@ -460,7 +460,7 @@ def log_execution_completed(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "playbook_name": playbook_name,
         "steps_completed": steps_completed,
     }
@@ -503,7 +503,7 @@ def log_execution_failed(
     Returns:
         AuditLogEntry on success, None on failure
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "playbook_name": playbook_name,
         "error_message": (
             error_message[:2048] if len(error_message) > 2048 else error_message
@@ -535,7 +535,7 @@ def log_execution_failed(
 
 def get_audit_logs_for_execution(
     execution_id: int, limit: int = 100
-) -> List[AuditLogEntry]:
+) -> list[AuditLogEntry]:
     """
     Get all audit log entries for an execution.
 
@@ -572,7 +572,7 @@ def get_audit_logs_for_execution(
 
 def get_audit_logs_by_action_type(
     action_type: AuditActionType, limit: int = 100
-) -> List[AuditLogEntry]:
+) -> list[AuditLogEntry]:
     """
     Get audit log entries by action type.
 
@@ -607,7 +607,7 @@ def get_audit_logs_by_action_type(
     ]
 
 
-def get_audit_logs_by_actor(actor: str, limit: int = 100) -> List[AuditLogEntry]:
+def get_audit_logs_by_actor(actor: str, limit: int = 100) -> list[AuditLogEntry]:
     """
     Get audit log entries by actor (user who performed the action).
 
@@ -642,7 +642,7 @@ def get_audit_logs_by_actor(actor: str, limit: int = 100) -> List[AuditLogEntry]
     ]
 
 
-def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
+def _parse_audit_log_entry(data: dict[str, Any]) -> Optional[AuditLogEntry]:
     """Parse a database row into an AuditLogEntry object."""
     try:
         timestamp = data.get("timestamp")
@@ -686,13 +686,13 @@ def _parse_audit_log_entry(data: Dict[str, Any]) -> Optional[AuditLogEntry]:
 class AuditLogQueryResult:
     """Result of an audit log query with pagination info."""
 
-    entries: List[AuditLogEntry]
+    entries: list[AuditLogEntry]
     total_count: int
     limit: int
     offset: int
     has_more: bool
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "entries": [entry.to_dict() for entry in self.entries],
@@ -734,8 +734,8 @@ def query_audit_logs(
     offset = max(0, offset)
 
     # Build the WHERE clause dynamically
-    conditions: List[str] = []
-    params: List[Any] = []
+    conditions: list[str] = []
+    params: list[Any] = []
 
     if execution_id is not None:
         conditions.append("execution_id = %s")
@@ -796,7 +796,7 @@ def query_audit_logs(
     data_params = list(params) + [limit, offset]
     data_result = db.query_db(data_query, tuple(data_params), show_columns=True)
 
-    entries: List[AuditLogEntry] = []
+    entries: list[AuditLogEntry] = []
     if data_result and data_result != "[]":
         rows = json.loads(str(data_result))
         entries = [
@@ -816,7 +816,7 @@ def query_audit_logs(
     )
 
 
-def audit_logs_to_csv(entries: List[AuditLogEntry]) -> str:
+def audit_logs_to_csv(entries: list[AuditLogEntry]) -> str:
     """
     Convert audit log entries to CSV format.
 

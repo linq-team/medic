@@ -24,7 +24,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from Medic.Core.database import query_db
@@ -79,7 +79,7 @@ class Schedule:
     schedule_id: int
     name: str
     timezone: str
-    hours: Dict[str, List[TimeRange]]
+    hours: dict[str, list[TimeRange]]
 
     def get_timezone(self) -> ZoneInfo:
         """
@@ -125,7 +125,7 @@ def parse_time(time_str: str) -> time:
         raise ValueError(f"Invalid time format: {time_str}") from e
 
 
-def parse_hours(hours_data: Dict[str, Any]) -> Dict[str, List[TimeRange]]:
+def parse_hours(hours_data: dict[str, Any]) -> dict[str, list[TimeRange]]:
     """
     Parse hours JSON data into structured TimeRange objects.
 
@@ -139,7 +139,7 @@ def parse_hours(hours_data: Dict[str, Any]) -> Dict[str, List[TimeRange]]:
     Raises:
         ValueError: If hours data is invalid
     """
-    result: Dict[str, List[TimeRange]] = {}
+    result: dict[str, list[TimeRange]] = {}
 
     for day_name, ranges in hours_data.items():
         day_name_lower = day_name.lower()
@@ -150,7 +150,7 @@ def parse_hours(hours_data: Dict[str, Any]) -> Dict[str, List[TimeRange]]:
         if not isinstance(ranges, list):
             raise ValueError(f"Hours for {day_name} must be a list, got {type(ranges)}")
 
-        day_ranges: List[TimeRange] = []
+        day_ranges: list[TimeRange] = []
         for range_data in ranges:
             if not isinstance(range_data, dict):
                 raise ValueError(f"Time range must be a dict, got {type(range_data)}")
@@ -343,7 +343,7 @@ def is_within_working_hours(
 def is_service_within_working_hours(
     service_id: int,
     check_time: Optional[datetime] = None,
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool, Optional[str]]:
     """
     Check if a service is within its configured working hours.
 

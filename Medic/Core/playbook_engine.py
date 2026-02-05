@@ -30,7 +30,7 @@ Step result statuses:
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -148,7 +148,7 @@ class PlaybookExecutionEngine:
 
     def __init__(self):
         """Initialize the execution engine."""
-        self._step_executors: Dict[StepType, StepExecutor] = {
+        self._step_executors: dict[StepType, StepExecutor] = {
             StepType.WAIT: self._execute_wait,
             StepType.WEBHOOK: self._execute_webhook,
             StepType.SCRIPT: self._execute_script,
@@ -159,7 +159,7 @@ class PlaybookExecutionEngine:
         self,
         playbook_id: int,
         service_id: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         skip_approval: bool = False,
     ) -> Optional[PlaybookExecution]:
         """
@@ -696,7 +696,7 @@ def get_engine() -> PlaybookExecutionEngine:
 def start_playbook_execution(
     playbook_id: int,
     service_id: Optional[int] = None,
-    context: Optional[Dict[str, Any]] = None,
+    context: Optional[dict[str, Any]] = None,
     skip_approval: bool = False,
 ) -> Optional[PlaybookExecution]:
     """

@@ -21,7 +21,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 import Medic.Core.database as db
 import Medic.Helpers.logSettings as logLevel
@@ -54,7 +54,7 @@ CONDITION_POLL_INTERVAL = 5
 
 
 def check_heartbeat_received(
-    service_id: int, since: datetime, parameters: Dict[str, Any]
+    service_id: int, since: datetime, parameters: dict[str, Any]
 ) -> tuple[bool, str]:
     """
     Check if a heartbeat has been received for a service since a given time.
@@ -77,7 +77,7 @@ def check_heartbeat_received(
         WHERE service_id = %s
           AND time >= %s
     """
-    params: List[Any] = [service_id, since]
+    params: list[Any] = [service_id, since]
 
     # Add status filter if specified
     if status_filter:

@@ -19,7 +19,8 @@ Usage:
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 import requests
 
@@ -61,7 +62,7 @@ except ImportError:
     SECRETS_AVAILABLE = False
 
 
-def substitute_variables(value: Any, context: Dict[str, Any]) -> Any:
+def substitute_variables(value: Any, context: dict[str, Any]) -> Any:
     """
     Substitute variables in a value using execution context.
 
@@ -107,7 +108,7 @@ def substitute_variables(value: Any, context: Dict[str, Any]) -> Any:
 
 
 def substitute_all(
-    value: Any, context: Dict[str, Any], secrets_cache: Optional[Dict[str, str]] = None
+    value: Any, context: dict[str, Any], secrets_cache: Optional[dict[str, str]] = None
 ) -> Any:
     """
     Substitute both variables and secrets in a value.
@@ -138,7 +139,7 @@ def substitute_all(
     return result
 
 
-def _build_webhook_context(execution: PlaybookExecution) -> Dict[str, Any]:
+def _build_webhook_context(execution: PlaybookExecution) -> dict[str, Any]:
     """
     Build the variable context for webhook substitution.
 

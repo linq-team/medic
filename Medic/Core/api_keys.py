@@ -2,7 +2,7 @@
 
 import secrets
 import logging
-from typing import Tuple
+# typing imports removed - using built-in types for Python 3.14+
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
@@ -23,7 +23,7 @@ API_KEY_PREFIX = "mdk_"
 MIN_KEY_BYTES = 32
 
 
-def generate_api_key() -> Tuple[str, str]:
+def generate_api_key() -> tuple[str, str]:
     """
     Generate a cryptographically secure API key.
 

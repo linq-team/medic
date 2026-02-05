@@ -34,13 +34,13 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from flask import g, has_request_context, request
 
 # OTEL severity level mapping (following OTEL semantic conventions)
 # https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields
-OTEL_SEVERITY_TEXT: Dict[int, str] = {
+OTEL_SEVERITY_TEXT: dict[int, str] = {
     logging.DEBUG: "DEBUG",
     logging.INFO: "INFO",
     logging.WARNING: "WARN",
@@ -48,7 +48,7 @@ OTEL_SEVERITY_TEXT: Dict[int, str] = {
     logging.CRITICAL: "FATAL",
 }
 
-OTEL_SEVERITY_NUMBER: Dict[int, int] = {
+OTEL_SEVERITY_NUMBER: dict[int, int] = {
     logging.DEBUG: 5,  # DEBUG
     logging.INFO: 9,  # INFO
     logging.WARNING: 13,  # WARN
@@ -57,7 +57,7 @@ OTEL_SEVERITY_NUMBER: Dict[int, int] = {
 }
 
 # Log level mapping
-LOG_LEVELS: Dict[str, int] = {
+LOG_LEVELS: dict[str, int] = {
     "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
     "WARNING": logging.WARNING,
@@ -78,7 +78,7 @@ DEFAULT_VERSION: str = "unknown"
 _configured: bool = False
 
 
-def get_log_config() -> Dict[str, Any]:
+def get_log_config() -> dict[str, Any]:
     """
     Get logging configuration from environment variables.
 
@@ -94,7 +94,7 @@ def get_log_config() -> Dict[str, Any]:
     }
 
 
-def get_trace_context() -> Dict[str, Optional[str]]:
+def get_trace_context() -> dict[str, Optional[str]]:
     """
     Get current trace context from Flask g context.
 
@@ -114,14 +114,14 @@ def get_trace_context() -> Dict[str, Optional[str]]:
     }
 
 
-def get_request_context() -> Dict[str, Optional[str]]:
+def get_request_context() -> dict[str, Optional[str]]:
     """
     Get current HTTP request context from Flask request.
 
     Returns:
         Dictionary with HTTP request fields (or empty if not in request context)
     """
-    context: Dict[str, Optional[str]] = {}
+    context: dict[str, Optional[str]] = {}
 
     if has_request_context():
         context["http.method"] = request.method
@@ -174,7 +174,7 @@ class JSONFormatter(logging.Formatter):
             JSON-formatted log string
         """
         # Build the log entry following OTEL log data model
-        log_entry: Dict[str, Any] = {
+        log_entry: dict[str, Any] = {
             # Timestamp in ISO 8601 format with timezone
             "Timestamp": datetime.now(timezone.utc).isoformat(),
             # OTEL severity fields

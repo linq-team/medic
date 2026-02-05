@@ -3,7 +3,7 @@
 import Medic.Core.database as db
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Optional, Union
 import pytz
 
 
@@ -95,7 +95,7 @@ def addHeartbeat(heartbeat_obj: Heartbeat) -> bool:
 
 def queryHeartbeats(
     h_name: str, starttime: Optional[str] = None, endtime: Optional[str] = None
-) -> Optional[Union[str, List]]:
+) -> Optional[Union[str, list]]:
     """
     Query heartbeats by name and optional time range.
 
@@ -131,7 +131,7 @@ def queryHeartbeats(
         return result
 
 
-def queryLastHeartbeat(heartbeat_name: str) -> Optional[Union[str, List]]:
+def queryLastHeartbeat(heartbeat_name: str) -> Optional[Union[str, list]]:
     """
     Query the most recent heartbeat by name.
 
@@ -154,7 +154,7 @@ def queryLastHeartbeat(heartbeat_name: str) -> Optional[Union[str, List]]:
     return result
 
 
-def queryHeartbeatsByRunId(run_id: str) -> Optional[Union[str, List]]:
+def queryHeartbeatsByRunId(run_id: str) -> Optional[Union[str, list]]:
     """
     Query heartbeats by run_id to find correlated start/complete events.
 

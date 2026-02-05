@@ -4,7 +4,8 @@ import json
 import logging
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Optional, List, Callable, Any
+from collections.abc import Callable
+from typing import Any, Optional
 
 from flask import request, g
 
@@ -134,7 +135,7 @@ def _is_key_expired(expires_at: Optional[str]) -> bool:
         return True
 
 
-def _has_required_scopes(key_scopes: List[str], required_scopes: List[str]) -> bool:
+def _has_required_scopes(key_scopes: list[str], required_scopes: list[str]) -> bool:
     """
     Check if the API key has all required scopes.
 
@@ -169,7 +170,7 @@ def _should_bypass_auth(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in AUTH_BYPASS_PREFIXES)
 
 
-def authenticate_request(required_scopes: Optional[List[str]] = None) -> Callable:
+def authenticate_request(required_scopes: Optional[list[str]] = None) -> Callable:
     """
     Decorator to authenticate API requests using API keys.
 
@@ -274,7 +275,7 @@ def authenticate_request(required_scopes: Optional[List[str]] = None) -> Callabl
     return decorator
 
 
-def require_auth(required_scopes: Optional[List[str]] = None) -> Callable:
+def require_auth(required_scopes: Optional[list[str]] = None) -> Callable:
     """
     Alias for authenticate_request for cleaner syntax.
 
@@ -286,7 +287,7 @@ def require_auth(required_scopes: Optional[List[str]] = None) -> Callable:
     return authenticate_request(required_scopes=required_scopes)
 
 
-def verify_request_auth(required_scopes: Optional[List[str]] = None) -> Optional[tuple]:
+def verify_request_auth(required_scopes: Optional[list[str]] = None) -> Optional[tuple]:
     """
     Verify authentication for the current request without using decorator.
 
