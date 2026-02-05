@@ -201,9 +201,8 @@ jobs:
   push-ecr:
     name: Push to ECR (Multi-arch)
     runs-on: ubuntu-latest
-    # Only run on push to main, not on PRs
+    # Only run on push to main, after all checks pass
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    # Wait for all jobs to pass before pushing
     needs: [lint, test, build, helm-lint]
 
     steps:
