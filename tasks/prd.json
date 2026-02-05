@@ -60,7 +60,7 @@
         "Terraform fmt passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Dev cluster doesn't exist yet. Configure now, will fail gracefully until cluster created."
     },
     {
@@ -76,7 +76,7 @@
         "Terraform fmt passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Reusable module for ACM certificates with DNS validation."
     },
     {

@@ -11,6 +11,9 @@
 - `ruff` and `mypy` are available via `python3 -m ruff` / `python3 -m mypy` (not in PATH directly)
 - Pre-existing mypy warnings in `scripts/init_api_keys.py` (Python 3.10 union syntax) — not blocking
 - Backend.tf files only set `encrypt = true`; all other backend config (bucket, key, region, DynamoDB) comes via `-backend-config` flags in workflows
+- Dev environment points to `dev-o11y-terraform-state` bucket (future dev-o11y-tf cluster); prod points to `o11y-prod-terraform-state`
+- Dev ingress host is `dev-medic.linqapp.com`; prod is `medic.linqapp.com`
+- ACM module uses DNS validation (not email) — requires adding CNAME to Cloudflare manually after `terraform apply`
 
 ---
 
@@ -40,5 +43,29 @@
   - The S3 state key pattern `$TF_STATE_KEY/$TF_ENVIRONMENT/terraform.tfstate` is configured in the workflow files, not in backend.tf — backend.tf only has `encrypt = true` since all other values come via `-backend-config` flags
   - Original prod backend.tf had a copy-paste bug: key comment said `TF_STATE_KEY/dev/terraform.tfstate` instead of `prod`
   - Backend configuration is entirely driven by CI/CD `-backend-config` flags — the backend.tf files are documentation-only beyond `encrypt = true`
+---
+
+## 2026-02-05 - US-003 - Linear Issue: SRE-147
+- **What was implemented:** Configured dev environment to reference the future `dev-o11y-tf` cluster remote state instead of the prod `o11y-prod-terraform-state` bucket. Updated `o11y_state_bucket` default to `dev-o11y-terraform-state`, changed `ingress_host` to `dev-medic.linqapp.com`, and added clear comments in both `variables.tf` and `main.tf` explaining that the dev environment will fail until the dev-o11y-tf cluster is provisioned.
+- **Files changed:**
+  - `terraform/environments/dev/variables.tf` — Changed `o11y_state_bucket` default from `o11y-prod-terraform-state` to `dev-o11y-terraform-state`; updated `ingress_host` from `medic.internal.linqapp.com` to `dev-medic.linqapp.com`; added NOTE comments about dev-o11y-tf not existing yet
+  - `terraform/environments/dev/main.tf` — Updated header and remote state section comments to reference dev-o11y-tf; added NOTE about environment failing until dev cluster is provisioned
+- **Learnings for future iterations:**
+  - Dev `ingress_host` was previously `medic.internal.linqapp.com` (not a dev-specific hostname) — prod already had the correct `medic.linqapp.com`
+  - The `o11y_state_bucket` variable drives the remote state lookup — changing it is sufficient to point dev at a different cluster's state
+  - Prod environment should NOT be modified for this story — it correctly references `o11y-prod-terraform-state`
+---
+
+## 2026-02-05 - US-004 - Linear Issue: SRE-147
+- **What was implemented:** Created reusable ACM certificate Terraform module at `terraform/modules/acm/` with DNS validation for TLS termination. Module creates an ACM certificate and outputs the certificate ARN plus CNAME validation records for Cloudflare DNS setup.
+- **Files changed:**
+  - `terraform/modules/acm/main.tf` — ACM certificate resource with DNS validation and `create_before_destroy` lifecycle
+  - `terraform/modules/acm/variables.tf` — `domain_name` (required) and `tags` (optional) variables
+  - `terraform/modules/acm/outputs.tf` — `certificate_arn`, `domain_validation_options`, `domain_name`, `validation_cname_name`, `validation_cname_value` outputs
+- **Learnings for future iterations:**
+  - Existing modules follow a consistent pattern: header comment block with `=====`, section dividers with `-----`, `merge(var.tags, {...})` for tag merging
+  - ACM DNS validation always creates a single CNAME record — `one()` function extracts it cleanly from `domain_validation_options`
+  - `create_before_destroy` lifecycle is important for ACM certificates to avoid downtime during rotation
+  - The module intentionally does NOT include `aws_acm_certificate_validation` resource — validation is done externally via Cloudflare DNS (not managed by Terraform)
 ---
 
