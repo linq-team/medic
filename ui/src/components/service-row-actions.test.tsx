@@ -28,6 +28,18 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     apiClient: {
       updateService: vi.fn(),
+      getSnapshots: vi.fn().mockResolvedValue({
+        success: true,
+        message: '',
+        results: {
+          entries: [{ snapshot_id: 1 }],
+          total_count: 1,
+          limit: 1,
+          offset: 0,
+          has_more: false,
+        },
+      }),
+      restoreSnapshot: vi.fn().mockResolvedValue({ success: true }),
     },
   }
 })
@@ -220,10 +232,16 @@ describe('ServiceRowActions', () => {
       await waitFor(() => {
         expect(mockUpdateService).toHaveBeenCalledWith('test-service', { muted: 1 })
       })
-      expect(toast.success).toHaveBeenCalledWith(
-        'Service muted - alerts silenced',
-        { description: 'Test Service' }
-      )
+      // Mute is a destructive action, so uses undo toast with action button
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          'Service muted',
+          expect.objectContaining({
+            duration: 10000,
+            action: expect.objectContaining({ label: 'Undo' }),
+          })
+        )
+      })
     })
 
     it('unmutes service when Unmute is clicked', async () => {
@@ -338,10 +356,16 @@ describe('ServiceRowActions', () => {
       await waitFor(() => {
         expect(mockUpdateService).toHaveBeenCalledWith('test-service', { active: 0 })
       })
-      expect(toast.success).toHaveBeenCalledWith(
-        'Service deactivated - monitoring paused',
-        { description: 'Test Service' }
-      )
+      // Deactivate is a destructive action, so uses undo toast with action button
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          'Service deactivated',
+          expect.objectContaining({
+            duration: 10000,
+            action: expect.objectContaining({ label: 'Undo' }),
+          })
+        )
+      })
     })
 
     it('cancels deactivation when Cancel is clicked', async () => {

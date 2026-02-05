@@ -20,8 +20,18 @@ vi.mock('@/lib/api', async () => {
     apiClient: {
       getServiceByHeartbeatName: vi.fn(),
       updateService: vi.fn(),
-      getSnapshots: vi.fn(),
-      restoreSnapshot: vi.fn(),
+      getSnapshots: vi.fn().mockResolvedValue({
+        success: true,
+        message: '',
+        results: {
+          entries: [{ snapshot_id: 1 }],
+          total_count: 1,
+          limit: 1,
+          offset: 0,
+          has_more: false,
+        },
+      }),
+      restoreSnapshot: vi.fn().mockResolvedValue({ success: true }),
     },
   }
 })
@@ -467,7 +477,7 @@ describe('ServiceDetail - Quick Action Buttons', () => {
       })
     })
 
-    it('shows success toast when mute succeeds', async () => {
+    it('shows success toast with undo button when mute succeeds', async () => {
       const user = userEvent.setup()
       const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
       const mockUpdateService = vi.mocked(apiClient.updateService)
@@ -493,9 +503,14 @@ describe('ServiceDetail - Quick Action Buttons', () => {
       const muteButton = screen.getByRole('button', { name: /Mute/i })
       await user.click(muteButton)
 
+      // Mute is a destructive action, so uses undo toast with action button
       await waitFor(() => {
         expect(mockToastSuccess).toHaveBeenCalledWith(
-          expect.stringContaining('muted')
+          expect.stringContaining('muted'),
+          expect.objectContaining({
+            duration: 10000,
+            action: expect.objectContaining({ label: 'Undo' }),
+          })
         )
       })
     })
@@ -695,7 +710,7 @@ describe('ServiceDetail - Quick Action Buttons', () => {
       })
     })
 
-    it('shows success toast when deactivate succeeds', async () => {
+    it('shows success toast with undo button when deactivate succeeds', async () => {
       const user = userEvent.setup()
       const mockGetService = vi.mocked(apiClient.getServiceByHeartbeatName)
       const mockUpdateService = vi.mocked(apiClient.updateService)
@@ -731,9 +746,14 @@ describe('ServiceDetail - Quick Action Buttons', () => {
       const confirmButton = within(dialog).getByRole('button', { name: /^Deactivate$/i })
       await user.click(confirmButton)
 
+      // Deactivate is a destructive action, so uses undo toast with action button
       await waitFor(() => {
         expect(mockToastSuccess).toHaveBeenCalledWith(
-          expect.stringContaining('deactivated')
+          expect.stringContaining('deactivated'),
+          expect.objectContaining({
+            duration: 10000,
+            action: expect.objectContaining({ label: 'Undo' }),
+          })
         )
       })
     })

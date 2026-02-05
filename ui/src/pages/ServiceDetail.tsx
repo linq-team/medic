@@ -43,7 +43,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ServiceEditModal } from '@/components/service-edit-modal'
-import { useService, useSnapshots, useRestoreSnapshot } from '@/hooks'
+import { useService, useSnapshots, useRestoreSnapshot, useUndoToast } from '@/hooks'
 import { useUpdateService } from '@/hooks/use-service-mutations'
 import { cn } from '@/lib/utils'
 import type { Service, Snapshot, SnapshotActionType } from '@/lib/api'
@@ -245,6 +245,7 @@ export function ServiceDetail() {
   const [selectedSnapshot, setSelectedSnapshot] = useState<Snapshot | null>(null)
   const { mutate: updateService, isPending: isUpdating } = useUpdateService()
   const { mutate: restoreSnapshot, isPending: isRestoring } = useRestoreSnapshot()
+  const { showUndoToast, isRestoring: isUndoing } = useUndoToast()
 
   // The API returns an array, get the first (and usually only) result
   const service = data?.results?.[0]
@@ -311,11 +312,17 @@ export function ServiceDetail() {
       },
       {
         onSuccess: () => {
-          toast.success(
-            newMuted === 1
-              ? `${service.service_name} muted - alerts silenced`
-              : `${service.service_name} unmuted - alerts enabled`
-          )
+          // Muting is a destructive action (silences alerts), so show undo toast
+          if (newMuted === 1) {
+            showUndoToast({
+              serviceId: service.service_id,
+              serviceName: service.service_name,
+              successMessage: `${service.service_name} muted`,
+              description: 'Alerts silenced',
+            })
+          } else {
+            toast.success(`${service.service_name} unmuted - alerts enabled`)
+          }
         },
         onError: (error) => {
           toast.error(`Failed to ${actionLabel} ${service.service_name}: ${error.message}`)
@@ -359,7 +366,12 @@ export function ServiceDetail() {
       },
       {
         onSuccess: () => {
-          toast.success(`${service.service_name} deactivated - monitoring paused`)
+          showUndoToast({
+            serviceId: service.service_id,
+            serviceName: service.service_name,
+            successMessage: `${service.service_name} deactivated`,
+            description: 'Monitoring paused',
+          })
           setShowDeactivateDialog(false)
         },
         onError: (error) => {
@@ -429,7 +441,7 @@ export function ServiceDetail() {
             variant="outline"
             size="sm"
             onClick={handleMuteToggle}
-            disabled={isUpdating}
+            disabled={isUpdating || isUndoing}
             className={service.muted === 1 ? 'text-muted-foreground' : ''}
           >
             {service.muted === 1 ? (
@@ -450,7 +462,7 @@ export function ServiceDetail() {
               variant="outline"
               size="sm"
               onClick={() => setShowDeactivateDialog(true)}
-              disabled={isUpdating}
+              disabled={isUpdating || isUndoing}
               className="text-destructive hover:text-destructive"
             >
               <PowerOff className="h-4 w-4 mr-2" />
@@ -461,7 +473,7 @@ export function ServiceDetail() {
               variant="outline"
               size="sm"
               onClick={handleActivate}
-              disabled={isUpdating}
+              disabled={isUpdating || isUndoing}
               className="text-status-healthy hover:text-status-healthy"
             >
               <Power className="h-4 w-4 mr-2" />
