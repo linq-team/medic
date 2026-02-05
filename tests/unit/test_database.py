@@ -18,12 +18,13 @@ class TestConnectDb:
         result = connect_db()
 
         assert result == mock_conn
+        # Use values from mock_env_vars fixture to verify correct env var usage
         mock_connect.assert_called_once_with(
-            user="test_user",
-            password="test_pass",
-            host="localhost",
+            user=mock_env_vars["PG_USER"],
+            password=mock_env_vars["PG_PASS"],
+            host=mock_env_vars["DB_HOST"],
             port="5432",
-            database="test_medic"
+            database=mock_env_vars["DB_NAME"]
         )
 
     @patch("psycopg2.connect")

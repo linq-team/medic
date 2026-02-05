@@ -1,6 +1,7 @@
 """Integration tests for database operations with real PostgreSQL."""
 import pytest
 import os
+from unittest.mock import patch
 
 
 @pytest.mark.integration
@@ -82,12 +83,13 @@ class TestRealDatabaseIntegration:
 class TestMockedDatabaseIntegration:
     """Integration tests with mocked database for CI environments."""
 
-    def test_connection_retry_logic(self, mock_db_connection, mock_env_vars):
+    @patch("psycopg2.connect")
+    def test_connection_retry_logic(self, mock_connect, mock_env_vars):
         """Test that connection failures are handled gracefully."""
         import psycopg2
         from Medic.Core.database import query_db
 
-        mock_db_connection["connect"].side_effect = psycopg2.Error("Connection refused")
+        mock_connect.side_effect = psycopg2.Error("Connection refused")
 
         result = query_db("SELECT 1")
         assert result is None

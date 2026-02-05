@@ -75,7 +75,7 @@ def query_db(
             return json.dumps(data)
         else:
             return rows
-    except psycopg2.Error as e:
+    except (psycopg2.Error, ConnectionError) as e:
         logger.log(
             level=30, msg=f"Unable to perform query. An Error has occurred: {str(e)}"
         )
@@ -106,7 +106,7 @@ def insert_db(query: str, params: Optional[Tuple] = None) -> bool:
         cur.execute(query, params)
         client.commit()
         return True
-    except psycopg2.Error as e:
+    except (psycopg2.Error, ConnectionError) as e:
         logger.log(level=30, msg=f"Unable to perform insert: {str(e)}")
         return False
     finally:
