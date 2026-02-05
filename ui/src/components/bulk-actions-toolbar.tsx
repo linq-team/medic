@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useBulkUpdateServices } from '@/hooks/use-service-mutations'
+import { useBulkUpdateServices, useUndoToast } from '@/hooks'
 import type { Service } from '@/lib/api'
 import { PRIORITY_OPTIONS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
@@ -80,12 +80,14 @@ export function BulkActionsToolbar({
   onClearSelection,
 }: BulkActionsToolbarProps) {
   const { mutate: bulkUpdate, isPending } = useBulkUpdateServices()
+  const { showBulkUndoToast, isRestoring } = useUndoToast()
   const [dialog, setDialog] = useState<DialogState>({ type: null, open: false })
   const [newPriority, setNewPriority] = useState<string>('p3')
   const [newTeam, setNewTeam] = useState<string>('')
 
   const count = selectedServices.length
   const heartbeatNames = selectedServices.map((s) => s.heartbeat_name)
+  const isDisabled = isPending || isRestoring
 
   /**
    * Opens confirmation dialog for an action
@@ -105,6 +107,13 @@ export function BulkActionsToolbar({
    */
   function closeDialog() {
     setDialog({ type: null, open: false })
+  }
+
+  /**
+   * Check if action is destructive (mute or deactivate)
+   */
+  function isDestructiveBulkAction(type: ActionType): boolean {
+    return type === 'mute' || type === 'deactivate'
   }
 
   /**
@@ -148,6 +157,12 @@ export function BulkActionsToolbar({
         break
     }
 
+    // Capture services for undo (before clearing selection)
+    const servicesForUndo = selectedServices.map((s) => ({
+      serviceId: s.service_id,
+      serviceName: s.service_name,
+    }))
+
     bulkUpdate(
       { heartbeatNames, updates },
       {
@@ -155,7 +170,15 @@ export function BulkActionsToolbar({
           const { succeeded, failed } = result
 
           if (failed.length === 0) {
-            toast.success(`${succeeded.length} service${succeeded.length > 1 ? 's' : ''} ${successMessage}`)
+            // Use undo toast for destructive actions (mute, deactivate)
+            if (isDestructiveBulkAction(type)) {
+              showBulkUndoToast({
+                services: servicesForUndo,
+                successMessage: `${succeeded.length} service${succeeded.length > 1 ? 's' : ''} ${successMessage}`,
+              })
+            } else {
+              toast.success(`${succeeded.length} service${succeeded.length > 1 ? 's' : ''} ${successMessage}`)
+            }
           } else if (succeeded.length > 0) {
             toast.warning(`${actionLabel}: ${succeeded.length} succeeded, ${failed.length} failed`, {
               description: `Failed: ${failed.map((f) => f.heartbeatName).join(', ')}`,
@@ -256,7 +279,7 @@ export function BulkActionsToolbar({
             variant="outline"
             size="sm"
             onClick={() => openDialog('mute')}
-            disabled={isPending}
+            disabled={isDisabled}
           >
             <VolumeX className="h-4 w-4 mr-1" />
             Mute
@@ -265,7 +288,7 @@ export function BulkActionsToolbar({
             variant="outline"
             size="sm"
             onClick={() => openDialog('unmute')}
-            disabled={isPending}
+            disabled={isDisabled}
           >
             <Volume2 className="h-4 w-4 mr-1" />
             Unmute
@@ -274,7 +297,7 @@ export function BulkActionsToolbar({
             variant="outline"
             size="sm"
             onClick={() => openDialog('activate')}
-            disabled={isPending}
+            disabled={isDisabled}
           >
             <Power className="h-4 w-4 mr-1" />
             Activate
@@ -283,7 +306,7 @@ export function BulkActionsToolbar({
             variant="outline"
             size="sm"
             onClick={() => openDialog('deactivate')}
-            disabled={isPending}
+            disabled={isDisabled}
             className="text-destructive hover:text-destructive"
           >
             <PowerOff className="h-4 w-4 mr-1" />
@@ -296,7 +319,7 @@ export function BulkActionsToolbar({
             variant="outline"
             size="sm"
             onClick={() => openDialog('priority')}
-            disabled={isPending}
+            disabled={isDisabled}
           >
             Change Priority
           </Button>
@@ -304,7 +327,7 @@ export function BulkActionsToolbar({
             variant="outline"
             size="sm"
             onClick={() => openDialog('team')}
-            disabled={isPending}
+            disabled={isDisabled}
           >
             Change Team
           </Button>
@@ -390,14 +413,14 @@ export function BulkActionsToolbar({
             <Button
               variant="outline"
               onClick={closeDialog}
-              disabled={isPending}
+              disabled={isDisabled}
             >
               Cancel
             </Button>
             <Button
               variant={isDestructiveAction() ? 'destructive' : 'default'}
               onClick={() => dialog.type && executeAction(dialog.type)}
-              disabled={isPending}
+              disabled={isDisabled}
             >
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {isPending ? 'Processing...' : 'Confirm'}

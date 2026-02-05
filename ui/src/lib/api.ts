@@ -116,6 +116,53 @@ export type PlaybookStatus =
   | 'cancelled'
 
 /**
+ * Valid snapshot action types
+ */
+export type SnapshotActionType =
+  | 'deactivate'
+  | 'activate'
+  | 'mute'
+  | 'unmute'
+  | 'edit'
+  | 'bulk_edit'
+  | 'priority_change'
+  | 'team_change'
+  | 'delete'
+
+/**
+ * Snapshot data representing the captured service state
+ */
+export interface SnapshotData {
+  service_id: number
+  heartbeat_name: string
+  service_name: string
+  active: number
+  alert_interval: number
+  threshold: number
+  team: string
+  priority: string
+  muted: number
+  down: number
+  runbook: string | null
+  date_added: string
+  date_modified: string | null
+  date_muted: string | null
+}
+
+/**
+ * Service snapshot representing a point-in-time backup of service state
+ */
+export interface Snapshot {
+  snapshot_id: number
+  service_id: number
+  snapshot_data: SnapshotData
+  action_type: SnapshotActionType
+  actor: string | null
+  created_at: string
+  restored_at: string | null
+}
+
+/**
  * Standard API response envelope
  */
 export interface ApiResponse<T> {
@@ -565,6 +612,55 @@ export function createApiClient(config: ApiClientConfig = {}) {
       message?: string
     }>> {
       return fetchWithAuth(`/v2/playbooks/${playbookId}/execute`, {
+        method: 'POST',
+        body: params ? JSON.stringify(params) : undefined,
+      })
+    },
+
+    // =========================================================================
+    // Snapshot Endpoints
+    // =========================================================================
+
+    /**
+     * Get snapshots with optional filters and pagination
+     */
+    async getSnapshots(params?: {
+      service_id?: number
+      action_type?: SnapshotActionType
+      start_date?: string // ISO format
+      end_date?: string // ISO format
+      limit?: number
+      offset?: number
+    }): Promise<ApiResponse<PaginatedResponse<Snapshot>>> {
+      const searchParams = new URLSearchParams()
+      if (params?.service_id) searchParams.set('service_id', String(params.service_id))
+      if (params?.action_type) searchParams.set('action_type', params.action_type)
+      if (params?.start_date) searchParams.set('start_date', params.start_date)
+      if (params?.end_date) searchParams.set('end_date', params.end_date)
+      if (params?.limit) searchParams.set('limit', String(params.limit))
+      if (params?.offset) searchParams.set('offset', String(params.offset))
+
+      const query = searchParams.toString()
+      const endpoint = query ? `/v2/snapshots?${query}` : '/v2/snapshots'
+
+      return fetchWithAuth<ApiResponse<PaginatedResponse<Snapshot>>>(endpoint)
+    },
+
+    /**
+     * Get a single snapshot by ID
+     */
+    async getSnapshotById(snapshotId: number): Promise<ApiResponse<Snapshot>> {
+      return fetchWithAuth<ApiResponse<Snapshot>>(`/v2/snapshots/${snapshotId}`)
+    },
+
+    /**
+     * Restore a service from a snapshot
+     */
+    async restoreSnapshot(
+      snapshotId: number,
+      params?: { actor?: string }
+    ): Promise<ApiResponse<Snapshot>> {
+      return fetchWithAuth<ApiResponse<Snapshot>>(`/v2/snapshots/${snapshotId}/restore`, {
         method: 'POST',
         body: params ? JSON.stringify(params) : undefined,
       })

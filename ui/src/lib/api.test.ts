@@ -517,6 +517,139 @@ describe('createApiClient', () => {
       )
     })
   })
+
+  describe('snapshot endpoints', () => {
+    const client = createApiClient({ apiKey: 'test-key' })
+
+    it('getSnapshots fetches snapshots with pagination', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: '',
+            results: { entries: [], total_count: 0, limit: 50, offset: 0, has_more: false },
+          }),
+      })
+
+      await client.getSnapshots({ limit: 25, offset: 50 })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/snapshots?limit=25&offset=50',
+        expect.anything()
+      )
+    })
+
+    it('getSnapshots includes filters when provided', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: '',
+            results: { entries: [], total_count: 0, limit: 50, offset: 0, has_more: false },
+          }),
+      })
+
+      await client.getSnapshots({
+        service_id: 42,
+        action_type: 'deactivate',
+        start_date: '2026-01-01T00:00:00Z',
+        end_date: '2026-01-31T23:59:59Z',
+      })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/snapshots?service_id=42&action_type=deactivate&start_date=2026-01-01T00%3A00%3A00Z&end_date=2026-01-31T23%3A59%3A59Z',
+        expect.anything()
+      )
+    })
+
+    it('getSnapshots fetches without query params when no filters', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: '',
+            results: { entries: [], total_count: 0, limit: 50, offset: 0, has_more: false },
+          }),
+      })
+
+      await client.getSnapshots()
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/v2/snapshots', expect.anything())
+    })
+
+    it('getSnapshotById fetches a single snapshot', async () => {
+      const mockSnapshot = {
+        snapshot_id: 123,
+        service_id: 42,
+        snapshot_data: {},
+        action_type: 'edit',
+        actor: 'user@example.com',
+        created_at: '2026-01-15T10:00:00Z',
+        restored_at: null,
+      }
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: '',
+            results: mockSnapshot,
+          }),
+      })
+
+      const result = await client.getSnapshotById(123)
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/v2/snapshots/123', expect.anything())
+      expect(result.results).toEqual(mockSnapshot)
+    })
+
+    it('restoreSnapshot sends POST request', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: 'Snapshot restored',
+            results: { snapshot_id: 123, restored_at: '2026-01-20T12:00:00Z' },
+          }),
+      })
+
+      await client.restoreSnapshot(123)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/snapshots/123/restore',
+        expect.objectContaining({
+          method: 'POST',
+        })
+      )
+    })
+
+    it('restoreSnapshot sends POST request with actor', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            message: 'Snapshot restored',
+            results: { snapshot_id: 123, restored_at: '2026-01-20T12:00:00Z' },
+          }),
+      })
+
+      await client.restoreSnapshot(123, { actor: 'admin@example.com' })
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v2/snapshots/123/restore',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ actor: 'admin@example.com' }),
+        })
+      )
+    })
+  })
 })
 
 describe('apiClient (default instance)', () => {

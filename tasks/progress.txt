@@ -154,6 +154,67 @@
 - **Service mutation hooks**: Use `useUpdateService`, `useCreateService`, `useBulkUpdateServices` from `@/hooks/use-service-mutations` for service CRUD operations with optimistic updates
 - **ServiceCreateModal pattern**: Modal for creating new services with heartbeat_name validation (alphanumeric + hyphens + underscores only), sensible defaults (priority=p3, alert_interval=5, threshold=1), and duplicate detection via error message parsing
 - **Quick action buttons**: ServiceDetail page has Mute/Unmute and Activate/Deactivate buttons in header with icons, using `useUpdateService` hook for mutations with toast notifications
+- **Snapshot hooks**: Use `useSnapshots`, `useSnapshot`, `useRestoreSnapshot` from `@/hooks/use-snapshots` for querying and restoring snapshots. Query key factory `snapshotsKeys` for consistent cache management. Restore mutation invalidates both snapshots and services queries.
+- **Tabs component**: shadcn Tabs component from `@/components/ui/tabs`, use with `value` and `onValueChange` for controlled state
+- **URL-synced tabs**: Use `useSearchParams` to sync tab state with URL query params (e.g., `?tab=history`)
+- **History tab pattern**: Fetch snapshots conditionally with `enabled: !!service?.service_id && activeTab === 'history'` to avoid unnecessary API calls
+- **Restore confirmation dialog**: Show snapshot data preview in dialog before restoring, including service name, active status, muted status, priority, and team
+
+---
+
+## 2026-02-05 - US-016 - Linear Issue: SRE-115
+- **What was implemented**: History tab added to ServiceDetail page with snapshot list and restore functionality
+  - Added shadcn Tabs component to UI component library
+  - Added Overview and History tabs to ServiceDetail page
+  - Tab state synced with URL query params (`?tab=history`)
+  - Snapshot list displays action type (formatted labels), actor, timestamp, and change summary
+  - Restore button on each non-restored snapshot opens confirmation dialog
+  - Confirmation dialog shows preview of the state that will be restored
+  - Already-restored snapshots display "Restored" badge instead of button
+  - Empty state with message when no snapshots exist
+  - Added 19 new test cases covering tabs, history display, and restore flow
+
+- **Files changed**:
+  - `ui/src/components/ui/tabs.tsx` (new file - shadcn Tabs component)
+  - `ui/src/pages/ServiceDetail.tsx` (added tabs, history tab content, restore dialog)
+  - `ui/src/pages/ServiceDetail.test.tsx` (added 19 tests for history tab functionality)
+  - `ui/package.json` (added @radix-ui/react-tabs dependency)
+  - `tasks/prd.json` (marked US-016 as passes: true)
+
+- **Learnings for future iterations**:
+  - shadcn CLI creates files in literal `@/` directory - must move to `src/components/ui/` after install
+  - Use `useSearchParams` from react-router-dom to sync UI state with URL for better UX (deep linking, back button)
+  - Enable React Query conditionally with `enabled` option to avoid fetching when data isn't needed (e.g., when tab is not active)
+  - When testing tabs, use `getByRole('tab', { name: /TabName/i })` and check `data-state="active"` attribute
+  - For restore confirmations, show a preview of what will be restored so users understand the impact
+
+---
+
+## 2026-02-05 - US-015 - Linear Issue: SRE-114
+- **What was implemented**: React Query hooks for fetching and restoring service snapshots
+  - Added Snapshot types to api.ts: `SnapshotActionType`, `SnapshotData`, `Snapshot`
+  - Added API client methods: `getSnapshots`, `getSnapshotById`, `restoreSnapshot`
+  - Created `useSnapshots` query hook with filters (service_id, action_type, date range, pagination)
+  - Created `useSnapshot` query hook for fetching single snapshot by ID
+  - Created `useRestoreSnapshot` mutation hook that invalidates both snapshots and services queries
+  - Query key factory `snapshotsKeys` for consistent cache key management
+  - Added 17 test cases for hooks (snapshotsKeys, useSnapshots, useSnapshot, useRestoreSnapshot)
+  - Added 6 test cases for API client snapshot methods
+
+- **Files changed**:
+  - `ui/src/lib/api.ts` (added Snapshot types and API methods)
+  - `ui/src/lib/api.test.ts` (added tests for snapshot API methods)
+  - `ui/src/hooks/use-snapshots.ts` (new file - snapshot query and mutation hooks)
+  - `ui/src/hooks/use-snapshots.test.tsx` (new file - comprehensive tests for hooks)
+  - `ui/src/hooks/index.ts` (export new hooks)
+  - `tasks/prd.json` (marked US-015 as passes: true)
+
+- **Learnings for future iterations**:
+  - Root .gitignore has `lib/` which ignores ui/src/lib/ - use `git add -f` for lib files
+  - Restore mutation should invalidate both snapshots and services queries since service data changes
+  - Query keys with filters allow React Query to cache different filter combinations separately
+  - API client methods return `ApiResponse<PaginatedResponse<T>>` for paginated endpoints, `ApiResponse<T>` for single-entity endpoints
+  - useQuery `enabled` option prevents fetch when ID is falsy (e.g., `enabled: !!snapshotId`)
 
 ---
 
@@ -2254,5 +2315,68 @@
   - Deactivate action requires confirmation dialog, activate does not
   - Use `text-destructive focus:text-destructive` for destructive menu items
   - Radix DropdownMenu provides keyboard accessibility out of the box
+
+---
+
+## 2026-02-05 - US-017 - Linear Issue: SRE-116
+- **What was implemented**: Added Service History page (`/history`) to view and restore service changes across all services
+- **Features**:
+  - New `/history` route accessible from sidebar navigation
+  - Snapshot table with Service, Action, Actor, Date, Status columns
+  - Filters for service name search, action type, and date range
+  - Server-side pagination (25 items per page)
+  - Restore functionality with confirmation dialog showing snapshot state preview
+  - Service names link to service detail pages
+  - "Restored" badge for already-restored snapshots, "Available" badge for restorable ones
+  - Empty state when no history exists
+  - Error handling for API failures
+
+- **Files changed**:
+  - `ui/src/pages/History.tsx` (new - History page component)
+  - `ui/src/pages/History.test.tsx` (new - 26 test cases)
+  - `ui/src/pages/index.ts` (export History)
+  - `ui/src/App.tsx` (added /history route)
+  - `ui/src/components/sidebar.tsx` (added History nav item)
+  - `tasks/prd.json` (marked US-017 as passes: true)
+
+- **Learnings for future iterations**:
+  - Snapshot API filters by service_id (number), not service name - client-side filtering needed for name search
+  - Pattern matches AuditLogs page for filters, pagination, and table styling
+  - getActionBadge function provides consistent badge colors for action types across pages
+  - Restore dialog reuses the same pattern from ServiceDetail History tab
+  - History icon from lucide-react matches the History tab icon in ServiceDetail
+
+---
+
+## 2026-02-05 - US-018 - Linear Issue: SRE-117
+- **What was implemented**: Undo toast functionality for destructive actions
+  - Created `useUndoToast` hook with `showUndoToast` and `showBulkUndoToast` functions
+  - Extended toast duration to 10 seconds for undo toasts
+  - Undo button fetches most recent snapshot and restores it on click
+  - Loading toast displayed during restore operation
+  - Confirmation toast 'Action undone' shown on successful restore
+  - Integrated into ServiceDetail page (mute/deactivate buttons)
+  - Integrated into ServiceRowActions (row dropdown menu)
+  - Integrated into BulkActionsToolbar (bulk mute/deactivate operations)
+  - Handles partial restore failures gracefully for bulk operations
+
+- **Files changed**:
+  - `ui/src/hooks/use-undo-toast.ts` (new - useUndoToast hook)
+  - `ui/src/hooks/use-undo-toast.test.tsx` (new - 7 test cases)
+  - `ui/src/hooks/index.ts` (export new hook)
+  - `ui/src/pages/ServiceDetail.tsx` (use undo toast for mute/deactivate)
+  - `ui/src/pages/ServiceDetail.test.tsx` (updated tests for new behavior)
+  - `ui/src/components/service-row-actions.tsx` (use undo toast for mute/deactivate)
+  - `ui/src/components/service-row-actions.test.tsx` (updated tests)
+  - `ui/src/components/bulk-actions-toolbar.tsx` (use undo toast for bulk mute/deactivate)
+  - `ui/src/components/bulk-actions-toolbar.test.tsx` (updated tests)
+  - `tasks/prd.json` (marked US-018 as passes: true)
+
+- **Learnings for future iterations**:
+  - Sonner toast action button uses `{ label: string, onClick: Function }` object
+  - Undo functionality needs to fetch snapshot AFTER action succeeds (snapshot created server-side)
+  - Use `toast.loading()` for async operations and `toast.dismiss(id)` to close it
+  - When testing toast with action buttons, use `expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) })`
+  - Bulk undo should handle partial failures gracefully - show warning toast for partial success
 
 ---

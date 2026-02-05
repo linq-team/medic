@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ServiceEditModal } from '@/components/service-edit-modal'
-import { useUpdateService } from '@/hooks/use-service-mutations'
+import { useUpdateService, useUndoToast } from '@/hooks'
 import type { Service } from '@/lib/api'
 
 // ============================================================================
@@ -69,8 +69,11 @@ export interface ServiceRowActionsProps {
 export function ServiceRowActions({ service }: ServiceRowActionsProps) {
   const navigate = useNavigate()
   const { mutate: updateService, isPending } = useUpdateService()
+  const { showUndoToast, isRestoring } = useUndoToast()
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeactivateDialogOpen, setIsDeactivateDialogOpen] = useState(false)
+
+  const isDisabled = isPending || isRestoring
 
   const isMuted = service.muted === 1
   const isActive = service.active === 1
@@ -94,10 +97,19 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
       },
       {
         onSuccess: () => {
-          toast.success(
-            newMuted === 1 ? 'Service muted - alerts silenced' : 'Service unmuted - alerts enabled',
-            { description: service.service_name }
-          )
+          // Muting is a destructive action (silences alerts), so show undo toast
+          if (newMuted === 1) {
+            showUndoToast({
+              serviceId: service.service_id,
+              serviceName: service.service_name,
+              successMessage: 'Service muted',
+              description: `${service.service_name} - alerts silenced`,
+            })
+          } else {
+            toast.success('Service unmuted - alerts enabled', {
+              description: service.service_name,
+            })
+          }
         },
         onError: (error) => {
           toast.error('Failed to update service', {
@@ -143,8 +155,11 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
       },
       {
         onSuccess: () => {
-          toast.success('Service deactivated - monitoring paused', {
-            description: service.service_name
+          showUndoToast({
+            serviceId: service.service_id,
+            serviceName: service.service_name,
+            successMessage: 'Service deactivated',
+            description: `${service.service_name} - monitoring paused`,
           })
           setIsDeactivateDialogOpen(false)
         },
@@ -189,7 +204,7 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem onClick={handleMuteToggle} disabled={isPending}>
+          <DropdownMenuItem onClick={handleMuteToggle} disabled={isDisabled}>
             {isMuted ? (
               <>
                 <Volume2 className="mr-2 h-4 w-4" />
@@ -207,13 +222,13 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
             <DropdownMenuItem
               onClick={() => setIsDeactivateDialogOpen(true)}
               className="text-destructive focus:text-destructive"
-              disabled={isPending}
+              disabled={isDisabled}
             >
               <PowerOff className="mr-2 h-4 w-4" />
               Deactivate
             </DropdownMenuItem>
           ) : (
-            <DropdownMenuItem onClick={handleActivate} disabled={isPending}>
+            <DropdownMenuItem onClick={handleActivate} disabled={isDisabled}>
               <Power className="mr-2 h-4 w-4" />
               Activate
             </DropdownMenuItem>
@@ -249,14 +264,14 @@ export function ServiceRowActions({ service }: ServiceRowActionsProps) {
             <Button
               variant="outline"
               onClick={() => setIsDeactivateDialogOpen(false)}
-              disabled={isPending}
+              disabled={isDisabled}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={handleDeactivateConfirm}
-              disabled={isPending}
+              disabled={isDisabled}
             >
               {isPending ? 'Deactivating...' : 'Deactivate'}
             </Button>
