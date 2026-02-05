@@ -18,6 +18,11 @@
 - ESO CRD validation uses `data "kubernetes_resources"` with `field_selector` to check for specific CRD by name — avoids listing all CRDs
 - `null_resource` with `precondition` lifecycle block is the pattern for fail-fast validation checks in Terraform
 - Multiple `locals {}` blocks are valid in Terraform and get merged — no need to combine into a single block
+- ClusterSecretStore uses `external-secrets.io/v1beta1` with JWT auth and `serviceAccountRef` for IRSA-based AWS Secrets Manager access
+- `kubernetes_manifest` is the resource type for creating ESO custom resources (ClusterSecretStore, ExternalSecret, etc.) via Terraform
+- Secrets module has two secret paths: `medic/{env}/secrets` (Terraform-managed) and `medic/{env}/app-secrets` (manually created, referenced via data source)
+- ExternalSecret keys in Helm are passed as a `keys` array from Terraform, each with `secretKey`, `remoteRef.key`, `remoteRef.property` — the Helm template iterates this array directly
+- IAM policy for IRSA must include ARNs for BOTH the Terraform-managed secret AND the manually-created app-secrets to allow ESO to read them
 
 ---
 
@@ -98,5 +103,34 @@
   - The `null` provider (`hashicorp/null ~> 3.2`) must be added to `required_providers` when using `null_resource`
   - Multiple `locals {}` blocks in the same file are valid Terraform — they're merged automatically
   - ESO validation section is placed between ACM certificate and Kubernetes namespace sections in both environments
+---
+
+## 2026-02-05 - US-007 - Linear Issue: SRE-147
+- **What was implemented:** Added `kubernetes_manifest` resource for ClusterSecretStore in both dev and prod environments. The ClusterSecretStore is named `aws-secrets-manager` (via `var.external_secret_store_ref`), configured with AWS Secrets Manager provider in `us-east-2` (via `var.aws_region`), and uses JWT auth referencing the IRSA service account from the secrets module. Added dependency on `null_resource.eso_validation` and `kubernetes_namespace.medic`. Also added `kubernetes_manifest.cluster_secret_store` to the Helm release `depends_on` to ensure the store exists before ExternalSecret resources are created.
+- **Files changed:**
+  - `terraform/environments/dev/main.tf` — Added ClusterSecretStore kubernetes_manifest resource; added it to Helm release depends_on
+  - `terraform/environments/prod/main.tf` — Same changes as dev
+- **Learnings for future iterations:**
+  - ClusterSecretStore uses `external-secrets.io/v1beta1` API version — this is the stable ESO API for secret stores
+  - JWT auth with `serviceAccountRef` is the correct pattern for IRSA-based authentication — the service account name and namespace must match what's annotated with the IAM role ARN
+  - The `var.external_secret_store_ref` variable (default: `aws-secrets-manager`) is the single source of truth for the store name — both the ClusterSecretStore resource and the Helm chart's ExternalSecret reference this same variable
+  - ClusterSecretStore is placed between ESO CRD validation and Kubernetes namespace sections, following the dependency order pattern
+  - The `kubernetes_manifest` resource requires the kubernetes provider to be configured — it uses the same EKS auth as other kubernetes resources
+---
+
+## 2026-02-05 - US-008 - Linear Issue: SRE-147
+- **What was implemented:** Updated secrets module to reference existing `medic/{env}/app-secrets` in AWS Secrets Manager via a data source. Added the app-secrets ARN to the IRSA IAM policy so ESO can read both Terraform-managed secrets and manually-created app-secrets. Updated Helm ExternalSecret configuration in both dev and prod environments to use the `keys` array format (matching the Helm template), with all required secret keys: MEDIC_SECRETS_KEY, MEDIC_WEBHOOK_SECRET, SLACK_API_TOKEN, SLACK_CHANNEL_ID, SLACK_SIGNING_SECRET, PAGERDUTY_ROUTING_KEY (from app-secrets) and DATABASE_URL (from rds-credentials). Updated Helm values.yaml defaults to include all secret keys with the correct `app-secrets` path.
+- **Files changed:**
+  - `terraform/modules/secrets/main.tf` — Added `data "aws_secretsmanager_secret" "app_secrets"` data source; updated IAM policy to include app-secrets ARN in GetSecretValue resource list
+  - `terraform/modules/secrets/outputs.tf` — Added `app_secrets_arn` and `app_secrets_name` outputs
+  - `terraform/environments/dev/main.tf` — Replaced `secretPath`/`additionalSecrets` with explicit `keys` array including all 7 secret keys from two Secrets Manager entries
+  - `terraform/environments/prod/main.tf` — Same changes as dev
+  - `helm/medic/values.yaml` — Updated default ExternalSecret keys to include MEDIC_WEBHOOK_SECRET, SLACK_CHANNEL_ID; changed remote ref paths from `medic/production/secrets` to `medic/production/app-secrets` and `medic/production/rds-credentials`; removed REDIS_URL and MEDIC_ADMIN_API_KEY (not in app-secrets)
+- **Learnings for future iterations:**
+  - The Helm ExternalSecret template uses `.Values.externalSecret.keys` array — Terraform must pass this exact structure (`secretKey`, `remoteRef.key`, `remoteRef.property`), not a custom `secretPath`/`additionalSecrets` format
+  - `data "aws_secretsmanager_secret"` is a read-only lookup — Terraform does NOT manage the secret values, just references the ARN for IAM policy and passes the name to Helm
+  - The IRSA IAM policy must include ARNs for ALL secrets the service account needs to read (both Terraform-managed and manually-created)
+  - REDIS_URL is passed via ConfigMap (non-sensitive, from ElastiCache module output), not via Secrets Manager
+  - The `secretStoreRef` in Helm values is now passed as an object `{name, kind}` matching the template structure
 ---
 

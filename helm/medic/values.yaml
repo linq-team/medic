@@ -157,35 +157,39 @@ externalSecret:
     name: aws-secrets-manager
     kind: ClusterSecretStore
   # Keys to fetch from external secret store
+  # Note: When deployed via Terraform, these are overridden per environment
+  # with the correct secret paths (medic/{env}/app-secrets, medic/{env}/rds-credentials)
   keys:
+    # App secrets (from medic/{env}/app-secrets)
     - secretKey: MEDIC_SECRETS_KEY
       remoteRef:
-        key: medic/production/secrets
+        key: medic/production/app-secrets
         property: MEDIC_SECRETS_KEY
-    - secretKey: DATABASE_URL
+    - secretKey: MEDIC_WEBHOOK_SECRET
       remoteRef:
-        key: medic/production/secrets
-        property: DATABASE_URL
-    - secretKey: REDIS_URL
-      remoteRef:
-        key: medic/production/secrets
-        property: REDIS_URL
-    - secretKey: MEDIC_ADMIN_API_KEY
-      remoteRef:
-        key: medic/production/secrets
-        property: MEDIC_ADMIN_API_KEY
+        key: medic/production/app-secrets
+        property: MEDIC_WEBHOOK_SECRET
     - secretKey: SLACK_API_TOKEN
       remoteRef:
-        key: medic/production/secrets
+        key: medic/production/app-secrets
         property: SLACK_API_TOKEN
+    - secretKey: SLACK_CHANNEL_ID
+      remoteRef:
+        key: medic/production/app-secrets
+        property: SLACK_CHANNEL_ID
     - secretKey: SLACK_SIGNING_SECRET
       remoteRef:
-        key: medic/production/secrets
+        key: medic/production/app-secrets
         property: SLACK_SIGNING_SECRET
     - secretKey: PAGERDUTY_ROUTING_KEY
       remoteRef:
-        key: medic/production/secrets
+        key: medic/production/app-secrets
         property: PAGERDUTY_ROUTING_KEY
+    # RDS credentials (from medic/{env}/rds-credentials)
+    - secretKey: DATABASE_URL
+      remoteRef:
+        key: medic/production/rds-credentials
+        property: DATABASE_URL
 
 # ServiceAccount configuration
 serviceAccount:

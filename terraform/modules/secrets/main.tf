@@ -3,6 +3,7 @@
 # =============================================================================
 # Creates:
 #   - Secrets Manager secret for application secrets
+#   - Data source for manually-created app-secrets
 #   - IAM role with trust policy for EKS OIDC (IRSA)
 #   - IAM policy allowing secretsmanager:GetSecretValue, DescribeSecret
 # =============================================================================
@@ -48,6 +49,22 @@ resource "aws_secretsmanager_secret_version" "this" {
   lifecycle {
     ignore_changes = [secret_string]
   }
+}
+
+# -----------------------------------------------------------------------------
+# App Secrets (manually created in AWS)
+# -----------------------------------------------------------------------------
+# References the existing medic/{env}/app-secrets secret that was created
+# manually. This secret contains application-specific secrets such as
+# MEDIC_SECRETS_KEY, MEDIC_WEBHOOK_SECRET, Slack tokens, and PagerDuty keys.
+#
+# Terraform only reads this secret (data source) — it does NOT manage the
+# secret values. The IAM policy below grants read access to both the
+# Terraform-managed secret and this manually-created app-secrets secret.
+# -----------------------------------------------------------------------------
+
+data "aws_secretsmanager_secret" "app_secrets" {
+  name = "medic/${var.environment}/app-secrets"
 }
 
 # -----------------------------------------------------------------------------
@@ -103,8 +120,10 @@ resource "aws_iam_policy" "secrets_access" {
         ]
         Resource = [
           aws_secretsmanager_secret.this.arn,
-          # Allow access to any versions of the secret
-          "${aws_secretsmanager_secret.this.arn}:*"
+          "${aws_secretsmanager_secret.this.arn}:*",
+          # App secrets (manually created, referenced via data source)
+          data.aws_secretsmanager_secret.app_secrets.arn,
+          "${data.aws_secretsmanager_secret.app_secrets.arn}:*"
         ]
       },
       {

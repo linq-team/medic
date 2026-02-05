@@ -395,15 +395,68 @@ resource "helm_release" "medic" {
         }
       }
 
+      # ExternalSecret for ESO integration
+      # Fetches secrets from two Secrets Manager entries:
+      #   - medic/{env}/app-secrets: application secrets (manually created)
+      #   - medic/{env}/rds-credentials: database URL (Terraform-managed)
       externalSecret = {
-        enabled        = true
-        secretStoreRef = var.external_secret_store_ref
-        secretPath     = module.secrets.secret_name
-        additionalSecrets = [
+        enabled = true
+        secretStoreRef = {
+          name = var.external_secret_store_ref
+          kind = "ClusterSecretStore"
+        }
+        keys = [
+          # App secrets (manually created in AWS Secrets Manager)
           {
-            secretPath = aws_secretsmanager_secret.rds_credentials.name
-            property   = "DATABASE_URL"
-          }
+            secretKey = "MEDIC_SECRETS_KEY"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "MEDIC_SECRETS_KEY"
+            }
+          },
+          {
+            secretKey = "MEDIC_WEBHOOK_SECRET"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "MEDIC_WEBHOOK_SECRET"
+            }
+          },
+          {
+            secretKey = "SLACK_API_TOKEN"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "SLACK_API_TOKEN"
+            }
+          },
+          {
+            secretKey = "SLACK_CHANNEL_ID"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "SLACK_CHANNEL_ID"
+            }
+          },
+          {
+            secretKey = "SLACK_SIGNING_SECRET"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "SLACK_SIGNING_SECRET"
+            }
+          },
+          {
+            secretKey = "PAGERDUTY_ROUTING_KEY"
+            remoteRef = {
+              key      = module.secrets.app_secrets_name
+              property = "PAGERDUTY_ROUTING_KEY"
+            }
+          },
+          # RDS credentials (Terraform-managed)
+          {
+            secretKey = "DATABASE_URL"
+            remoteRef = {
+              key      = aws_secretsmanager_secret.rds_credentials.name
+              property = "DATABASE_URL"
+            }
+          },
         ]
       }
 

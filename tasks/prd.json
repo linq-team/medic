@@ -123,7 +123,7 @@
         "Terraform fmt passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-006. Must match name expected by Helm chart."
     },
     {
@@ -138,7 +138,7 @@
         "Terraform fmt passes"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Secrets already created in AWS. Terraform just references them."
     },
     {
