@@ -8,9 +8,13 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_env_vars():
-    """Set up required environment variables for testing."""
+    """Set up required environment variables for testing.
+
+    This fixture is autouse=True so it runs for all tests automatically,
+    ensuring database and API credentials are always available.
+    """
     env_vars = {
         "PG_USER": "test_user",
         "PG_PASS": "test_pass",
@@ -19,8 +23,11 @@ def mock_env_vars():
         "PORT": "5000",
         "SLACK_API_TOKEN": "xoxb-test-token",
         "SLACK_CHANNEL_ID": "C12345678",
+        "SLACK_SIGNING_SECRET": "test-signing-secret",
         "PAGERDUTY_ROUTING_KEY": "test-routing-key",
         "MEDIC_BASE_URL": "http://localhost:5000",
+        "MEDIC_SECRETS_KEY": "dGVzdC1zZWNyZXQta2V5LWZvci10ZXN0aW5n",
+        "MEDIC_WEBHOOK_SECRET": "test-webhook-secret",
     }
     with patch.dict(os.environ, env_vars):
         yield env_vars

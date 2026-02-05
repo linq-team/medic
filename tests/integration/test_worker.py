@@ -1,4 +1,5 @@
 """Integration tests for worker with database."""
+from datetime import datetime, timezone
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -35,11 +36,12 @@ class TestWorkerIntegration:
 
         with patch("Medic.Worker.monitor.query_db") as mock_query:
             # Service is healthy - has enough heartbeats
+            # Note: The second tuple element must be a datetime object for .astimezone() call
             mock_query.side_effect = [
                 [{"service_id": 1, "heartbeat_name": "test-hb", "service_name": "test-service",
                   "active": 1, "alert_interval": 5, "threshold": 1, "team": "platform",
                   "priority": "p2", "muted": 0, "down": 0}],
-                [("2024-01-01 00:00:00", 2)]  # Has heartbeats
+                [(datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc), 2)]  # Has heartbeats
             ]
 
             queryForNoHeartbeat()
@@ -62,11 +64,12 @@ class TestWorkerIntegration:
         with patch("Medic.Worker.monitor.query_db") as mock_query:
             with patch("Medic.Worker.monitor.sendAlert") as mock_send_alert:
                 # Service is unhealthy - no heartbeats
+                # Note: The first tuple element must be a datetime object for .astimezone() call
                 mock_query.side_effect = [
                     [{"service_id": 1, "heartbeat_name": "test-hb", "service_name": "test-service",
                       "active": 1, "alert_interval": 5, "threshold": 1, "team": "platform",
                       "priority": "p2", "muted": 0, "down": 0}],
-                    [("2024-01-01 00:00:00", 0)]  # Zero heartbeats - unhealthy
+                    [(datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc), 0)]  # Zero heartbeats - unhealthy
                 ]
 
                 queryForNoHeartbeat()
