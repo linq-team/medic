@@ -48,7 +48,7 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Simple version number change in workflow file"
     },
     {

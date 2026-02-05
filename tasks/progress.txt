@@ -2406,3 +2406,19 @@
   - Many packages support Python 3.14 functionally but haven't added the classifier yet
 
 ---
+
+## 2026-02-05 - US-001 - Linear Issue: SRE-122
+- **What was implemented**: Updated CI workflow to use Python 3.14
+  - Changed PYTHON_VERSION from "3.11" to "3.14" in .github/workflows/build.yml
+  - Verified actions/setup-python@v5 supports Python 3.14 (added October 2025)
+
+- **Files changed**:
+  - `.github/workflows/build.yml` (PYTHON_VERSION: "3.11" → "3.14")
+  - `tasks/prd.json` (marked US-001 as passes: true)
+
+- **Learnings for future iterations**:
+  - actions/setup-python@v5 supports Python 3.14 since October 2025
+  - GitHub Actions hosted runners include Python 3.14 in the available versions
+  - The CI workflow only changes the environment variable - the Python version is resolved at runtime by setup-python action
+
+---
