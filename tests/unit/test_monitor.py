@@ -1,7 +1,7 @@
 """Unit tests for monitor module."""
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class TestMonitorConnectDb:
@@ -739,7 +739,7 @@ class TestGracePeriod:
         from Medic.Worker.monitor import queryForNoHeartbeat
 
         # Last heartbeat was 3 minutes ago (naive datetime)
-        last_hbeat_time = datetime.utcnow() - timedelta(minutes=3)
+        last_hbeat_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)
 
         # Setup service data with grace period
         mock_query.side_effect = [
