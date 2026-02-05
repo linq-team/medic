@@ -19,16 +19,21 @@ variable "environment" {
 }
 
 # -----------------------------------------------------------------------------
-# Remote State Configuration (o11y-tf)
+# Remote State Configuration (dev-o11y-tf)
 # -----------------------------------------------------------------------------
-# Infrastructure dependencies (VPC, EKS, subnets) are fetched from o11y-tf
-# remote state to stay in sync with the shared platform.
+# Infrastructure dependencies (VPC, EKS, subnets) are fetched from the
+# dev-o11y-tf remote state to stay in sync with the dev platform.
+#
+# NOTE: The dev-o11y-tf cluster does not exist yet. Terraform plan/apply will
+# fail with a remote state error until the dev cluster is provisioned. This is
+# expected behavior — once dev-o11y-tf is deployed, this configuration will
+# work automatically without changes.
 # -----------------------------------------------------------------------------
 
 variable "o11y_state_bucket" {
-  description = "S3 bucket containing o11y-tf state"
+  description = "S3 bucket containing dev-o11y-tf state"
   type        = string
-  default     = "o11y-prod-terraform-state"
+  default     = "dev-o11y-terraform-state"
 }
 
 variable "o11y_state_key" {
@@ -253,7 +258,7 @@ variable "ingress_enabled" {
 variable "ingress_host" {
   description = "Ingress hostname"
   type        = string
-  default     = "medic.internal.linqapp.com"
+  default     = "dev-medic.linqapp.com"
 }
 
 variable "ingress_tls_enabled" {

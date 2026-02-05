@@ -7,8 +7,11 @@
 #   - Secrets Manager and IAM for ESO/IRSA
 #   - Medic Helm chart via helm_release
 #
-# Infrastructure dependencies (VPC, EKS, subnets) are fetched from o11y-tf
-# remote state to stay in sync with the shared platform.
+# Infrastructure dependencies (VPC, EKS, subnets) are fetched from dev-o11y-tf
+# remote state to stay in sync with the dev platform.
+#
+# NOTE: This environment will fail until dev-o11y-tf is provisioned. The remote
+# state data source will error when the dev cluster state does not exist.
 # =============================================================================
 
 terraform {
@@ -66,10 +69,12 @@ provider "kubernetes" {
 }
 
 # -----------------------------------------------------------------------------
-# Remote State - o11y-tf (shared platform infrastructure)
+# Remote State - dev-o11y-tf (dev platform infrastructure)
 # -----------------------------------------------------------------------------
-# Fetches VPC, EKS, subnets, and security group info from o11y-tf state.
-# This ensures medic stays in sync with platform infrastructure changes.
+# Fetches VPC, EKS, subnets, and security group info from dev-o11y-tf state.
+# This ensures medic-dev stays in sync with dev platform infrastructure.
+#
+# Will fail until dev-o11y-tf cluster is provisioned and has state in S3.
 # -----------------------------------------------------------------------------
 
 data "terraform_remote_state" "o11y" {
