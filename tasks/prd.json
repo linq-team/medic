@@ -186,7 +186,7 @@
         "Include architecture diagram (ASCII or mermaid) showing component relationships"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Comprehensive setup guide for new team members."
     },
     {
@@ -201,7 +201,7 @@
         "Document multi-region architecture (ECR us-east-1, EKS us-east-2)"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Final documentation step. Links to detailed docs."
     }
   ]

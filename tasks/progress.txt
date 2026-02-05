@@ -157,3 +157,24 @@
   - Existing troubleshooting doc (`docs/TROUBLESHOOTING.md`) covers application-level issues; the new `docs/troubleshooting/` directory is for infrastructure/deployment issues
 ---
 
+## 2026-02-05 - US-011 - Linear Issue: SRE-147
+- **What was implemented:** Created `docs/deployment-prerequisites.md` with comprehensive deployment prerequisites documentation. Includes ASCII architecture diagram showing CI/CD pipeline flow, multi-region architecture table (ECR in us-east-1, EKS/RDS/Secrets in us-east-2), GitHub secrets/variables/environments configuration, external dependencies (o11y-tf cluster, ESO, ALB Controller, Alloy), AWS Secrets Manager paths for both Terraform-managed and manually-created secrets, DNS/TLS setup for Cloudflare ACM validation, Terraform state backend details, IAM permissions summary, and a step-by-step first-time setup checklist.
+- **Files changed:**
+  - `docs/deployment-prerequisites.md` — New file: comprehensive deployment prerequisites guide
+- **Learnings for future iterations:**
+  - The `docs/` directory already has `TROUBLESHOOTING.md` (app-level) and `troubleshooting/eso-not-found.md` (infra-level) — infrastructure docs go in subdirectories, application docs go at the top level
+  - App-secrets must be created manually in AWS Secrets Manager before the first Terraform apply — they are referenced via `data "aws_secretsmanager_secret"`, not created by Terraform
+  - The Alloy/OTEL collector endpoint (`http://alloy:4317`) is a cluster-internal service that must be running for telemetry — this is deployed by o11y-tf
+  - ACM certificate validation requires two steps: Terraform creates the cert, then you must manually add the CNAME to Cloudflare — `terraform output acm_validation_records` provides the values
+---
+
+## 2026-02-05 - US-012 - Linear Issue: SRE-147
+- **What was implemented:** Added a "Deployment" section to README.md documenting the CI/CD workflow (PR→dev, merge→prod), multi-region architecture (ECR in us-east-1, EKS/RDS/Secrets in us-east-2), and troubleshooting links. Updated the Table of Contents to include the new section. Linked to `docs/deployment-prerequisites.md` for full setup instructions and `docs/troubleshooting/eso-not-found.md` for common deployment issues.
+- **Files changed:**
+  - `README.md` — Added "Deployment" section with CI/CD Workflow, Multi-Region Architecture, and Troubleshooting subsections; updated Table of Contents
+- **Learnings for future iterations:**
+  - The README already had a "Deployment and Configuration" section focused on application configuration (env vars, DB tables) — the new "Deployment" section covers infrastructure/CI/CD deployment, placed before the existing section
+  - The Table of Contents uses `* [Section](#section)` markdown format with manually maintained anchors — when adding new sections, update the TOC to match
+  - README serves as the entry point linking to detailed docs — keep deployment details in dedicated docs (`deployment-prerequisites.md`) and only put the workflow overview in the README
+---
+
