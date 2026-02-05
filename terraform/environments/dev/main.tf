@@ -85,14 +85,14 @@ data "terraform_remote_state" "o11y" {
 # Local values derived from o11y remote state
 locals {
   # EKS cluster info
-  eks_cluster_name = data.terraform_remote_state.o11y.outputs.cluster_name
-  eks_endpoint     = data.terraform_remote_state.o11y.outputs.cluster_endpoint
-  eks_ca_cert      = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
+  eks_cluster_name  = data.terraform_remote_state.o11y.outputs.cluster_name
+  eks_endpoint      = data.terraform_remote_state.o11y.outputs.cluster_endpoint
+  eks_ca_cert       = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
   oidc_provider_arn = data.terraform_remote_state.o11y.outputs.oidc_provider_arn
 
   # Network info
-  vpc_id              = data.terraform_remote_state.o11y.outputs.vpc_id
-  private_subnet_ids  = data.terraform_remote_state.o11y.outputs.private_subnet_ids
+  vpc_id                 = data.terraform_remote_state.o11y.outputs.vpc_id
+  private_subnet_ids     = data.terraform_remote_state.o11y.outputs.private_subnet_ids
   node_security_group_id = data.terraform_remote_state.o11y.outputs.node_security_group_id
 }
 
@@ -244,17 +244,17 @@ resource "kubernetes_namespace" "medic" {
 # -----------------------------------------------------------------------------
 
 resource "helm_release" "medic" {
-  name       = "medic"
-  namespace  = var.kubernetes_namespace
-  chart      = var.helm_chart_path
-  version    = var.helm_chart_version
+  name      = "medic"
+  namespace = var.kubernetes_namespace
+  chart     = var.helm_chart_path
+  version   = var.helm_chart_version
 
-  create_namespace = false  # Use kubernetes_namespace resource above
+  create_namespace = false # Use kubernetes_namespace resource above
 
   # Wait for resources to be ready
-  wait             = true
-  wait_for_jobs    = true
-  timeout          = 600
+  wait          = true
+  wait_for_jobs = true
+  timeout       = 600
 
   # Atomic install - rollback on failure
   atomic = true

@@ -41,7 +41,7 @@ resource "aws_secretsmanager_secret_version" "this" {
 
   secret_id = aws_secretsmanager_secret.this.id
   secret_string = jsonencode({
-    DATABASE_URL     = "postgresql://user:password@host:5432/medic"
+    DATABASE_URL      = "postgresql://user:password@host:5432/medic"
     MEDIC_SECRETS_KEY = "change-me-in-production"
   })
 

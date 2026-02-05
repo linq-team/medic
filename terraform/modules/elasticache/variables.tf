@@ -55,7 +55,7 @@ variable "parameter_group_name" {
 variable "snapshot_retention_limit" {
   description = "Number of days for which ElastiCache will retain automatic snapshots (0 to disable)"
   type        = number
-  default     = 0  # No snapshots for ephemeral rate limit data
+  default     = 0 # No snapshots for ephemeral rate limit data
 }
 
 variable "snapshot_window" {

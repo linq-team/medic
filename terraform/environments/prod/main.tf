@@ -78,12 +78,12 @@ data "terraform_remote_state" "o11y" {
 
 # Local values derived from o11y remote state
 locals {
-  eks_cluster_name      = data.terraform_remote_state.o11y.outputs.cluster_name
-  eks_endpoint          = data.terraform_remote_state.o11y.outputs.cluster_endpoint
-  eks_ca_cert           = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
-  oidc_provider_arn     = data.terraform_remote_state.o11y.outputs.oidc_provider_arn
-  vpc_id                = data.terraform_remote_state.o11y.outputs.vpc_id
-  private_subnet_ids    = data.terraform_remote_state.o11y.outputs.private_subnet_ids
+  eks_cluster_name       = data.terraform_remote_state.o11y.outputs.cluster_name
+  eks_endpoint           = data.terraform_remote_state.o11y.outputs.cluster_endpoint
+  eks_ca_cert            = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
+  oidc_provider_arn      = data.terraform_remote_state.o11y.outputs.oidc_provider_arn
+  vpc_id                 = data.terraform_remote_state.o11y.outputs.vpc_id
+  private_subnet_ids     = data.terraform_remote_state.o11y.outputs.private_subnet_ids
   node_security_group_id = data.terraform_remote_state.o11y.outputs.node_security_group_id
 }
 
@@ -104,7 +104,7 @@ resource "random_password" "rds_password" {
 resource "aws_secretsmanager_secret" "rds_credentials" {
   name                    = "medic/${var.environment}/rds-credentials"
   description             = "RDS credentials for Medic ${var.environment}"
-  recovery_window_in_days = 30  # Longer recovery window in prod
+  recovery_window_in_days = 30 # Longer recovery window in prod
 
   tags = merge(var.tags, {
     Name = "medic-${var.environment}-rds-credentials"
@@ -143,7 +143,7 @@ module "rds" {
   instance_class = var.rds_instance_class
   engine_version = var.rds_engine_version
   database_name  = var.rds_database_name
-  multi_az       = true  # Always Multi-AZ in production
+  multi_az       = true # Always Multi-AZ in production
 
   # Credentials from Secrets Manager
   master_username = var.rds_master_username
@@ -155,7 +155,7 @@ module "rds" {
 
   # Backup - longer retention in prod
   backup_retention_period = 30
-  skip_final_snapshot     = false  # Never skip in production
+  skip_final_snapshot     = false # Never skip in production
 
   # Monitoring - enabled in prod
   performance_insights_enabled = true
@@ -230,10 +230,10 @@ resource "kubernetes_namespace" "medic" {
 # -----------------------------------------------------------------------------
 
 resource "helm_release" "medic" {
-  name       = "medic"
-  namespace  = var.kubernetes_namespace
-  chart      = var.helm_chart_path
-  version    = var.helm_chart_version
+  name      = "medic"
+  namespace = var.kubernetes_namespace
+  chart     = var.helm_chart_path
+  version   = var.helm_chart_version
 
   create_namespace = false
 

@@ -53,7 +53,7 @@ variable "o11y_state_region" {
 variable "rds_instance_class" {
   description = "RDS instance class"
   type        = string
-  default     = "db.t3.small"  # Larger for production
+  default     = "db.t3.small" # Larger for production
 }
 
 variable "rds_engine_version" {
@@ -77,13 +77,13 @@ variable "rds_master_username" {
 variable "rds_allocated_storage" {
   description = "Allocated storage in GB"
   type        = number
-  default     = 50  # Larger for production
+  default     = 50 # Larger for production
 }
 
 variable "rds_max_allocated_storage" {
   description = "Maximum allocated storage in GB for autoscaling"
   type        = number
-  default     = 500  # Larger for production
+  default     = 500 # Larger for production
 }
 
 # -----------------------------------------------------------------------------
@@ -93,7 +93,7 @@ variable "rds_max_allocated_storage" {
 variable "elasticache_node_type" {
   description = "ElastiCache node type"
   type        = string
-  default     = "cache.t3.small"  # Larger for production
+  default     = "cache.t3.small" # Larger for production
 }
 
 variable "elasticache_engine_version" {
@@ -165,7 +165,7 @@ variable "image_pull_policy" {
 variable "api_replica_count" {
   description = "Number of API replicas"
   type        = number
-  default     = 3  # More replicas in production
+  default     = 3 # More replicas in production
 }
 
 variable "api_resources" {
@@ -182,7 +182,7 @@ variable "api_resources" {
   })
   default = {
     requests = {
-      cpu    = "200m"   # Higher for production
+      cpu    = "200m" # Higher for production
       memory = "512Mi"
     }
     limits = {
@@ -195,7 +195,7 @@ variable "api_resources" {
 variable "worker_replica_count" {
   description = "Number of worker replicas"
   type        = number
-  default     = 2  # More replicas in production
+  default     = 2 # More replicas in production
 }
 
 variable "worker_resources" {
@@ -212,7 +212,7 @@ variable "worker_resources" {
   })
   default = {
     requests = {
-      cpu    = "100m"  # Higher for production
+      cpu    = "100m" # Higher for production
       memory = "256Mi"
     }
     limits = {
@@ -235,7 +235,7 @@ variable "ingress_enabled" {
 variable "ingress_host" {
   description = "Ingress hostname"
   type        = string
-  default     = "medic.linqapp.com"  # Production hostname
+  default     = "medic.linqapp.com" # Production hostname
 }
 
 variable "ingress_tls_enabled" {
