@@ -2516,3 +2516,25 @@
   - The codebase pattern of using `Optional` and `Union` from typing is still valid in Python 3.14
 
 ---
+
+## 2026-02-05 - US-008 - Linear Issue: SRE-129
+- **What was implemented**: Validated full test suite passes on Python 3.14
+  - Ran pytest tests/ -v: 1304 tests passed, 3 skipped (expected - integration tests requiring real DB)
+  - Test coverage at 85% - no decrease from baseline
+  - No flaky tests detected - all tests pass consistently
+  - ruff lint check passes with no errors
+  - mypy type check passes (only informational note about untyped function bodies)
+  - Helm lint and template validation passes
+  - All CI quality gates verified locally
+
+- **Files changed**:
+  - `tasks/prd.json` (marked US-008 as passes: true)
+  - No code changes required - test suite already passes on Python 3.14
+
+- **Learnings for future iterations**:
+  - The 3 skipped tests are expected: integration tests requiring TEST_DATABASE_URL environment variable
+  - mypy may pick up files outside the CI target paths (like scripts/) - only check Medic/ medic.py config.py
+  - Test coverage at 85% is the baseline to maintain for this codebase
+  - All Python 3.14 deprecation fixes from US-005 are working correctly with the full test suite
+
+---
