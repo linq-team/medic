@@ -2538,3 +2538,24 @@
   - All Python 3.14 deprecation fixes from US-005 are working correctly with the full test suite
 
 ---
+
+## 2026-02-05 - US-003 - Linear Issue: SRE-124
+- **What was implemented**: Evaluated alternative Docker base images for Python 3.14
+  - Pulled and measured actual image sizes:
+    - python:3.14-bookworm: 1.49GB (full Debian)
+    - python:3.14-slim-bookworm: 211MB (recommended)
+    - python:3.14-alpine: 77.1MB (smallest)
+  - Added detailed comparison comment to Dockerfile header
+  - Documented decision rationale: slim-bookworm for glibc compatibility
+
+- **Files changed**:
+  - `Dockerfile` (added base image evaluation comment with sizes and rationale)
+  - `tasks/prd.json` (marked US-003 as passes: true)
+
+- **Learnings for future iterations**:
+  - Alpine is ~3x smaller than slim-bookworm but uses musl libc which breaks prebuilt wheels
+  - slim-bookworm is the sweet spot: 7x smaller than full image, full glibc compatibility
+  - Use `docker pull && docker images --format` to get actual image sizes
+  - Reference pythonspeed.com for authoritative Docker base image guidance
+
+---

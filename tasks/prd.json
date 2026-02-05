@@ -134,7 +134,7 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Research task - document findings, keep slim-bookworm as default unless alpine is clearly better"
     },
     {
