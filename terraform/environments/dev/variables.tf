@@ -7,9 +7,9 @@
 # -----------------------------------------------------------------------------
 
 variable "aws_region" {
-  description = "AWS region"
+  description = "AWS region (should match o11y-tf region)"
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "environment" {
@@ -19,26 +19,35 @@ variable "environment" {
 }
 
 # -----------------------------------------------------------------------------
-# Network Configuration
+# Remote State Configuration (o11y-tf)
+# -----------------------------------------------------------------------------
+# Infrastructure dependencies (VPC, EKS, subnets) are fetched from o11y-tf
+# remote state to stay in sync with the shared platform.
 # -----------------------------------------------------------------------------
 
-variable "vpc_id" {
-  description = "VPC ID where resources will be deployed"
+variable "o11y_state_bucket" {
+  description = "S3 bucket containing o11y-tf state"
   type        = string
+  default     = "o11y-prod-terraform-state"
 }
 
-variable "eks_cluster_name" {
-  description = "Name of the existing EKS cluster"
+variable "o11y_state_key" {
+  description = "S3 key for o11y-tf state file"
   type        = string
+  default     = "terraform.tfstate"
 }
 
-variable "eks_node_security_group_id" {
-  description = "Security group ID of EKS nodes (for database access)"
+variable "o11y_state_region" {
+  description = "AWS region where o11y-tf state bucket is located"
   type        = string
+  default     = "us-east-2"
 }
 
 # -----------------------------------------------------------------------------
 # RDS Configuration
+# -----------------------------------------------------------------------------
+# Note: Password is auto-generated and stored in Secrets Manager.
+# Username can be overridden but defaults to 'medic'.
 # -----------------------------------------------------------------------------
 
 variable "rds_instance_class" {
@@ -62,13 +71,7 @@ variable "rds_database_name" {
 variable "rds_master_username" {
   description = "Master username for RDS"
   type        = string
-  sensitive   = true
-}
-
-variable "rds_master_password" {
-  description = "Master password for RDS"
-  type        = string
-  sensitive   = true
+  default     = "medic"
 }
 
 variable "rds_allocated_storage" {
@@ -160,8 +163,9 @@ variable "helm_chart_version" {
 # -----------------------------------------------------------------------------
 
 variable "image_repository" {
-  description = "Docker image repository"
+  description = "Docker image repository (ECR URI)"
   type        = string
+  default     = "018143940435.dkr.ecr.us-east-1.amazonaws.com/medic"
 }
 
 variable "image_tag" {
@@ -249,6 +253,7 @@ variable "ingress_enabled" {
 variable "ingress_host" {
   description = "Ingress hostname"
   type        = string
+  default     = "medic.internal.linqapp.com"
 }
 
 variable "ingress_tls_enabled" {

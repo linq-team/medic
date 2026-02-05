@@ -2,8 +2,10 @@
 # Medic Prod Environment - Root Module
 # =============================================================================
 # Production environment configuration.
-# This is a placeholder that mirrors the dev environment structure.
-# Production should use larger instance sizes, multi-AZ, and stricter settings.
+# Uses larger instance sizes, multi-AZ, and stricter settings than dev.
+#
+# Infrastructure dependencies (VPC, EKS, subnets) are fetched from o11y-tf
+# remote state to stay in sync with the shared platform.
 # =============================================================================
 
 terraform {
@@ -21,6 +23,10 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.25"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
 }
@@ -41,59 +47,84 @@ provider "aws" {
   }
 }
 
-# Helm provider uses EKS cluster authentication
+# Helm provider uses EKS cluster authentication from o11y remote state
 provider "helm" {
   kubernetes {
-    host                   = data.aws_eks_cluster.this.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
+    host                   = local.eks_endpoint
+    cluster_ca_certificate = base64decode(local.eks_ca_cert)
     token                  = data.aws_eks_cluster_auth.this.token
   }
 }
 
 provider "kubernetes" {
-  host                   = data.aws_eks_cluster.this.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
+  host                   = local.eks_endpoint
+  cluster_ca_certificate = base64decode(local.eks_ca_cert)
   token                  = data.aws_eks_cluster_auth.this.token
 }
 
 # -----------------------------------------------------------------------------
-# Data Sources - Existing Infrastructure
+# Remote State - o11y-tf (shared platform infrastructure)
 # -----------------------------------------------------------------------------
 
-# Existing VPC
-data "aws_vpc" "this" {
-  id = var.vpc_id
-}
+data "terraform_remote_state" "o11y" {
+  backend = "s3"
 
-# Private subnets for databases
-data "aws_subnets" "private" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-
-  tags = {
-    Tier = "private"
+  config = {
+    bucket = var.o11y_state_bucket
+    key    = var.o11y_state_key
+    region = var.o11y_state_region
   }
 }
 
-# Existing EKS cluster
-data "aws_eks_cluster" "this" {
-  name = var.eks_cluster_name
+# Local values derived from o11y remote state
+locals {
+  eks_cluster_name      = data.terraform_remote_state.o11y.outputs.cluster_name
+  eks_endpoint          = data.terraform_remote_state.o11y.outputs.cluster_endpoint
+  eks_ca_cert           = data.terraform_remote_state.o11y.outputs.cluster_certificate_authority_data
+  oidc_provider_arn     = data.terraform_remote_state.o11y.outputs.oidc_provider_arn
+  vpc_id                = data.terraform_remote_state.o11y.outputs.vpc_id
+  private_subnet_ids    = data.terraform_remote_state.o11y.outputs.private_subnet_ids
+  node_security_group_id = data.terraform_remote_state.o11y.outputs.node_security_group_id
 }
 
 data "aws_eks_cluster_auth" "this" {
-  name = var.eks_cluster_name
+  name = local.eks_cluster_name
 }
 
-# EKS node security group (for database access rules)
-data "aws_security_group" "eks_nodes" {
-  id = var.eks_node_security_group_id
+# -----------------------------------------------------------------------------
+# RDS Credentials in Secrets Manager
+# -----------------------------------------------------------------------------
+
+resource "random_password" "rds_password" {
+  length           = 32
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
-# EKS OIDC provider for IRSA
-data "aws_iam_openid_connect_provider" "eks" {
-  url = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
+resource "aws_secretsmanager_secret" "rds_credentials" {
+  name                    = "medic/${var.environment}/rds-credentials"
+  description             = "RDS credentials for Medic ${var.environment}"
+  recovery_window_in_days = 30  # Longer recovery window in prod
+
+  tags = merge(var.tags, {
+    Name = "medic-${var.environment}-rds-credentials"
+  })
+}
+
+resource "aws_secretsmanager_secret_version" "rds_credentials" {
+  secret_id = aws_secretsmanager_secret.rds_credentials.id
+  secret_string = jsonencode({
+    username     = var.rds_master_username
+    password     = random_password.rds_password.result
+    host         = module.rds.address
+    port         = 5432
+    database     = var.rds_database_name
+    DATABASE_URL = "postgresql://${var.rds_master_username}:${random_password.rds_password.result}@${module.rds.endpoint}/${var.rds_database_name}"
+  })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -104,9 +135,9 @@ module "rds" {
   source = "../../modules/rds"
 
   identifier            = "medic-${var.environment}"
-  vpc_id                = var.vpc_id
-  subnet_ids            = data.aws_subnets.private.ids
-  eks_security_group_id = var.eks_node_security_group_id
+  vpc_id                = local.vpc_id
+  subnet_ids            = local.private_subnet_ids
+  eks_security_group_id = local.node_security_group_id
 
   # Production instance configuration
   instance_class = var.rds_instance_class
@@ -114,9 +145,9 @@ module "rds" {
   database_name  = var.rds_database_name
   multi_az       = true  # Always Multi-AZ in production
 
-  # Credentials
+  # Credentials from Secrets Manager
   master_username = var.rds_master_username
-  master_password = var.rds_master_password
+  master_password = random_password.rds_password.result
 
   # Storage
   allocated_storage     = var.rds_allocated_storage
@@ -143,9 +174,9 @@ module "elasticache" {
   source = "../../modules/elasticache"
 
   cluster_id            = "medic-${var.environment}"
-  vpc_id                = var.vpc_id
-  subnet_ids            = data.aws_subnets.private.ids
-  eks_security_group_id = var.eks_node_security_group_id
+  vpc_id                = local.vpc_id
+  subnet_ids            = local.private_subnet_ids
+  eks_security_group_id = local.node_security_group_id
 
   # Production instance configuration
   node_type      = var.elasticache_node_type
@@ -165,7 +196,7 @@ module "secrets" {
   source = "../../modules/secrets"
 
   environment           = var.environment
-  eks_oidc_provider_arn = data.aws_iam_openid_connect_provider.eks.arn
+  eks_oidc_provider_arn = local.oidc_provider_arn
   eks_namespace         = var.kubernetes_namespace
   service_account_name  = var.service_account_name
 
@@ -241,7 +272,7 @@ resource "helm_release" "medic" {
 
         # PDB enabled in production
         pdb = {
-          enabled = true
+          enabled      = true
           minAvailable = 1
         }
       }
@@ -267,6 +298,12 @@ resource "helm_release" "medic" {
         enabled        = true
         secretStoreRef = var.external_secret_store_ref
         secretPath     = module.secrets.secret_name
+        additionalSecrets = [
+          {
+            secretPath = aws_secretsmanager_secret.rds_credentials.name
+            property   = "DATABASE_URL"
+          }
+        ]
       }
 
       secret = {
@@ -274,13 +311,13 @@ resource "helm_release" "medic" {
       }
 
       config = {
-        PORT      = "8080"
-        LOG_LEVEL = var.log_level
-        REDIS_URL = module.elasticache.connection_string
-        MEDIC_RATE_LIMITER_TYPE = "redis"
+        PORT                        = "8080"
+        LOG_LEVEL                   = var.log_level
+        REDIS_URL                   = module.elasticache.connection_string
+        MEDIC_RATE_LIMITER_TYPE     = "redis"
         OTEL_EXPORTER_OTLP_ENDPOINT = var.otel_endpoint
-        OTEL_SERVICE_NAME = "medic"
-        MEDIC_ENVIRONMENT = var.environment
+        OTEL_SERVICE_NAME           = "medic"
+        MEDIC_ENVIRONMENT           = var.environment
       }
 
       metrics = {
@@ -301,15 +338,11 @@ resource "helm_release" "medic" {
     })
   ]
 
-  set_sensitive {
-    name  = "config.DATABASE_URL"
-    value = "postgresql://${var.rds_master_username}:${var.rds_master_password}@${module.rds.endpoint}/${module.rds.database_name}"
-  }
-
   depends_on = [
     module.rds,
     module.elasticache,
     module.secrets,
-    kubernetes_namespace.medic
+    kubernetes_namespace.medic,
+    aws_secretsmanager_secret_version.rds_credentials
   ]
 }

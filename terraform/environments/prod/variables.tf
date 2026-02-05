@@ -7,9 +7,9 @@
 # -----------------------------------------------------------------------------
 
 variable "aws_region" {
-  description = "AWS region"
+  description = "AWS region (should match o11y-tf region)"
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "environment" {
@@ -19,32 +19,41 @@ variable "environment" {
 }
 
 # -----------------------------------------------------------------------------
-# Network Configuration
+# Remote State Configuration (o11y-tf)
+# -----------------------------------------------------------------------------
+# Infrastructure dependencies (VPC, EKS, subnets) are fetched from o11y-tf
+# remote state to stay in sync with the shared platform.
 # -----------------------------------------------------------------------------
 
-variable "vpc_id" {
-  description = "VPC ID where resources will be deployed"
+variable "o11y_state_bucket" {
+  description = "S3 bucket containing o11y-tf state"
   type        = string
+  default     = "o11y-prod-terraform-state"
 }
 
-variable "eks_cluster_name" {
-  description = "Name of the existing EKS cluster"
+variable "o11y_state_key" {
+  description = "S3 key for o11y-tf state file"
   type        = string
+  default     = "terraform.tfstate"
 }
 
-variable "eks_node_security_group_id" {
-  description = "Security group ID of EKS nodes (for database access)"
+variable "o11y_state_region" {
+  description = "AWS region where o11y-tf state bucket is located"
   type        = string
+  default     = "us-east-2"
 }
 
 # -----------------------------------------------------------------------------
 # RDS Configuration
 # -----------------------------------------------------------------------------
+# Note: Password is auto-generated and stored in Secrets Manager.
+# Username can be overridden but defaults to 'medic'.
+# -----------------------------------------------------------------------------
 
 variable "rds_instance_class" {
   description = "RDS instance class"
   type        = string
-  default     = "db.t3.micro"
+  default     = "db.t3.small"  # Larger for production
 }
 
 variable "rds_engine_version" {
@@ -62,43 +71,19 @@ variable "rds_database_name" {
 variable "rds_master_username" {
   description = "Master username for RDS"
   type        = string
-  sensitive   = true
-}
-
-variable "rds_master_password" {
-  description = "Master password for RDS"
-  type        = string
-  sensitive   = true
+  default     = "medic"
 }
 
 variable "rds_allocated_storage" {
   description = "Allocated storage in GB"
   type        = number
-  default     = 20
+  default     = 50  # Larger for production
 }
 
 variable "rds_max_allocated_storage" {
   description = "Maximum allocated storage in GB for autoscaling"
   type        = number
-  default     = 100
-}
-
-variable "rds_multi_az" {
-  description = "Enable Multi-AZ deployment"
-  type        = bool
-  default     = false
-}
-
-variable "rds_backup_retention_period" {
-  description = "Backup retention period in days"
-  type        = number
-  default     = 7
-}
-
-variable "rds_performance_insights_enabled" {
-  description = "Enable Performance Insights"
-  type        = bool
-  default     = false
+  default     = 500  # Larger for production
 }
 
 # -----------------------------------------------------------------------------
@@ -108,7 +93,7 @@ variable "rds_performance_insights_enabled" {
 variable "elasticache_node_type" {
   description = "ElastiCache node type"
   type        = string
-  default     = "cache.t3.micro"
+  default     = "cache.t3.small"  # Larger for production
 }
 
 variable "elasticache_engine_version" {
@@ -160,8 +145,9 @@ variable "helm_chart_version" {
 # -----------------------------------------------------------------------------
 
 variable "image_repository" {
-  description = "Docker image repository"
+  description = "Docker image repository (ECR URI)"
   type        = string
+  default     = "018143940435.dkr.ecr.us-east-1.amazonaws.com/medic"
 }
 
 variable "image_tag" {
@@ -179,7 +165,7 @@ variable "image_pull_policy" {
 variable "api_replica_count" {
   description = "Number of API replicas"
   type        = number
-  default     = 2
+  default     = 3  # More replicas in production
 }
 
 variable "api_resources" {
@@ -196,12 +182,12 @@ variable "api_resources" {
   })
   default = {
     requests = {
-      cpu    = "100m"
-      memory = "256Mi"
+      cpu    = "200m"   # Higher for production
+      memory = "512Mi"
     }
     limits = {
-      cpu    = "500m"
-      memory = "512Mi"
+      cpu    = "1000m"
+      memory = "1Gi"
     }
   }
 }
@@ -209,7 +195,7 @@ variable "api_resources" {
 variable "worker_replica_count" {
   description = "Number of worker replicas"
   type        = number
-  default     = 1
+  default     = 2  # More replicas in production
 }
 
 variable "worker_resources" {
@@ -226,12 +212,12 @@ variable "worker_resources" {
   })
   default = {
     requests = {
-      cpu    = "50m"
-      memory = "128Mi"
+      cpu    = "100m"  # Higher for production
+      memory = "256Mi"
     }
     limits = {
-      cpu    = "200m"
-      memory = "256Mi"
+      cpu    = "500m"
+      memory = "512Mi"
     }
   }
 }
@@ -249,6 +235,7 @@ variable "ingress_enabled" {
 variable "ingress_host" {
   description = "Ingress hostname"
   type        = string
+  default     = "medic.linqapp.com"  # Production hostname
 }
 
 variable "ingress_tls_enabled" {
