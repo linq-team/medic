@@ -158,10 +158,11 @@ jobs:
         id: plan-output
         working-directory: terraform/environments/${{ env.TF_ENVIRONMENT }}
         run: |
+          DELIMITER="TFPLAN_OUTPUT_$(date +%s)"
           terraform show -no-color tfplan > plan_output.txt
-          echo "plan<<EOF" >> $GITHUB_OUTPUT
-          cat plan_output.txt | head -c 60000 >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "plan<<${DELIMITER}" >> $GITHUB_OUTPUT
+          head -c 60000 plan_output.txt >> $GITHUB_OUTPUT
+          echo "${DELIMITER}" >> $GITHUB_OUTPUT
 
       - name: Comment Plan on PR
         if: github.event_name == 'pull_request'
