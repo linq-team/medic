@@ -123,7 +123,7 @@ resource "aws_secretsmanager_secret_version" "rds_credentials" {
     host         = module.rds.address
     port         = 5432
     database     = var.rds_database_name
-    DATABASE_URL = "postgresql://${var.rds_master_username}:${random_password.rds_password.result}@${module.rds.endpoint}/${var.rds_database_name}"
+    DATABASE_URL = "postgresql://${var.rds_master_username}:${urlencode(random_password.rds_password.result)}@${module.rds.endpoint}/${var.rds_database_name}"
   })
 
   lifecycle {
@@ -407,12 +407,12 @@ resource "helm_release" "medic" {
               property = "PAGERDUTY_ROUTING_KEY"
             }
           },
-          # RDS credentials (Terraform-managed)
+          # RDS password (Terraform-managed, synced as individual var to avoid URL-encoding issues)
           {
-            secretKey = "DATABASE_URL"
+            secretKey = "PG_PASS"
             remoteRef = {
               key      = aws_secretsmanager_secret.rds_credentials.name
-              property = "DATABASE_URL"
+              property = "password"
             }
           },
         ]
@@ -430,6 +430,10 @@ resource "helm_release" "medic" {
         OTEL_EXPORTER_OTLP_ENDPOINT = var.otel_endpoint
         OTEL_SERVICE_NAME           = "medic"
         MEDIC_ENVIRONMENT           = var.environment
+        PG_USER                     = var.rds_master_username
+        DB_HOST                     = module.rds.address
+        DB_NAME                     = var.rds_database_name
+        DB_PORT                     = "5432"
       }
 
       metrics = {

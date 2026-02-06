@@ -286,7 +286,7 @@ variable "log_level" {
 variable "otel_endpoint" {
   description = "OpenTelemetry collector endpoint"
   type        = string
-  default     = "http://alloy:4317"
+  default     = "http://alloy.observability.svc.cluster.local:4317"
 }
 
 variable "service_monitor_enabled" {

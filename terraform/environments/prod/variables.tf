@@ -263,7 +263,7 @@ variable "log_level" {
 variable "otel_endpoint" {
   description = "OpenTelemetry collector endpoint"
   type        = string
-  default     = "http://alloy:4317"
+  default     = "http://alloy.observability.svc.cluster.local:4317"
 }
 
 variable "service_monitor_enabled" {
@@ -295,7 +295,7 @@ variable "external_secret_store_ref" {
 variable "migrations_enabled" {
   description = "Enable database migrations Helm hook"
   type        = bool
-  default     = true
+  default     = false
 }
 
 # -----------------------------------------------------------------------------
