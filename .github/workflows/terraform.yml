@@ -162,6 +162,7 @@ jobs:
           terraform show -no-color tfplan > plan_output.txt
           echo "plan<<${DELIMITER}" >> $GITHUB_OUTPUT
           head -c 60000 plan_output.txt >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
           echo "${DELIMITER}" >> $GITHUB_OUTPUT
 
       - name: Comment Plan on PR
