@@ -295,7 +295,7 @@ variable "external_secret_store_ref" {
 variable "migrations_enabled" {
   description = "Enable database migrations Helm hook"
   type        = bool
-  default     = false
+  default     = true
 }
 
 # -----------------------------------------------------------------------------
