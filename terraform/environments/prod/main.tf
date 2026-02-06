@@ -279,7 +279,7 @@ resource "null_resource" "eso_validation" {
 
 resource "kubernetes_manifest" "cluster_secret_store" {
   manifest = {
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ClusterSecretStore"
     metadata = {
       name = var.external_secret_store_ref
