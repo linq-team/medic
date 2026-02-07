@@ -3,7 +3,6 @@ from datetime import datetime
 import pytz
 import threading
 import time
-import logging
 import psycopg2
 from Medic.Core.logging_config import configure_logging, get_logger
 from Medic.Worker import slack_client as slack
