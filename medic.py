@@ -5,10 +5,10 @@ A Flask-based service for tracking service health through heartbeat monitoring.
 """
 
 import os
-import logging
 from flask import Flask
 
 import Medic.Core.routes
+from Medic.Core.logging_config import configure_logging, get_logger
 from Medic.Core.telemetry import init_telemetry
 from config import get_config
 
@@ -21,11 +21,9 @@ except ImportError:
     API_KEY_INIT_AVAILABLE = False
     init_api_keys = None  # type: ignore[misc, assignment]
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure structured logging (JSON or text based on MEDIC_LOG_FORMAT env var)
+configure_logging()
+logger = get_logger(__name__)
 
 
 def create_app() -> Flask:

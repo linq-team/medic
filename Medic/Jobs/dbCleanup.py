@@ -1,12 +1,13 @@
 """Database cleanup job for Medic - removes old heartbeat events."""
 
-import logging
 import psycopg2
 import os
 
+from Medic.Core.logging_config import configure_logging, get_logger
+
 # Log Setup
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 
 def connect_db():

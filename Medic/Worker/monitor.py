@@ -5,6 +5,7 @@ import threading
 import time
 import logging
 import psycopg2
+from Medic.Core.logging_config import configure_logging, get_logger
 from Medic.Worker import slack_client as slack
 from Medic.Worker import pagerduty_client as pagerduty
 
@@ -95,10 +96,8 @@ except ImportError:
     get_alert_consecutive_failures = None  # type: ignore[misc, assignment]
 
 # Log Setup
-logging.basicConfig(
-    level=logging.WARNING, format="%(relativeCreated)6d %(threadName)s %(message)s"
-)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 # Initialize tracer (will be set up in main)
 _tracer = None

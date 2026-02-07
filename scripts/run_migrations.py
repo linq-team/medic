@@ -29,13 +29,11 @@ from urllib.parse import urlparse
 import psycopg2
 from psycopg2 import sql
 
+from Medic.Core.logging_config import configure_logging, get_logger
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 
 def parse_database_url(url: str) -> dict:
