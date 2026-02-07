@@ -105,25 +105,35 @@ jobs:
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "Image tag: ${IMAGE_TAG}"
 
-      - name: Check if image exists
+      - name: Wait for image in ECR
         id: check
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           IMAGE_TAG="${{ steps.tag.outputs.image_tag }}"
+          MAX_WAIT=600  # 10 minutes
+          INTERVAL=15
+          ELAPSED=0
 
-          # Check if image exists in ECR (ECR is in us-east-1)
-          if aws ecr describe-images \
-              --repository-name medic \
-              --image-ids imageTag="${IMAGE_TAG}" \
-              --region us-east-1 > /dev/null 2>&1; then
-            echo "Image medic:${IMAGE_TAG} found in ECR"
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-          else
-            echo "Image medic:${IMAGE_TAG} not found in ECR"
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
-          fi
+          echo "Waiting for image medic:${IMAGE_TAG} in ECR..."
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            if aws ecr describe-images \
+                --repository-name medic \
+                --image-ids imageTag="${IMAGE_TAG}" \
+                --region us-east-1 > /dev/null 2>&1; then
+              echo "Image medic:${IMAGE_TAG} found in ECR after ${ELAPSED}s"
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "Image not found yet, waiting ${INTERVAL}s... (${ELAPSED}/${MAX_WAIT}s)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "Image medic:${IMAGE_TAG} not found in ECR after ${MAX_WAIT}s"
+          echo "should_deploy=false" >> $GITHUB_OUTPUT
 
   # ---------------------------------------------------------------------------
   # Deploy to dev (PR to main)
