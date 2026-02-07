@@ -31,6 +31,25 @@ spec:
       serviceAccountName: {{ include "medic.serviceAccountName" . }}
       securityContext:
         {{- include "medic.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.migrations.enabled }}
+      initContainers:
+        - name: migrations
+          image: {{ include "medic.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - python
+            - -m
+            - scripts.run_migrations
+          envFrom:
+            {{- include "medic.envFrom" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- include "medic.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
       containers:
         - name: api
           image: {{ include "medic.image" . }}

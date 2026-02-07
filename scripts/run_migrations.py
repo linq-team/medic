@@ -195,6 +195,14 @@ def run_migrations(
     try:
         conn = connect_db()
 
+        # Acquire an advisory lock to prevent concurrent migration runs.
+        # Only one process can hold this lock at a time; others will block
+        # until it's released (automatically when the connection closes).
+        MIGRATION_LOCK_ID = 8439215  # Arbitrary unique ID for medic migrations
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_ID,))
+        logger.info("Acquired migration advisory lock")
+
         # Ensure migrations table exists
         ensure_migrations_table(conn)
 
